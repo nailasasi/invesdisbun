@@ -10,6 +10,7 @@ use App\Models\MutasiAset;
 use App\Models\Pegawai;
 use App\Models\PemegangAset;
 use App\Models\PenempatanAset;
+use App\Models\Ruangan;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -55,6 +56,7 @@ class AsetBarangController extends Controller
     private function adminIndex(Request $request)
     {
         $search = $request->query('search');
+        $penempatan = $request->query('penempatan'); // 'pemegang' | 'tanpa_pemegang' | null (semua)
         $pemegangId = $request->query('pemegang');
 
         $asetList = Aset::with(['barang', 'pemegangSaatIni.pegawai', 'penempatanAktif.ruangan'])
@@ -66,6 +68,12 @@ class AsetBarangController extends Controller
                         ->orWhereHas('pemegangSaatIni.pegawai', fn ($p) => $p->where('nama_pegawai', 'like', "%{$search}%"));
                 });
             })
+            ->when($penempatan === 'pemegang', function ($query) {
+                $query->whereHas('pemegangSaatIni');
+            })
+            ->when($penempatan === 'tanpa_pemegang', function ($query) {
+                $query->whereDoesntHave('pemegangSaatIni');
+            })
             ->when($pemegangId, function ($query, $pemegangId) {
                 $query->whereHas('pemegangSaatIni', fn ($p) => $p->where('pemegang_aset.id_pegawai', $pemegangId));
             })
@@ -73,19 +81,24 @@ class AsetBarangController extends Controller
             ->paginate(10)
             ->withQueryString();
 
-        // Dropdown filter pemegang: hanya pegawai yang sedang memegang aset.
+        // Dropdown filter pemegang: pegawai yang saat ini memegang aset.
         $pemegangOptions = Pegawai::whereHas('pemegangAset', fn ($q) => $q->where('status', 'aktif'))
             ->orderBy('nama_pegawai')
             ->get(['id_pegawai', 'nama_pegawai']);
 
         // Dropdown pemegang (Tambah/Edit): semua pegawai.
-        $allPegawai = Pegawai::orderBy('nama_pegawai')->get(['id_pegawai', 'nama_pegawai']);
+        $allPegawai = Pegawai::orderBy('nama_pegawai')->get(['id_pegawai', 'nama_pegawai', 'id_ruangan']);
+
+        // Dropdown ruangan (Tambah/Edit Aset): semua ruangan (opsional).
+        $ruanganOptions = Ruangan::orderBy('nama_ruangan')->get(['id_ruangan', 'nama_ruangan']);
+
         $kondisiList = self::KONDISI;
 
         return view('aset-barang.admin-index', compact(
             'asetList',
             'pemegangOptions',
             'allPegawai',
+            'ruanganOptions',
             'kondisiList'
         ));
     }
@@ -118,11 +131,12 @@ class AsetBarangController extends Controller
     {
         $pemegangId = $request->input('id_pegawai') ?: $pegawai->id_pegawai;
 
-        $this->createAsetFor($request, $pemegangId);
+        $warning = $this->createAsetFor($request, $pemegangId);
 
         return response()->json([
             'success' => true,
             'message' => 'Aset berhasil ditambahkan.',
+            'warning' => $warning,
         ]);
     }
 
@@ -131,21 +145,29 @@ class AsetBarangController extends Controller
      */
     public function storeFlat(Request $request)
     {
-        $this->createAsetFor($request, $request->input('id_pegawai'));
+        $warning = $this->createAsetFor($request, $request->input('id_pegawai'));
 
         return response()->json([
             'success' => true,
             'message' => 'Aset berhasil ditambahkan.',
+            'warning' => $warning,
         ]);
     }
 
-    private function createAsetFor(Request $request, int $pegawaiId): void
+    private function createAsetFor(Request $request, ?int $pegawaiId): ?string
     {
         $data = $this->validateData($request);
         $data['id_barang'] = $this->resolveBarang($request->input('nama_barang'));
 
         $aset = Aset::create($data);
 
+        // Alur manual: aset melekat langsung ke ruangan, tanpa pemegang.
+        if (!$pegawaiId) {
+            $this->placeAtRoom($aset, $request->input('id_ruangan'));
+            return null;
+        }
+
+        // Alur otomatis: aset dipegang pegawai, mengikuti ruangan kerja pegawai.
         PemegangAset::create([
             'id_aset' => $aset->id_aset,
             'id_pegawai' => $pegawaiId,
@@ -154,6 +176,21 @@ class AsetBarangController extends Controller
         ]);
 
         $this->placeAtPegawaiRoom($aset, $pegawaiId);
+
+        $penempatanAktif = PenempatanAset::where('id_aset', $aset->id_aset)->where('status', 'aktif')->exists();
+        if (!$penempatanAktif) {
+            return 'Pegawai belum punya ruangan. Aset akan tampil tanpa ruangan sampai ruangan pegawai diisi.';
+        }
+
+        return null;
+    }
+
+    /**
+     * Tempatkan aset secara manual ke ruangan tertentu (tanpa pemegang).
+     */
+    private function placeAtRoom(Aset $aset, ?int $ruanganId): ?int
+    {
+        return $aset->placeAtRoom($ruanganId);
     }
 
     /**
@@ -169,6 +206,7 @@ class AsetBarangController extends Controller
             'nama_barang' => $aset->barang?->nama_barang ?? '',
             'id_pegawai' => $pemegang?->id_pegawai ?? null,
             'nama_pemegang' => $pemegang?->pegawai?->nama_pegawai ?? '',
+            'id_ruangan' => $aset->penempatanAktif?->id_ruangan ?? null,
             'nomor_kartu_barang' => $aset->nomor_kartu_barang,
             'merk' => $aset->merk,
             'tanggal_pengadaan' => $aset->tanggal_pengadaan?->format('Y-m-d'),
@@ -181,26 +219,130 @@ class AsetBarangController extends Controller
     }
 
     /**
-     * Perbarui aset. Jika pemegang berubah -> catat mutasi & pindah ruangan otomatis.
+     * Detail aset (read-only): informasi lengkap + riwayat mutasi per barang.
+     */
+    public function detailAset(Aset $aset)
+    {
+        $aset->load([
+            'barang.kategori',
+            'pemegangSaatIni.pegawai.skpd',
+            'penempatanAktif.ruangan.skpd',
+        ]);
+
+        $riwayatMutasi = $aset->mutasiDetails()
+            ->with([
+                'mutasi.userPenginput.pegawai',
+                'mutasi.userPenginput.role',
+                'pegawaiLama',
+                'pegawaiBaru',
+                'ruanganLama',
+                'ruanganBaru',
+            ])
+            ->orderByDesc('id_detail')
+            ->get();
+
+        return view('aset-barang.detail', compact('aset', 'riwayatMutasi'));
+    }
+
+    /**
+     * Perbarui data aset (tanpa pemegang/ruangan).
+     * Ganti pemegang / pindah ruangan dilakukan via aksi "Mutasi" terpisah.
      */
     public function update(Request $request, Aset $aset)
     {
         $data = $this->validateUpdateData($request, $aset);
         $data['id_barang'] = $this->resolveBarang($request->input('nama_barang'));
 
-        $pemegangBaru = $request->input('id_pegawai');
-        $pemegangLama = $aset->pemegangSaatIni?->pegawai?->id_pegawai;
-
         $aset->update($data);
-
-        // Ganti pemegang = mutasi
-        if ($pemegangBaru && $pemegangBaru != $pemegangLama) {
-            $this->mutatePemegang($aset, $pemegangLama, $pemegangBaru, $request->input('keterangan'));
-        }
 
         return response()->json([
             'success' => true,
             'message' => 'Aset berhasil diperbarui.',
+        ]);
+    }
+
+    /**
+     * Aksi mutasi terpisah: Ganti Pemegang (`tipe=pegawai`) atau
+     * Pindah Ruangan (`tipe=ruangan`). Setiap perubahan tercatat di
+     * tabel mutasi_aset + detail_mutasi_aset.
+     */
+    public function mutasi(Request $request, Aset $aset)
+    {
+        $data = $request->validate([
+            'tipe' => ['required', Rule::in(['pegawai', 'ruangan'])],
+            'id_pegawai' => ['nullable', 'exists:pegawai,id_pegawai'],
+            'id_ruangan' => ['nullable', 'exists:ruangan,id_ruangan'],
+            'keterangan' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        if ($data['tipe'] === 'pegawai') {
+            $pemegangBaru = $data['id_pegawai'] ?? null;
+            if (!$pemegangBaru) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'id_pegawai' => 'Pilih pemegang baru untuk aset ini.',
+                ]);
+            }
+
+            $pemegangLama = $aset->pemegangSaatIni?->pegawai?->id_pegawai;
+            $this->mutatePemegang($aset, $pemegangLama, $pemegangBaru, $data['keterangan'] ?? null);
+
+            $warning = null;
+            $penempatanAktif = PenempatanAset::where('id_aset', $aset->id_aset)->where('status', 'aktif')->exists();
+            if (!$penempatanAktif) {
+                $warning = 'Pegawai belum punya ruangan. Aset akan tampil tanpa ruangan sampai ruangan pegawai diisi.';
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Pemegang aset berhasil diganti.',
+                'warning' => $warning,
+            ]);
+        }
+
+        // tipe = ruangan (Pindah Ruangan)
+        if ($aset->pemegangSaatIni) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'tipe' => 'Aset ber-pemegang selalu mengikuti ruangan kerja pegawainya. Gunakan mode Ganti Pemegang.',
+            ]);
+        }
+
+        $ruanganBaru = $data['id_ruangan'] ?? null;
+        if (!$ruanganBaru) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'id_ruangan' => 'Pilih ruangan tujuan.',
+            ]);
+        }
+
+        $ruanganLama = $aset->penempatanAktif?->id_ruangan;
+        $this->placeAtRoom($aset, $ruanganBaru);
+
+        if ($ruanganLama == $ruanganBaru) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Aset sudah berada di ruangan tersebut.',
+            ]);
+        }
+
+        $mutasi = MutasiAset::create([
+            'tanggal_mutasi' => now()->toDateString(),
+            'jenis_mutasi' => 'Pindah Ruangan',
+            'keterangan' => $data['keterangan'] ?? null,
+            'id_user_penginput' => auth()->id(),
+            'status_mutasi' => 'selesai',
+        ]);
+
+        DetailMutasiAset::create([
+            'id_mutasi' => $mutasi->id_mutasi,
+            'id_aset' => $aset->id_aset,
+            'pegawai_lama' => null,
+            'pegawai_baru' => null,
+            'ruangan_lama' => $ruanganLama,
+            'ruangan_baru' => $ruanganBaru,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Aset berhasil dipindah ruangan.',
         ]);
     }
 
@@ -267,25 +409,7 @@ class AsetBarangController extends Controller
     private function placeAtPegawaiRoom(Aset $aset, int $pegawaiId): ?int
     {
         $pegawai = Pegawai::find($pegawaiId);
-        $ruanganId = $pegawai?->id_ruangan;
-
-        if (!$ruanganId) {
-            return null;
-        }
-
-        // Tutup penempatan aktif lama
-        PenempatanAset::where('id_aset', $aset->id_aset)
-            ->where('status', 'aktif')
-            ->update(['status' => 'tidak aktif', 'tanggal_selesai' => now()->toDateString()]);
-
-        PenempatanAset::create([
-            'id_aset' => $aset->id_aset,
-            'id_ruangan' => $ruanganId,
-            'tanggal_mulai' => now()->toDateString(),
-            'status' => 'aktif',
-        ]);
-
-        return $ruanganId;
+        return $aset->placeAtRoom($pegawai?->id_ruangan);
     }
 
     private function validateData(Request $request, ?Aset $aset = null): array
@@ -293,9 +417,10 @@ class AsetBarangController extends Controller
         $asetId = $aset?->id_aset;
 
         return $request->validate([
-            'id_pegawai' => ['required', 'exists:pegawai,id_pegawai'],
+            'id_pegawai' => ['nullable', 'exists:pegawai,id_pegawai'],
+            'id_ruangan' => ['nullable', 'exists:ruangan,id_ruangan'],
             'nama_barang' => ['required', 'string', 'max:100'],
-            'nomor_kartu_barang' => ['required', 'string', 'max:50', Rule::unique('aset', 'nomor_kartu_barang')->ignore($asetId, 'id_aset')],
+            'nomor_kartu_barang' => ['required', 'string', 'max:255', Rule::unique('aset', 'nomor_kartu_barang')->ignore($asetId, 'id_aset')],
             'merk' => ['nullable', 'string', 'max:100'],
             'tanggal_pengadaan' => ['nullable', 'date'],
             'tanggal_perolehan' => ['nullable', 'date'],
@@ -308,7 +433,23 @@ class AsetBarangController extends Controller
 
     private function validateUpdateData(Request $request, ?Aset $aset = null): array
     {
-        return $this->validateData($request, $aset);
+        $asetId = $aset?->id_aset;
+
+        $rules = [
+            'nama_barang' => ['required', 'string', 'max:100'],
+            'nomor_kartu_barang' => ['required', 'string', 'max:255', Rule::unique('aset', 'nomor_kartu_barang')->ignore($asetId, 'id_aset')],
+            'merk' => ['nullable', 'string', 'max:100'],
+            'tanggal_pengadaan' => ['nullable', 'date'],
+            'tanggal_perolehan' => ['nullable', 'date'],
+            'tanggal_habis_pakai' => ['nullable', 'date'],
+            'nilai_perolehan' => ['nullable', 'numeric'],
+            'kondisi' => ['required', Rule::in(self::KONDISI)],
+            'status_aset' => ['required', 'string', 'max:50'],
+        ];
+
+        $data = $request->validate($rules);
+
+        return $data;
     }
 
     /**

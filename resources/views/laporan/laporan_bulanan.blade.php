@@ -135,8 +135,8 @@
                                 <tr class="border-b border-slate-50 hover:bg-slate-50/50">
                                     <td class="px-5 py-3 text-slate-400">{{ $no++ }}</td>
                                     <td class="px-5 py-3 font-medium text-slate-700">{{ $namaRuangan }}</td>
-                                    <td class="px-5 py-3 text-slate-500">{{ $item->ruangan->lantai ?? '-' }}</td>
-                                    <td class="px-5 py-3 text-slate-500">{{ $item->ruangan->skpd->nama_skpd ?? '-' }}</td>
+                                    <td class="px-5 py-3 text-slate-500">{{ $item->ruangan?->lantai ?? '-' }}</td>
+                                    <td class="px-5 py-3 text-slate-500">{{ $item->ruangan?->skpd?->nama_skpd ?? '-' }}</td>
                                     <td class="px-5 py-3 text-slate-700">{{ $item->aset->barang->nama_barang ?? '-' }}</td>
                                     <td class="px-5 py-3 text-slate-500">{{ $item->aset->barang->kode_barang ?? '-' }}</td>
                                     <td class="px-5 py-3 text-slate-500">{{ $item->aset->barang->kategori->nama_kategori ?? '-' }}</td>

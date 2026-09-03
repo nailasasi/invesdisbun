@@ -55,6 +55,11 @@ class Aset extends Model
         return $this->hasOne(PenempatanAset::class, 'id_aset')->where('status', 'aktif');
     }
 
+    public function mutasiDetails()
+    {
+        return $this->hasMany(DetailMutasiAset::class, 'id_aset');
+    }
+
     public function kendaraan()
     {
         return $this->hasOne(Kendaraan::class, 'id_aset');
@@ -63,5 +68,68 @@ class Aset extends Model
     public function tanah()
     {
         return $this->hasOne(Tanah::class, 'id_aset');
+    }
+
+    /**
+     * Tempatkan aset ke ruangan tertentu (menutup penempatan aktif lama).
+     * Mengembalikan id_ruangan yang aktif, atau null bila ruangan kosong/dibatalkan.
+     */
+    public function placeAtRoom(?int $ruanganId): ?int
+    {
+        if (!$ruanganId) {
+            return null;
+        }
+
+        PenempatanAset::where('id_aset', $this->id_aset)
+            ->where('status', 'aktif')
+            ->update(['status' => 'tidak aktif', 'tanggal_selesai' => now()->toDateString()]);
+
+        PenempatanAset::create([
+            'id_aset' => $this->id_aset,
+            'id_ruangan' => $ruanganId,
+            'tanggal_mulai' => now()->toDateString(),
+            'status' => 'aktif',
+        ]);
+
+        return $ruanganId;
+    }
+
+    /**
+     * Pindahkan aset ke ruangan lain sambil mencatat mutasi 'Pindah Ruangan'.
+     *
+     * @param int|null    $ruanganId  ruangan tujuan (null = tanpa ruangan)
+     * @param int|null    $pegawaiId  pemegang saat ini (untuk riwayat; sama untuk ppindah ruangan)
+     * @param string|null $keterangan keterangan mutasi
+     * @param int|null    $idMutasi   reuse induk MutasiAset untuk perpindahan massal
+     */
+    public function moveToRoom(?int $ruanganId, ?int $pegawaiId = null, ?string $keterangan = null, ?int $idMutasi = null): void
+    {
+        $ruanganLama = $this->penempatanAktif?->id_ruangan;
+
+        $this->placeAtRoom($ruanganId);
+
+        if ($ruanganLama == $ruanganId) {
+            return;
+        }
+
+        if (!$idMutasi) {
+            $mutasi = MutasiAset::create([
+                'tanggal_mutasi' => now()->toDateString(),
+                'jenis_mutasi' => 'Pindah Ruangan',
+                'keterangan' => $keterangan,
+                'id_user_penginput' => auth()->id(),
+                'status_mutasi' => 'selesai',
+            ]);
+            $idMutasi = $mutasi->id_mutasi;
+        }
+
+        DetailMutasiAset::create([
+            'id_mutasi' => $idMutasi,
+            'id_aset' => $this->id_aset,
+            'pegawai_lama' => $pegawaiId,
+            'pegawai_baru' => $pegawaiId,
+            'ruangan_lama' => $ruanganLama,
+            'ruangan_baru' => $ruanganId,
+        ]);
     }
 }

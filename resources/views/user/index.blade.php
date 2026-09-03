@@ -3,6 +3,7 @@
 @section('title', 'User Management')
 
 @section('content')
+    @php $defaultRoleId = $roleList->firstWhere('nama_role', 'Pegawai')?->id_role; @endphp
     <x-page-header title="User Management" subtitle="Kelola data pegawai, akun login, dan hak akses (role)">
         <x-slot:actions>
             <x-button type="button" id="btn-tambah" icon="M12 4v16m8-8H4">
@@ -130,26 +131,30 @@
                         </div>
 
                         <div class="space-y-1.5">
-                            <label for="field-role" class="block text-sm font-medium text-slate-700">Role <span class="text-red-500">*</span></label>
-                            <select id="field-role" name="id_role" required class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                                @foreach ($roleList as $role)
-                                    <option value="{{ $role->id_role }}" @selected($role->nama_role === 'Pegawai')>{{ $role->nama_role }}</option>
+                            <label for="field-ruangan" class="block text-sm font-medium text-slate-700">Ruangan</label>
+                            <select id="field-ruangan" name="id_ruangan" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                                <option value="" selected>-- Pilih SKPD dulu --</option>
+                                @foreach ($ruanganList as $ruangan)
+                                    <option value="{{ $ruangan->id_ruangan }}" data-skpd="{{ $ruangan->id_skpd ?? '' }}">{{ $ruangan->nama_ruangan }}</option>
                                 @endforeach
                             </select>
-                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_role"></p>
+                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_ruangan"></p>
                         </div>
+
+                        <input type="hidden" id="field-role-hidden" name="id_role" value="{{ $defaultRoleId ?? '' }}">
 
                         <div id="account-fields" class="grid grid-cols-1 gap-5 sm:col-span-2 sm:grid-cols-2">
                             <div class="space-y-1.5">
                                 <label for="field-username" class="block text-sm font-medium text-slate-700">Username <span class="text-red-500">*</span></label>
                                 <input type="text" id="field-username" name="username" maxlength="255" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="Username login">
                                 <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="username"></p>
+                                <p id="username-hint" class="text-xs text-slate-400">Tambah: otomatis terisi dari NIP.</p>
                             </div>
 
                             <div class="space-y-1.5">
                                 <label for="field-password" class="block text-sm font-medium text-slate-700">
-                                    Reset Password
-                                    <span id="password-hint" class="text-xs font-normal text-slate-400">(kosongkan = tidak diubah)</span>
+                                    Password
+                                    <span id="password-hint" class="text-xs font-normal text-slate-400">(kosongkan = sesuai NIP default)</span>
                                 </label>
                                 <input type="password" id="field-password" name="password" autocomplete="new-password" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="Minimal 8 karakter">
                                 <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="password"></p>
@@ -253,6 +258,14 @@
         const deleteModal = document.getElementById('delete-modal');
         const form = document.getElementById('user-form');
         const accountFields = document.getElementById('account-fields');
+        const fieldNip = document.getElementById('field-nip');
+        const fieldUsername = document.getElementById('field-username');
+
+        function autoFillUsername() {
+            if (fieldNip && fieldUsername && !document.getElementById('field-id').value) {
+                fieldUsername.value = fieldNip.value;
+            }
+        }
 
         function showErrors(container, errors) {
             container.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
@@ -274,12 +287,45 @@
             form.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
         }
 
+        // Filter dropdown ruangan sesuai SKPD yang dipilih.
+        const fieldSkpd = document.getElementById('field-skpd');
+        const fieldRuangan = document.getElementById('field-ruangan');
+
+        function applyRuanganFilter(selectedRuangan = '') {
+            const skpd = fieldSkpd.value;
+            let hasOption = false;
+            fieldRuangan.querySelectorAll('option').forEach(opt => {
+                if (!opt.value) { opt.style.display = ''; return; }
+                const match = opt.dataset.skpd === skpd;
+                opt.style.display = match ? '' : 'none';
+                if (match) hasOption = true;
+            });
+
+            // Reset pilihan jika ruangan tidak cocok dengan SKPD terpilih.
+            if (selectedRuangan && fieldRuangan.querySelector('option[value="' + selectedRuangan + '"]')?.dataset.skpd === skpd) {
+                fieldRuangan.value = selectedRuangan;
+            } else {
+                fieldRuangan.value = '';
+            }
+            fieldRuangan.querySelector('option[value=""]').textContent = hasOption
+                ? '-- Pilih Ruangan --'
+                : (skpd ? '-- Tidak ada ruangan untuk SKPD ini --' : '-- Pilih SKPD dulu --');
+        }
+
+        fieldSkpd.addEventListener('change', () => applyRuanganFilter());
+
+        if (fieldNip) {
+            fieldNip.addEventListener('input', autoFillUsername);
+        }
+
         function openRoleModal(id, name, currentRole) {
             if (!roleModal) return;
             document.getElementById('role-pegawai-name').textContent = name;
             roleModal.setAttribute('data-current-id', id);
             const sel = document.getElementById('role-field');
-            if (currentRole) { sel.value = ''; sel.value = currentRole; }
+            sel.querySelectorAll('option').forEach(opt => {
+                opt.selected = String(opt.value) === String(currentRole);
+            });
             roleModal.classList.remove('hidden');
             roleModal.classList.add('flex');
             roleForm.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
@@ -311,10 +357,15 @@
                     document.getElementById('field-id').value = '';
                     form.action = storeUrl;
                     document.getElementById('modal-title').textContent = 'Tambah User';
-                    document.getElementById('modal-subtitle').textContent = 'Isi data pegawai, akun login, dan role.';
+                    document.getElementById('modal-subtitle').textContent = 'Isi data pegawai dan akun login. Role diatur via tombol Ubah Role setelah tersimpan.';
                     document.getElementById('btn-submit').textContent = 'Simpan';
-                    accountFields.classList.add('hidden');
+                    accountFields.classList.remove('hidden');
+                    document.getElementById('password-hint').textContent = '(kosongkan = sesuai NIP default)';
+                    document.getElementById('username-hint').textContent = 'Otomatis terisi dari NIP.';
+                    document.getElementById('field-role-hidden').value = @json($defaultRoleId);
                     form.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
+                    applyRuanganFilter();
+                    autoFillUsername();
                     openModal();
                 });
             }
@@ -332,13 +383,15 @@
                         document.getElementById('field-nama').value = data.nama_pegawai;
                         document.getElementById('field-jabatan').value = data.jabatan ?? '';
                         document.getElementById('field-skpd').value = data.id_skpd ?? '';
-                        const roleSel = document.getElementById('field-role');
-                        if (data.id_role) roleSel.value = data.id_role;
+                        applyRuanganFilter(data.id_ruangan ?? '');
                         document.getElementById('field-username').value = data.username ?? '';
                         document.getElementById('field-password').value = '';
+                        document.getElementById('password-hint').textContent = '(kosongkan = tidak diubah)';
+                        document.getElementById('username-hint').textContent = 'Username dapat diubah.';
+                        document.getElementById('field-role-hidden').value = '';
                         form.action = storeUrl + '/' + id;
                         document.getElementById('modal-title').textContent = 'Edit User';
-                        document.getElementById('modal-subtitle').textContent = 'Perbarui data pegawai, username, password, dan role.';
+                        document.getElementById('modal-subtitle').textContent = 'Perbarui data pegawai, username, dan password.';
                         document.getElementById('btn-submit').textContent = 'Perbarui';
                         accountFields.classList.remove('hidden');
                         openModal();

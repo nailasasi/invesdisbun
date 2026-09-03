@@ -23,4 +23,9 @@ class Ruangan extends Model
     {
         return $this->belongsTo(Skpd::class, 'id_skpd');
     }
+
+    public function penempatan()
+    {
+        return $this->hasMany(PenempatanAset::class, 'id_ruangan');
+    }
 }

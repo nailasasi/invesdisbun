@@ -2,11 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Aset;
+use App\Models\MutasiAset;
 use App\Models\Pegawai;
+use App\Models\PemegangAset;
 use App\Models\Role;
+use App\Models\Ruangan;
 use App\Models\Skpd;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class UserController extends Controller
 {
@@ -30,8 +35,9 @@ class UserController extends Controller
 
         $skpdList = Skpd::orderBy('nama_skpd')->get(['id_skpd', 'nama_skpd']);
         $roleList = Role::orderBy('id_role')->get(['id_role', 'nama_role']);
+        $ruanganList = Ruangan::with('skpd')->orderBy('nama_ruangan')->get(['id_ruangan', 'nama_ruangan', 'id_skpd']);
 
-        return view('user.index', compact('pegawaiList', 'skpdList', 'roleList'));
+        return view('user.index', compact('pegawaiList', 'skpdList', 'roleList', 'ruanganList'));
     }
 
     /**
@@ -47,6 +53,7 @@ class UserController extends Controller
             'nama_pegawai' => $pegawai->nama_pegawai,
             'jabatan' => $pegawai->jabatan,
             'id_skpd' => $pegawai->id_skpd,
+            'id_ruangan' => $pegawai->id_ruangan,
             'id_role' => $pegawai->user?->id_role,
             'username' => $pegawai->user?->username,
             'status_user' => $pegawai->user?->status_user,
@@ -66,11 +73,12 @@ class UserController extends Controller
             'nama_pegawai' => $data['nama_pegawai'],
             'jabatan' => $data['jabatan'] ?? null,
             'id_skpd' => $data['id_skpd'] ?? null,
+            'id_ruangan' => $data['id_ruangan'] ?? null,
         ]);
 
         $pegawai->user()->create([
-            'username' => $data['username'] ?: $data['nip'],
-            'password' => $data['password'] ?: $data['nip'],
+            'username' => ($data['username'] ?? null) ?: $data['nip'],
+            'password' => ($data['password'] ?? null) ?: $data['nip'],
             'id_role' => $data['id_role'],
             'status_user' => 'aktif',
         ]);
@@ -86,20 +94,64 @@ class UserController extends Controller
      */
     public function update(Request $request, Pegawai $pegawai)
     {
-        $data = $this->validateData($request, $pegawai);
+        $data = $this->validateUpdateData($request, $pegawai);
+
+        $ruanganBaru = $data['id_ruangan'] ?? null;
+
+        // Aset yang sedang dipegang pegawai mengikuti ruangan kerja pegawai.
+        $asetPemegangIds = PemegangAset::where('id_pegawai', $pegawai->id_pegawai)
+            ->where('status', 'aktif')
+            ->pluck('id_aset');
+
+        if ($ruanganBaru === null && $asetPemegangIds->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'id_ruangan' => "Tidak dapat mengosongkan ruangan: masih ada {$asetPemegangIds->count()} aset yang dipegang pegawai ini. Pindahkan pemegangnya terlebih dahulu.",
+            ]);
+        }
 
         $pegawai->update([
             'nip' => $data['nip'],
             'nama_pegawai' => $data['nama_pegawai'],
             'jabatan' => $data['jabatan'] ?? null,
             'id_skpd' => $data['id_skpd'] ?? null,
+            'id_ruangan' => $data['id_ruangan'] ?? null,
         ]);
+
+        // Semua aset yang sedang dipegang pegawai selalu disinkronkan ke ruangan kerja
+        // pegawai (aturan: ruangan aset ber-pemegang mengikuti ruangan pegawainya).
+        // Bila posisi berubah, catat mutasi 'Pindah Ruangan'.
+        if ($ruanganBaru !== null && $asetPemegangIds->isNotEmpty()) {
+            $perluPindah = [];
+            foreach ($asetPemegangIds as $idAset) {
+                $aset = Aset::find($idAset);
+                if ($aset && $aset->penempatanAktif?->id_ruangan != $ruanganBaru) {
+                    $perluPindah[] = $aset;
+                }
+            }
+
+            if (!empty($perluPindah)) {
+                $mutasi = MutasiAset::create([
+                    'tanggal_mutasi' => now()->toDateString(),
+                    'jenis_mutasi' => 'Pindah Ruangan',
+                    'keterangan' => 'Ruangan kerja pegawai diubah',
+                    'id_user_penginput' => auth()->id(),
+                    'status_mutasi' => 'selesai',
+                ]);
+
+                foreach ($perluPindah as $aset) {
+                    $aset->moveToRoom($ruanganBaru, $pegawai->id_pegawai, null, $mutasi->id_mutasi);
+                }
+            }
+        }
 
         if ($pegawai->user) {
             $userData = [
-                'username' => $data['username'] ?: ($pegawai->user->username ?? ''),
-                'id_role' => $data['id_role'],
+                'username' => ($data['username'] ?? null) ?: ($pegawai->user->username ?? ''),
             ];
+
+            if (! empty($data['id_role'])) {
+                $userData['id_role'] = $data['id_role'];
+            }
 
             if (! empty($data['password'])) {
                 $userData['password'] = $data['password'];
@@ -158,9 +210,27 @@ class UserController extends Controller
             'nama_pegawai' => ['required', 'string', 'max:100'],
             'jabatan' => ['nullable', 'string', 'max:100'],
             'id_skpd' => ['nullable', 'exists:skpd,id_skpd'],
+            'id_ruangan' => ['nullable', 'exists:ruangan,id_ruangan'],
             'username' => ['nullable', 'string', 'max:255', Rule::unique('users', 'username')->ignore($userId, 'id_user')],
             'password' => ['nullable', 'sometimes', 'string', 'min:8'],
             'id_role' => ['required', 'exists:role,id_role'],
+        ]);
+    }
+
+    private function validateUpdateData(Request $request, ?Pegawai $pegawai = null): array
+    {
+        $pegawaiId = $pegawai?->id_pegawai;
+        $userId = $pegawai?->user?->id_user;
+
+        return $request->validate([
+            'nip' => ['required', 'string', 'max:30', Rule::unique('pegawai', 'nip')->ignore($pegawaiId, 'id_pegawai')],
+            'nama_pegawai' => ['required', 'string', 'max:100'],
+            'jabatan' => ['nullable', 'string', 'max:100'],
+            'id_skpd' => ['nullable', 'exists:skpd,id_skpd'],
+            'id_ruangan' => ['nullable', 'exists:ruangan,id_ruangan'],
+            'username' => ['nullable', 'string', 'max:255', Rule::unique('users', 'username')->ignore($userId, 'id_user')],
+            'password' => ['nullable', 'sometimes', 'string', 'min:8'],
+            'id_role' => ['nullable', 'exists:role,id_role'],
         ]);
     }
 }

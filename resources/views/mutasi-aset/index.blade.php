@@ -44,7 +44,13 @@
                         <tr class="transition hover:bg-slate-50">
                             <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-500">{{ $mutasiList->firstItem() + $i }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $mutasi->tanggal_mutasi?->format('d M Y') ?? '-' }}</td>
-                            <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">{{ $detail?->aset?->barang?->nama_barang ?? $detail?->aset?->nomor_kartu_barang ?? '-' }}</td>
+                            <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">
+                                @if ($detail?->aset)
+                                    <a href="{{ route('aset-barang.aset.detail', $detail->aset->id_aset) }}" class="text-slate-900 transition hover:text-emerald-600 hover:underline">{{ $detail->aset->barang?->nama_barang ?? $detail->aset->nomor_kartu_barang }}</a>
+                                @else
+                                    <span>-</span>
+                                @endif
+                            </td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm">
                                 <span class="inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-medium text-indigo-700">{{ $mutasi->jenis_mutasi ?? '-' }}</span>
                             </td>

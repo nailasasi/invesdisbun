@@ -28,8 +28,13 @@
                 >
             </div>
 
-            <div class="flex gap-3">
-                <select name="pemegang" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition lg:w-60">
+            <div class="flex flex-wrap gap-3">
+                <select name="penempatan" class="block rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition lg:w-48">
+                    <option value="">Semua Barang</option>
+                    <option value="pemegang" @selected(request('penempatan') === 'pemegang')>Dengan Pemegang</option>
+                    <option value="tanpa_pemegang" @selected(request('penempatan') === 'tanpa_pemegang')>Tanpa Pemegang</option>
+                </select>
+                <select name="pemegang" class="block rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition lg:w-56">
                     <option value="">Semua Pemegang</option>
                     @foreach ($pemegangOptions as $p)
                         <option value="{{ $p->id_pegawai }}" @selected(request('pemegang') == $p->id_pegawai)>{{ $p->nama_pegawai }}</option>
@@ -38,7 +43,7 @@
                 <button type="submit" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700">
                     Cari
                 </button>
-                @if (request('search') || request('pemegang'))
+                @if (request('search') || request('penempatan') || request('pemegang'))
                     <a href="{{ route('aset-barang.index') }}" class="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50">
                         Reset
                     </a>
@@ -75,7 +80,9 @@
                         @endphp
                         <tr class="transition hover:bg-slate-50">
                             <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-500">{{ $asetList->firstItem() + $i }}</td>
-                            <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">{{ $aset->barang?->nama_barang ?? '-' }}</td>
+                            <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">
+                                <a href="{{ route('aset-barang.aset.detail', $aset->id_aset) }}" class="text-slate-900 transition hover:text-emerald-600 hover:underline">{{ $aset->barang?->nama_barang ?? '-' }}</a>
+                            </td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $aset->nomor_kartu_barang ?? '-' }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $aset->merk ?? '-' }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $aset->nilai_perolehan ? 'Rp ' . number_format((float) $aset->nilai_perolehan, 0, ',', '.') : '-' }}</td>
@@ -94,6 +101,13 @@
                             </td>
                             <td class="whitespace-nowrap px-6 py-4 text-right text-sm">
                                 <div class="flex items-center justify-end gap-2">
+                                    <a href="{{ route('aset-barang.aset.detail', $aset->id_aset) }}" title="Lihat Detail" class="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
+                                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                        Detail
+                                    </a>
+                                    <button type="button" data-mutasi-modal="{{ $aset->id_aset }}" class="inline-flex items-center gap-2 rounded-xl bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-600 transition hover:bg-indigo-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+                                        Mutasi
+                                    </button>
                                     <button type="button" data-edit-modal="{{ $aset->id_aset }}" class="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
                                         Edit
                                     </button>
@@ -137,15 +151,28 @@
                 <input type="hidden" id="field-id" name="id" value="">
                 <div class="max-h-[70vh] space-y-5 overflow-y-auto px-6 py-6">
                     <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                        <div id="placement-fields" class="contents">
                         <div class="space-y-1.5">
-                            <label for="field-pegawai" class="block text-sm font-medium text-slate-700">Pemegang <span class="text-red-500">*</span></label>
-                            <select id="field-pegawai" name="id_pegawai" required class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                            <label for="field-pegawai" class="block text-sm font-medium text-slate-700">Pemegang</label>
+                            <select id="field-pegawai" name="id_pegawai" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
                                 <option value="" selected>-- Pilih Pegawai --</option>
                                 @foreach ($allPegawai as $p)
-                                    <option value="{{ $p->id_pegawai }}">{{ $p->nama_pegawai }}</option>
+                                    <option value="{{ $p->id_pegawai }}" data-ruangan="{{ $p->id_ruangan ?? '' }}">{{ $p->nama_pegawai }}</option>
                                 @endforeach
                             </select>
                             <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_pegawai"></p>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label for="field-ruangan" class="block text-sm font-medium text-slate-700">Ruangan</label>
+                            <select id="field-ruangan" name="id_ruangan" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                                <option value="" selected>-- Pilih Ruangan --</option>
+                                @foreach ($ruanganOptions as $r)
+                                    <option value="{{ $r->id_ruangan }}">{{ $r->nama_ruangan }}</option>
+                                @endforeach
+                            </select>
+                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_ruangan"></p>
+                        </div>
                         </div>
 
                         <div class="space-y-1.5">
@@ -206,11 +233,6 @@
                             <input type="text" id="field-status" name="status_aset" required maxlength="50" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: Aktif">
                             <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="status_aset"></p>
                         </div>
-
-                        <div class="space-y-1.5 sm:col-span-2">
-                            <label for="field-keterangan" class="block text-sm font-medium text-slate-700">Keterangan Mutasi <span class="text-xs font-normal text-slate-400">(hanya saat ganti pemegang)</span></label>
-                            <textarea id="field-keterangan" name="keterangan" rows="2" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: mutasi ke pemegang baru"></textarea>
-                        </div>
                     </div>
                 </div>
 
@@ -218,6 +240,84 @@
                     <button type="button" data-modal-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
                     <button type="submit" id="btn-submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700">
                         Simpan
+                    </button>
+                </div>
+            </form>
+            </div>
+        </div>
+    </div>
+
+    {{-- Modal Mutasi Aset --}}
+    <div id="mutasi-modal" class="fixed inset-0 z-50 hidden overflow-y-auto">
+        <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" data-mutasi-close></div>
+        <div class="flex min-h-full items-center justify-center p-4">
+        <div class="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-xl">
+            <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
+                <div>
+                    <h3 class="text-lg font-semibold text-slate-900">Mutasi Aset</h3>
+                    <p class="mt-0.5 text-sm text-slate-500" id="mutasi-aset-info">Pilih jenis mutasi untuk aset ini.</p>
+                </div>
+                <button type="button" data-mutasi-close class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Tutup">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <form id="mutasi-form" method="POST" autocomplete="off">
+                @csrf
+                <input type="hidden" id="mutasi-aset-id" name="id_aset" value="">
+                <div class="max-h-[70vh] space-y-5 overflow-y-auto px-6 py-6">
+                    <div class="space-y-1.5">
+                        <label for="mutasi-aset-name" class="block text-sm font-medium text-slate-700">Aset</label>
+                        <div id="mutasi-aset-name" class="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-700"></div>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label class="block text-sm font-medium text-slate-700">Jenis Mutasi <span class="text-red-500">*</span></label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button type="button" id="tipe-pegawai" data-tipe="pegawai" class="rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition">
+                                Ganti Pemegang
+                            </button>
+                            <button type="button" id="tipe-ruangan" data-tipe="ruangan" class="rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition">
+                                Pindah Ruangan
+                            </button>
+                        </div>
+                        <input type="hidden" id="mutasi-tipe" name="tipe" value="">
+                        <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="tipe"></p>
+                    </div>
+
+                    <div id="mutasi-field-pegawai" class="space-y-1.5 hidden">
+                        <label for="mutasi-pegawai" class="block text-sm font-medium text-slate-700">Pemegang Baru <span class="text-red-500">*</span></label>
+                        <select id="mutasi-pegawai" name="id_pegawai" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                            <option value="" selected>-- Pilih Pemegang Baru --</option>
+                            @foreach ($allPegawai as $p)
+                                <option value="{{ $p->id_pegawai }}">{{ $p->nama_pegawai }}</option>
+                            @endforeach
+                        </select>
+                        <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_pegawai"></p>
+                        <p class="text-xs text-slate-400">Aset akan otomatis mengikuti ruangan kerja pemegang baru.</p>
+                    </div>
+
+                    <div id="mutasi-field-ruangan" class="space-y-1.5 hidden">
+                        <label for="mutasi-ruangan" class="block text-sm font-medium text-slate-700">Ruangan Tujuan <span class="text-red-500">*</span></label>
+                        <select id="mutasi-ruangan" name="id_ruangan" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                            <option value="" selected>-- Pilih Ruangan Tujuan --</option>
+                            @foreach ($ruanganOptions as $r)
+                                <option value="{{ $r->id_ruangan }}">{{ $r->nama_ruangan }}</option>
+                            @endforeach
+                        </select>
+                        <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_ruangan"></p>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label for="mutasi-keterangan" class="block text-sm font-medium text-slate-700">Keterangan</label>
+                        <textarea id="mutasi-keterangan" name="keterangan" rows="2" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: serah terima antar pegawai"></textarea>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
+                    <button type="button" data-mutasi-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
+                    <button type="submit" id="btn-mutasi-submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700">
+                        Simpan Mutasi
                     </button>
                 </div>
             </form>
@@ -253,9 +353,11 @@
 
         const storeUrl = @json(route('aset-barang.store.flat'));
         const updateUrl = @json(route('aset-barang.aset.update', ['aset' => '__ID__']));
+        const mutasiUrl = @json(route('aset-barang.aset.mutasi', ['aset' => '__ID__']));
 
         const modal = document.getElementById('aset-modal');
         const deleteModal = document.getElementById('delete-modal');
+        const mutasiModal = document.getElementById('mutasi-modal');
         const form = document.getElementById('aset-form');
 
         function showErrors(errors) {
@@ -293,6 +395,7 @@
 
         // Tombol Tambah
         const btnTambah = document.getElementById('btn-tambah');
+        const placementFields = document.getElementById('placement-fields');
         if (btnTambah) {
             btnTambah.addEventListener('click', () => {
                 form.reset();
@@ -302,6 +405,8 @@
                 document.getElementById('modal-subtitle').textContent = 'Lengkapi data aset dan pilih pemegangnya.';
                 document.getElementById('btn-submit').textContent = 'Simpan';
                 form.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
+                if (placementFields) placementFields.style.display = '';
+                fieldRuangan.disabled = false;
                 openModal();
             });
         }
@@ -315,7 +420,7 @@
                     if (!res.ok) throw new Error('Gagal mengambil data');
                     const data = await res.json();
                     document.getElementById('field-id').value = data.id_aset;
-                    document.getElementById('field-pegawai').value = data.id_pegawai ?? '';
+                    if (placementFields) placementFields.style.display = 'none';
                     document.getElementById('field-barang').value = data.nama_barang ?? '';
                     document.getElementById('field-kartu').value = data.nomor_kartu_barang ?? '';
                     document.getElementById('field-merk').value = data.merk ?? '';
@@ -325,10 +430,9 @@
                     document.getElementById('field-nilai').value = data.nilai_perolehan ?? '';
                     document.getElementById('field-kondisi').value = data.kondisi ?? '';
                     document.getElementById('field-status').value = data.status_aset ?? '';
-                    document.getElementById('field-keterangan').value = '';
                     form.action = updateUrl.replace('__ID__', id);
                     document.getElementById('modal-title').textContent = 'Edit Aset';
-                    document.getElementById('modal-subtitle').textContent = 'Perbarui data aset. Ganti pemegang akan tercatat sebagai mutasi.';
+                    document.getElementById('modal-subtitle').textContent = 'Perbarui data aset. Ganti pemegang / pindah ruangan via tombol Mutasi.';
                     document.getElementById('btn-submit').textContent = 'Perbarui';
                     openModal();
                 } catch (e) {
@@ -354,7 +458,11 @@
                     return;
                 }
                 if (res.ok) {
+                    const data = await res.json();
                     window.location.reload();
+                    if (data.warning) {
+                        setTimeout(() => alert(data.warning), 100);
+                    }
                 } else {
                     alert('Terjadi kesalahan. Coba lagi.');
                     submit.textContent = original;
@@ -368,6 +476,25 @@
         });
 
         modal.querySelectorAll('[data-modal-close]').forEach(el => el.addEventListener('click', closeModal));
+
+        // Saat pilih pegawai -> ruangan otomatis terisi dari ruangan kerja pegawai.
+        // Aset ber-pemegang: ruangan tidak bisa diedit (diatur via User Management).
+        // Aset tanpa pemegang: dropdown ruangan aktif berisi semua ruangan.
+        const fieldPegawai = document.getElementById('field-pegawai');
+        const fieldRuangan = document.getElementById('field-ruangan');
+        function setRuanganState() {
+            const opt = fieldPegawai.selectedOptions[0];
+            if (opt && opt.value) {
+                fieldRuangan.disabled = true;
+                fieldRuangan.value = (opt.dataset.ruangan ?? '');
+                if (fieldRuangan.options[0]) fieldRuangan.options[0].textContent = 'Mengikuti ruangan pegawai';
+            } else {
+                fieldRuangan.disabled = false;
+                fieldRuangan.value = '';
+                if (fieldRuangan.options[0]) fieldRuangan.options[0].textContent = '-- Pilih Ruangan --';
+            }
+        }
+        fieldPegawai.addEventListener('change', setRuanganState);
 
         document.querySelectorAll('[data-delete-target]').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -394,6 +521,112 @@
                     alert('Koneksi bermasalah.');
                     btnConfirm.textContent = 'Hapus';
                     btnConfirm.disabled = false;
+                }
+            });
+        }
+
+        // ---- Modal Mutasi ----
+        const mutasiForm = document.getElementById('mutasi-form');
+        const mutasiTipeInput = document.getElementById('mutasi-tipe');
+        const mutasiFieldPegawai = document.getElementById('mutasi-field-pegawai');
+        const mutasiFieldRuangan = document.getElementById('mutasi-field-ruangan');
+        const mutasiPegawaiSel = document.getElementById('mutasi-pegawai');
+        const mutasiRuanganSel = document.getElementById('mutasi-ruangan');
+        const btnTipePegawai = document.getElementById('tipe-pegawai');
+        const btnTipeRuangan = document.getElementById('tipe-ruangan');
+
+        function setMutasiError(field, msg) {
+            const err = mutasiForm.querySelector('[data-error-for="' + field + '"]');
+            if (err) { err.textContent = msg; err.classList.remove('hidden'); }
+        }
+
+        function setMutasiMode(tipe) {
+            mutasiTipeInput.value = tipe;
+            const isPegawai = tipe === 'pegawai';
+            btnTipePegawai.classList.toggle('bg-indigo-600', isPegawai);
+            btnTipePegawai.classList.toggle('text-white', isPegawai);
+            btnTipePegawai.classList.toggle('border-indigo-600', isPegawai);
+            btnTipeRuangan.classList.toggle('bg-indigo-600', !isPegawai);
+            btnTipeRuangan.classList.toggle('text-white', !isPegawai);
+            btnTipeRuangan.classList.toggle('border-indigo-600', !isPegawai);
+            mutasiFieldPegawai.classList.toggle('hidden', !isPegawai);
+            mutasiFieldRuangan.classList.toggle('hidden', isPegawai);
+        }
+        if (btnTipePegawai) btnTipePegawai.addEventListener('click', () => setMutasiMode('pegawai'));
+        if (btnTipeRuangan) btnTipeRuangan.addEventListener('click', () => setMutasiMode('ruangan'));
+
+        function openMutasiModal(id, name, hasPemegang) {
+            if (!mutasiModal) return;
+            mutasiForm.reset();
+            mutasiForm.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
+            document.getElementById('mutasi-aset-id').value = id;
+            document.getElementById('mutasi-aset-name').textContent = name;
+            setMutasiMode(hasPemegang ? 'pegawai' : 'ruangan');
+            mutasiModal.classList.remove('hidden');
+            mutasiModal.classList.add('flex');
+            document.body.classList.add('overflow-hidden');
+        }
+        function closeMutasiModal() {
+            if (!mutasiModal) return;
+            mutasiModal.classList.add('hidden');
+            mutasiModal.classList.remove('flex');
+            document.body.classList.remove('overflow-hidden');
+        }
+        if (mutasiModal) {
+            mutasiModal.querySelectorAll('[data-mutasi-close]').forEach(el => el.addEventListener('click', closeMutasiModal));
+        }
+
+        document.querySelectorAll('[data-mutasi-modal]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const id = btn.dataset.mutasiModal;
+                try {
+                    const res = await fetch(updateUrl.replace('__ID__', id), { headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } });
+                    if (!res.ok) throw new Error('Gagal mengambil data');
+                    const data = await res.json();
+                    const label = (data.nama_barang || data.nomor_kartu_barang || 'Aset') + (data.nomor_kartu_barang ? ' (' + data.nomor_kartu_barang + ')' : '');
+                    openMutasiModal(id, label, !!data.id_pegawai);
+                } catch (e) {
+                    alert(e.message);
+                }
+            });
+        });
+
+        if (mutasiForm) {
+            mutasiForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const submit = document.getElementById('btn-mutasi-submit');
+                const original = submit.textContent;
+                submit.textContent = 'Menyimpan...';
+                submit.disabled = true;
+                mutasiForm.querySelectorAll('.field-error').forEach(el => el.classList.add('hidden'));
+                const body = new FormData(mutasiForm);
+                body.delete('id_aset');
+                try {
+                    const res = await fetch(mutasiUrl.replace('__ID__', document.getElementById('mutasi-aset-id').value), { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken }, body });
+                    if (res.status === 422) {
+                        const data = await res.json();
+                        (data.errors.tipe || []).forEach(m => setMutasiError('tipe', m));
+                        (data.errors.id_pegawai || []).forEach(m => setMutasiError('id_pegawai', m));
+                        (data.errors.id_ruangan || []).forEach(m => setMutasiError('id_ruangan', m));
+                        submit.textContent = original;
+                        submit.disabled = false;
+                        return;
+                    }
+                    if (res.ok) {
+                        const data = await res.json();
+                        window.location.reload();
+                        if (data.warning) {
+                            setTimeout(() => alert(data.warning), 100);
+                        }
+                    } else {
+                        alert('Terjadi kesalahan. Coba lagi.');
+                        submit.textContent = original;
+                        submit.disabled = false;
+                    }
+                } catch (err) {
+                    alert('Koneksi bermasalah. Coba lagi.');
+                    submit.textContent = original;
+                    submit.disabled = false;
                 }
             });
         }

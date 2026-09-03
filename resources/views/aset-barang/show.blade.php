@@ -42,10 +42,12 @@
                     <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Total Aset</dt>
                     <dd class="font-semibold text-emerald-600">{{ $asetList->count() }}</dd>
                 </div>
-                <div>
-                    <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Total Nilai</dt>
-                    <dd class="font-semibold text-slate-700">Rp {{ number_format($asetList->sum(fn ($item) => (float) $item->aset->nilai_perolehan), 0, ',', '.') }}</dd>
-                </div>
+                @if ($isAdminAset)
+                    <div>
+                        <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Total Nilai</dt>
+                        <dd class="font-semibold text-slate-700">Rp {{ number_format($asetList->sum(fn ($item) => (float) $item->aset->nilai_perolehan), 0, ',', '.') }}</dd>
+                    </div>
+                @endif
             </dl>
         </div>
     </x-card>
@@ -64,9 +66,11 @@
                             <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Nama Barang</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Kartu Barang</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Merk</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Nilai</th>
+                            @if ($isAdminAset)
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Nilai</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                            @endif
                             <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Kondisi</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
                             @if ($isAdminAset)
                                 <th scope="col" class="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Aksi</th>
                             @endif
@@ -80,7 +84,10 @@
                                 <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">{{ $aset->barang->nama_barang ?? '-' }}</td>
                                 <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $aset->nomor_kartu_barang ?? '-' }}</td>
                                 <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $aset->merk ?? '-' }}</td>
-                                <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $aset->nilai_perolehan ? 'Rp ' . number_format((float) $aset->nilai_perolehan, 0, ',', '.') : '-' }}</td>
+                                @if ($isAdminAset)
+                                    <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $aset->nilai_perolehan ? 'Rp ' . number_format((float) $aset->nilai_perolehan, 0, ',', '.') : '-' }}</td>
+                                    <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $aset->status_aset ?? '-' }}</td>
+                                @endif
                                 <td class="whitespace-nowrap px-6 py-4 text-sm">
                                     @php
                                         $kondisiColor = match ($aset->kondisi) {
@@ -92,7 +99,6 @@
                                     @endphp
                                     <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {{ $kondisiColor }}">{{ $aset->kondisi ?? '-' }}</span>
                                 </td>
-                                <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $aset->status_aset ?? '-' }}</td>
                                 @if ($isAdminAset)
                                     <td class="whitespace-nowrap px-6 py-4 text-right text-sm">
                                         <div class="flex items-center justify-end gap-2">
@@ -108,7 +114,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="{{ $isAdminAset ? 8 : 7 }}" class="px-6 py-12 text-center text-sm text-slate-400">Belum ada aset yang dipegang pegawai ini.</td>
+                                <td colspan="{{ $isAdminAset ? 8 : 5 }}" class="px-6 py-12 text-center text-sm text-slate-400">Belum ada aset yang dipegang pegawai ini.</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -351,7 +357,11 @@
                         return;
                     }
                     if (res.ok) {
+                        const data = await res.json();
                         window.location.reload();
+                        if (data.warning) {
+                            setTimeout(() => alert(data.warning), 100);
+                        }
                     } else {
                         alert('Terjadi kesalahan. Coba lagi.');
                         submit.textContent = original;
