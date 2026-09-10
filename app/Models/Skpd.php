@@ -19,6 +19,8 @@ class Skpd extends Model
 
     protected $fillable = ['nama_skpd'];
 
+    public $timestamps = false;
+
     public function pegawai()
     {
         return $this->hasMany(Pegawai::class, 'id_skpd');

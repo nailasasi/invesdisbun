@@ -17,6 +17,8 @@ class Aset extends Model
 
     protected $primaryKey = 'id_aset';
 
+    public $timestamps = false;
+
     protected $fillable = [
         'id_barang', 'nomor_kartu_barang', 'merk', 'tanggal_pengadaan',
         'tanggal_perolehan', 'tanggal_habis_pakai', 'nilai_perolehan',

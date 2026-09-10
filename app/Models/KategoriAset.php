@@ -19,6 +19,9 @@ class KategoriAset extends Model
 
     protected $fillable = ['nama_kategori'];
 
+    public $timestamps = false;
+
+
     public function masterBarang()
     {
         return $this->hasMany(MasterBarang::class, 'id_kategori');

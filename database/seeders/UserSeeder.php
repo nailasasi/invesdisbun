@@ -8,16 +8,15 @@ use App\Models\Role;
 use App\Models\Skpd;
 use App\Models\User;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
 class UserSeeder extends Seeder
 {
     /**
-     * Seed the 5 roles, initial SKPD, category, and the default Admin Aset account.
+     * Seed roles, initial SKPD, categories, and default user accounts.
      */
     public function run(): void
     {
-        // 7 role per unit + 1 role Pegawai (anggota biasa).
+        // Roles
         $roles = [
             'Admin Aset',
             'Bidang Perlindungan Perkebunan',
@@ -30,13 +29,12 @@ class UserSeeder extends Seeder
         ];
 
         foreach ($roles as $namaRole) {
-            Role::firstOrCreate(['nama_role' => $namaRole]);
+            Role::firstOrCreate([
+                'nama_role' => $namaRole,
+            ]);
         }
 
-        $adminRole = Role::where('nama_role', 'Admin Aset')->firstOrFail();
-        $pegawaiRole = Role::where('nama_role', 'Pegawai')->firstOrFail();
-
-        // 7 unit kerja (SKPD). Terpisah dari role.
+        // SKPD
         $daftarSkpd = [
             'Sekretariat',
             'Bidang Perlindungan Perkebunan',
@@ -48,20 +46,40 @@ class UserSeeder extends Seeder
         ];
 
         foreach ($daftarSkpd as $namaSkpd) {
-            Skpd::firstOrCreate(['nama_skpd' => $namaSkpd]);
+            Skpd::firstOrCreate([
+                'nama_skpd' => $namaSkpd,
+            ]);
         }
 
-        KategoriAset::firstOrCreate(['nama_kategori' => 'Tanah']);
-        KategoriAset::firstOrCreate(['nama_kategori' => 'Peralatan dan Mesin']);
-        KategoriAset::firstOrCreate(['nama_kategori' => 'Gedung dan Bangunan']);
-        KategoriAset::firstOrCreate(['nama_kategori' => 'Kendaraan']);
-        KategoriAset::firstOrCreate(['nama_kategori' => 'Barang Habis Pakai']);
+        // Kategori aset
+        $daftarKategori = [
+            'Tanah',
+            'Peralatan dan Mesin',
+            'Gedung dan Bangunan',
+            'Kendaraan',
+            'Barang Habis Pakai',
+        ];
 
+        foreach ($daftarKategori as $namaKategori) {
+            KategoriAset::firstOrCreate([
+                'nama_kategori' => $namaKategori,
+            ]);
+        }
+
+        // Ambil role
+        $adminRole = Role::where('nama_role', 'Admin Aset')->firstOrFail();
+        $pegawaiRole = Role::where('nama_role', 'Pegawai')->firstOrFail();
+
+        // Ambil SKPD Sekretariat
         $skpdSekretariat = Skpd::where('nama_skpd', 'Sekretariat')->firstOrFail();
 
-        // Akun Admin Aset default (dummy). Login memakai NIP sebagai username,
-        // password awal juga NIP (dapat diganti user nanti).
+        /*
+         * ==========================================
+         * AKUN ADMIN ASET
+         * ==========================================
+         */
         $nipAdmin = '111111111111111111';
+
         $adminPegawai = Pegawai::firstOrCreate(
             ['nip' => $nipAdmin],
             [
@@ -76,11 +94,69 @@ class UserSeeder extends Seeder
             [
                 'id_pegawai' => $adminPegawai->id_pegawai,
                 'id_role' => $adminRole->id_role,
-                'password' => Hash::make($nipAdmin),
+                'password' => 'admin123',
                 'status_user' => 'aktif',
             ]
         );
 
-        $this->command->info("Akun Admin Aset (Sekretariat): username = NIP '{$nipAdmin}', password awal = '{$nipAdmin}'");
+        /*
+         * ==========================================
+         * AKUN PEGAWAI
+         * ==========================================
+         */
+        $nipPegawai = '1234567891011121314';
+
+        $pegawai = Pegawai::firstOrCreate(
+            ['nip' => $nipPegawai],
+            [
+                'nama_pegawai' => 'Pegawai',
+                'jabatan' => 'Pegawai',
+                'id_skpd' => $skpdSekretariat->id_skpd,
+            ]
+        );
+
+        User::firstOrCreate(
+            ['username' => $nipPegawai],
+            [
+                'id_pegawai' => $pegawai->id_pegawai,
+                'id_role' => $pegawaiRole->id_role,
+                'password' => $nipPegawai,
+                'status_user' => 'aktif',
+            ]
+        );
+
+        /*
+         * ==========================================
+         * AKUN ADMINSUB
+         * ==========================================
+         *
+         * Untuk sementara menggunakan role Admin Aset
+         * sampai tersedia role Adminsub khusus.
+         */
+        $nipAdminsub = '222222222222222222';
+
+        $adminsubPegawai = Pegawai::firstOrCreate(
+            ['nip' => $nipAdminsub],
+            [
+                'nama_pegawai' => 'Admin Sub',
+                'jabatan' => 'Admin Sub',
+                'id_skpd' => $skpdSekretariat->id_skpd,
+            ]
+        );
+
+        User::firstOrCreate(
+            ['username' => $nipAdminsub],
+            [
+                'id_pegawai' => $adminsubPegawai->id_pegawai,
+                'id_role' => $adminRole->id_role,
+                'password' => $nipAdminsub,
+                'status_user' => 'aktif',
+            ]
+        );
+
+        $this->command->info('Akun default berhasil dibuat:');
+        $this->command->info('Admin    : 111111111111111111 / admin123');
+        $this->command->info('Pegawai  : 1234567891011121314 / 1234567891011121314');
+        $this->command->info('Adminsub  : 222222222222222222 / 222222222222222222');
     }
 }

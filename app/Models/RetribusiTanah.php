@@ -18,10 +18,18 @@ class RetribusiTanah extends Model
     protected $primaryKey = 'id_retribusi';
 
     protected $fillable = [
-        'id_tanah', 'tahun', 'status_pemanfaatan', 'tarif_retribusi',
-        'target_penerimaan', 'realisasi_penerimaan', 'PAD', 'biaya_pengurusan',
-        'total_tarif_sewa', 'keterangan',
-    ];
+    'id_tanah',
+    'tahun',
+    'status_pemanfaatan',
+    'tarif_retribusi',
+    'target_penerimaan',
+    'realisasi_penerimaan',
+    'PAD',
+    'biaya_pengurusan',
+    'total_tarif_sewa',
+    'satuan',
+    'keterangan',
+];
 
     protected $casts = [
         'tahun' => 'integer',

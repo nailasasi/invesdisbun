@@ -17,21 +17,42 @@ class Tanah extends Model
 
     protected $primaryKey = 'id_tanah';
 
+    public $timestamps = false;
+
     protected $fillable = [
-        'id_aset', 'luas_tanah', 'alamat', 'status_hak', 'nomor_sertifikat',
-        'tanggal_sertifikat', 'penggunaan', 'kondisi', 'nama_petugas',
-        'nomor_hp_petugas', 'google_maps', 'foto_tanah', 'video_tanah', 'keterangan',
-    ];
+    'no_excel',
+    'kib',
+    'tanggal_buku',
+    'tanggal_perolehan',
+    'nilai_perolehan',
+    'deskripsi_objek',
+    'luas_tanah',
+    'alamat',
+    'ketkel',
+    'status_hak',
+    'nomor_sertifikat',
+    'tanggal_sertifikat',
+    'penggunaan',
+    'penggunaan_air',
+    'kondisi',
+    'keterangan',
+    'nama_petugas',
+    'nomor_hp_petugas',
+    'google_maps',
+    'satuan',
+    'foto_tanah',
+    'video_tanah',
+];
 
     protected $casts = [
-        'tanggal_sertifikat' => 'date',
-        'luas_tanah' => 'decimal:2',
-    ];
+    'tanggal_buku' => 'date',
+    'tanggal_perolehan' => 'date',
+    'tanggal_sertifikat' => 'date',
+    'luas_tanah' => 'decimal:2',
+    'nilai_perolehan' => 'decimal:2',
+];
 
-    public function aset()
-    {
-        return $this->belongsTo(Aset::class, 'id_aset');
-    }
+    
 
     public function retribusi()
     {
@@ -41,5 +62,21 @@ class Tanah extends Model
     public function dokumenPbb()
     {
         return $this->hasMany(DokumenPbbTanah::class, 'id_tanah');
+    }
+    
+    public function dokumenPbbHistories()
+    {
+        return $this->hasMany(
+            DokumenPbbHistory::class,
+            'id_tanah'
+        );
+    }
+
+    public function histories()
+    {
+        return $this->hasMany(
+            TanahHistory::class,
+            'id_tanah'
+        );
     }
 }

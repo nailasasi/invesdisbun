@@ -7,7 +7,10 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LaporanBulananController;
 use App\Http\Controllers\MutasiAsetController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\TanahController;
+use App\Http\Controllers\RetribusiTanahController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\DokumenPbbTanahController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -23,6 +26,7 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
+
     Route::get('dashboard', [DashboardController::class, 'index'])
         ->name('dashboard');
 
@@ -78,6 +82,76 @@ Route::middleware('auth')->group(function () {
                 ->name('aset.detach');
         });
     });
+
+    // ==========================
+    // TANAH
+    // hanya Admin Aset & Admin UPT P2DP
+    // ==========================
+
+    Route::middleware('role:Admin Aset,Admin UPT P2DP')
+    ->group(function(){
+
+
+    Route::get('tanah', [TanahController::class,'index'])
+        ->name('tanah.index');
+
+
+    Route::get('tanah/create', [TanahController::class, 'create'])
+        ->name('tanah.create');
+
+
+    Route::post('tanah', [TanahController::class, 'store'])
+        ->name('tanah.store');
+
+
+    Route::get('tanah/{tanah}', [TanahController::class, 'show'])
+        ->name('tanah.show');
+
+
+    Route::get('tanah/{tanah}/edit', [TanahController::class, 'edit'])
+        ->name('tanah.edit');
+
+
+    Route::put('tanah/{tanah}', [TanahController::class, 'update'])
+        ->name('tanah.update');
+
+    });
+
+    // retribusi tanah
+    Route::prefix('tanah/{tanah}/retribusi')->name('tanah.retribusi.')->group(function () {
+    Route::get('/create', [RetribusiTanahController::class, 'create'])
+        ->name('create');
+
+    Route::post('/', [RetribusiTanahController::class, 'store'])
+        ->name('store');
+    });
+
+    Route::get('/retribusi/{retribusi}/edit', [RetribusiTanahController::class, 'edit'])
+        ->name('tanah.retribusi.edit');
+
+    Route::put('/retribusi/{retribusi}', [RetribusiTanahController::class, 'update'])
+        ->name('tanah.retribusi.update');
+
+    Route::delete('/retribusi/{retribusi}', [RetribusiTanahController::class, 'destroy'])
+        ->name('tanah.retribusi.destroy');
+
+    // Dokumen PBB
+    Route::get(
+        '/tanah/{tanah}/dokumen-pbb/create',
+        [DokumenPbbTanahController::class,'create']
+    )->name('tanah.dokumen.create');
+
+
+    Route::post(
+        '/tanah/{tanah}/dokumen-pbb',
+        [DokumenPbbTanahController::class,'store']
+    )->name('tanah.dokumen.store');
+
+
+    Route::delete(
+        '/dokumen-pbb/{dokumen}',
+        [DokumenPbbTanahController::class,'destroy']
+    )->name('tanah.dokumen.destroy');
 
     // User Management (khusus Admin Aset; ubah role juga diatur di sini)
     Route::prefix('user')->name('user.')->middleware('role:Admin Aset')->group(function () {
