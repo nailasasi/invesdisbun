@@ -11,8 +11,15 @@ use App\Models\Pegawai;
 use App\Models\PemegangAset;
 use App\Models\PenempatanAset;
 use App\Models\Ruangan;
+use App\Models\TemplateDokumen;
+use App\Models\UsulanPenghapusan;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 
 class AsetBarangController extends Controller
 {
@@ -35,7 +42,10 @@ class AsetBarangController extends Controller
         $search = $request->query('search');
 
         $pegawaiList = Pegawai::with('skpd')
-            ->withCount(['pemegangAset as jumlah_aset' => fn ($q) => $q->where('status', 'aktif')])
+            ->withCount(['pemegangAset as jumlah_aset' => function ($q) {
+                $q->where('status', 'aktif')
+                    ->whereHas('aset', fn ($a) => $a->where('is_kendaraan', false));
+            }])
             ->when($search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('nama_pegawai', 'like', "%{$search}%")
@@ -60,6 +70,8 @@ class AsetBarangController extends Controller
         $pemegangId = $request->query('pemegang');
 
         $asetList = Aset::with(['barang', 'pemegangSaatIni.pegawai', 'penempatanAktif.ruangan'])
+            ->barang()
+            ->where('status_aset', 'aktif')
             ->when($search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('nomor_kartu_barang', 'like', "%{$search}%")
@@ -81,16 +93,19 @@ class AsetBarangController extends Controller
             ->paginate(10)
             ->withQueryString();
 
-        // Dropdown filter pemegang: pegawai yang saat ini memegang aset.
-        $pemegangOptions = Pegawai::whereHas('pemegangAset', fn ($q) => $q->where('status', 'aktif'))
+        // Dropdown filter pemegang: pegawai yang saat ini memegang aset (non-kendaraan).
+        $pemegangOptions = Pegawai::whereHas('pemegangAset', function ($q) {
+            $q->where('status', 'aktif')
+                ->whereHas('aset', fn ($a) => $a->where('is_kendaraan', false));
+        })
             ->orderBy('nama_pegawai')
             ->get(['id_pegawai', 'nama_pegawai']);
 
         // Dropdown pemegang (Tambah/Edit): semua pegawai.
         $allPegawai = Pegawai::orderBy('nama_pegawai')->get(['id_pegawai', 'nama_pegawai', 'id_ruangan']);
 
-        // Dropdown ruangan (Tambah/Edit Aset): semua ruangan (opsional).
-        $ruanganOptions = Ruangan::orderBy('nama_ruangan')->get(['id_ruangan', 'nama_ruangan']);
+        // Dropdown ruangan (Tambah/Edit Aset): hanya ruangan aktif.
+        $ruanganOptions = Ruangan::where('status', 'Aktif')->orderBy('nama_ruangan')->get(['id_ruangan', 'nama_ruangan']);
 
         $kondisiList = self::KONDISI;
 
@@ -113,6 +128,7 @@ class AsetBarangController extends Controller
         $asetList = PemegangAset::with('aset.barang.kategori')
             ->where('id_pegawai', $pegawai->id_pegawai)
             ->where('status', 'aktif')
+            ->whereHas('aset', fn ($a) => $a->where('is_kendaraan', false))
             ->orderByDesc('id_pemegang')
             ->get();
 
@@ -241,7 +257,310 @@ class AsetBarangController extends Controller
             ->orderByDesc('id_detail')
             ->get();
 
-        return view('aset-barang.detail', compact('aset', 'riwayatMutasi'));
+        $kondisiList = self::KONDISI;
+        $isAdminAset = auth()->user()?->role?->nama_role === 'Admin Aset';
+        $allPegawai = Pegawai::orderBy('nama_pegawai')->get();
+        $ruanganList = Ruangan::where('status', 'Aktif')->with('skpd')->orderBy('nama_ruangan')->get();
+
+        return view('aset-barang.detail', compact(
+            'aset',
+            'riwayatMutasi',
+            'kondisiList',
+            'isAdminAset',
+            'allPegawai',
+            'ruanganList'
+        ));
+    }
+
+    /**
+     * Label QR untuk aset: menampilkan QR code nomor kartu barang sebagai PNG.
+     */
+    public function qrLabel(Aset $aset)
+    {
+        $content = $aset->nomor_kartu_barang ?: ('aset-' . $aset->id_aset);
+
+        $qr = \QrCode::format('svg')->size(300)->margin(1)->generate($content);
+
+        return response($qr, 200, [
+            'Content-Type' => 'image/svg+xml',
+            'Content-Disposition' => 'inline; filename="label-' . $content . '.svg"',
+        ]);
+    }
+
+    /**
+     * Unduh label seluruh aset aktif pegawai dalam SATU sheet tunggal (.xlsx).
+     * Blok label master (B2:F7) diduplikasi ke bawah berjeda 1 baris kosong via
+     * duplicateStyle + mergeCells, lalu placeholder diganti per barang:
+     * {no_kartu}, {nama_barang}, {merk_tipe}, {tahun}, {ruangan}, {lokasi_user}.
+     */
+    public function downloadSemuaLabel($id_pegawai)
+    {
+        $pegawai = Pegawai::with([
+            'pemegangAset' => function ($q) {
+                $q->where('status', 'aktif')
+                    ->whereHas('aset', fn ($a) => $a->where('is_kendaraan', false))
+                    ->with(['aset.barang', 'aset.penempatanAktif.ruangan']);
+            },
+        ])->findOrFail($id_pegawai);
+
+        $asetList = $pegawai->pemegangAset
+            ->map(fn ($pemegang) => $pemegang->aset)
+            ->filter()
+            ->values();
+
+        if ($asetList->isEmpty()) {
+            return back()->with('error', 'Pegawai ini belum memegang aset aktif.');
+        }
+
+        $template = TemplateDokumen::where('kode_template', 'label')->first();
+        if (!$template || !$template->file_path || !Storage::disk('public')->exists($template->file_path)) {
+            return back()->with('error', 'File template label belum diunggah.');
+        }
+
+        try {
+            $spreadsheet = IOFactory::load(Storage::disk('public')->path($template->file_path));
+
+            // Hapus sheet tambahan jika template punya lebih dari 1 sheet bawaan.
+            while ($spreadsheet->getSheetCount() > 1) {
+                $spreadsheet->removeSheetByIndex(1);
+            }
+
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Daftar Label');
+
+            // Dimensi 1 blok label: Baris 2 sampai 7, Kolom B sampai F
+            $srcStartRow = 2;
+            $srcEndRow   = 7;
+            $labelHeight = 6;
+            $gap         = 1; // 1 baris kosong sebagai pembatas potong gunting
+            $step        = $labelHeight + $gap; // Tiap label baru berjarak 7 baris ke bawah
+
+            $colStart = Coordinate::columnIndexFromString('B');
+            $colEnd   = Coordinate::columnIndexFromString('F');
+
+            // Catat seluruh posisi sel gabungan (merged cells) di blok B2:F7
+            $baseMerges = [];
+            foreach ($sheet->getMergeCells() as $mergeRange) {
+                if (preg_match('/([A-Z]+)(\d+):([A-Z]+)(\d+)/', $mergeRange, $matches)) {
+                    $r1 = (int) $matches[2];
+                    $r2 = (int) $matches[4];
+                    if ($r1 >= $srcStartRow && $r2 <= $srcEndRow) {
+                        $baseMerges[] = [
+                            'col1' => $matches[1],
+                            'row1_offset' => $r1 - $srcStartRow,
+                            'col2' => $matches[3],
+                            'row2_offset' => $r2 - $srcStartRow,
+                        ];
+                    }
+                }
+            }
+
+            // Ambil logo master yang ada di sheet (jika ada)
+            $originalDrawings = $sheet->getDrawingCollection();
+            $baseDrawing = null;
+            $logoSourcePath = null;
+            $logoTempPath = null;
+
+            foreach ($originalDrawings as $drawing) {
+                if ($drawing instanceof Drawing) {
+                    // Ambil gambar yang posisinya berada di sekitar sel B2
+                    if (str_starts_with($drawing->getCoordinates(), 'B')) {
+                        $baseDrawing = $drawing;
+                        break;
+                    }
+                }
+            }
+
+            if ($baseDrawing) {
+                $logoPath = $baseDrawing->getPath();
+
+                // Path gambar dari worksheet hasil load berbentuk zip://...#xl/media/xxx
+                // yang tidak bisa dipakai langsung, jadi ekstrak biner media ke file sementara.
+                if (str_starts_with($logoPath, 'zip://') && preg_match('/#(xl\/media\/.+)$/', $logoPath, $mediaMatch)) {
+                    $xlsxPath = Storage::disk('public')->path($template->file_path);
+                    $zip = new \ZipArchive();
+
+                    if ($zip->open($xlsxPath) === true) {
+                        $binary = $zip->getFromName($mediaMatch[1]);
+                        $zip->close();
+
+                        if ($binary !== false) {
+                            $ext = strtolower(pathinfo($mediaMatch[1], PATHINFO_EXTENSION)) ?: 'png';
+                            $logoTempPath = storage_path('app/private/temp/label_' . uniqid() . '.' . $ext);
+                            if (!is_dir(dirname($logoTempPath))) {
+                                mkdir(dirname($logoTempPath), 0755, true);
+                            }
+                            file_put_contents($logoTempPath, $binary);
+                            $logoSourcePath = $logoTempPath;
+                        }
+                    }
+                } else {
+                    $logoSourcePath = $logoPath;
+                }
+            }
+
+            // 1. Gandakan layout blok kotak ke bawah di sheet yang sama
+            for ($i = 1; $i < $asetList->count(); $i++) {
+                $destStartRow = $srcStartRow + ($i * $step);
+
+                for ($r = 0; $r < $labelHeight; $r++) {
+                    $fromRow = $srcStartRow + $r;
+                    $toRow   = $destStartRow + $r;
+
+                    // Samakan tinggi baris
+                    $rowHeight = $sheet->getRowDimension($fromRow)->getRowHeight();
+                    if ($rowHeight > 0) {
+                        $sheet->getRowDimension($toRow)->setRowHeight($rowHeight);
+                    }
+
+                    for ($c = $colStart; $c <= $colEnd; $c++) {
+                        $colStr   = Coordinate::stringFromColumnIndex($c);
+
+                        // Copy nilai & formula (setCellValue: sel tujuan masih baru)
+                        $sheet->setCellValue($colStr . $toRow, $sheet->getCell($colStr . $fromRow)->getValue());
+
+                        // Copy format background hijau, border, font
+                        $sheet->duplicateStyle($sheet->getStyle($colStr . $fromRow), $colStr . $toRow);
+                    }
+                }
+
+                // Terapkan merge cells pada blok baru
+                foreach ($baseMerges as $m) {
+                    $sheet->mergeCells(
+                        $m['col1'] . ($destStartRow + $m['row1_offset']) . ':'
+                            . $m['col2'] . ($destStartRow + $m['row2_offset'])
+                    );
+                }
+
+                // 3. DUPLIKASI LOGO DISBUN KE KOTAK BARU
+                if ($baseDrawing && $logoSourcePath && file_exists($logoSourcePath)) {
+                    $newDrawing = new Drawing();
+                    $newDrawing->setName($baseDrawing->getName());
+                    $newDrawing->setDescription($baseDrawing->getDescription() ?? '');
+                    $newDrawing->setPath($logoSourcePath);
+                    $newDrawing->setHeight($baseDrawing->getHeight());
+                    $newDrawing->setWidth($baseDrawing->getWidth());
+                    $newDrawing->setOffsetX($baseDrawing->getOffsetX());
+                    $newDrawing->setOffsetY($baseDrawing->getOffsetY());
+
+                    // Pasang logo ke sel B di awal baris kotak baru (misal B9, B16, dst)
+                    $newDrawing->setCoordinates('B' . $destStartRow);
+                    $newDrawing->setWorksheet($sheet);
+                }
+            }
+
+            // 2. Isi nilai & replace placeholder untuk setiap barang
+            foreach ($asetList as $index => $aset) {
+                $currentRow = $srcStartRow + ($index * $step);
+
+                $noKartu    = $aset->nomor_kartu_barang ?? '-';
+                $namaBarang = $aset->barang->nama_barang ?? '-';
+                $merk       = $aset->merk ?? '-';
+                $tahun      = $aset->tanggal_perolehan ? \Carbon\Carbon::parse($aset->tanggal_perolehan)->format('Y') : date('Y');
+                $lokasi     = $pegawai->nama_pegawai;
+                $ruangan    = $aset->penempatanAktif?->ruangan?->nama_ruangan ?? 'Sekretariat';
+
+                // Loop sel dalam batas kotak barang ini
+                for ($r = $currentRow; $r < ($currentRow + $labelHeight); $r++) {
+                    for ($c = $colStart; $c <= $colEnd; $c++) {
+                        $colStr = Coordinate::stringFromColumnIndex($c);
+                        $cell   = $sheet->getCell($colStr . $r);
+                        $val    = (string) $cell->getValue();
+
+                        if ($val !== '' && str_contains($val, '{')) {
+                            $newVal = str_replace(
+                                ['{no_kartu}', '{nama_barang}', '{merk_tipe}', '{tahun}', '{lokasi_user}', '{ruangan}'],
+                                [$noKartu, $namaBarang, $merk, $tahun, $lokasi, $ruangan],
+                                $val
+                            );
+                            $cell->setValue($newVal);
+                        }
+                    }
+                }
+            }
+
+            // 3. Ekspor 1 sheet tunggal
+            $namaFile = 'Label_Aset_' . Str::slug($pegawai->nama_pegawai, '_') . '.xlsx';
+            $writer = IOFactory::createWriter($spreadsheet, 'Xlsx');
+
+            return response()->streamDownload(function () use ($writer, $logoTempPath) {
+                $writer->save('php://output');
+                if ($logoTempPath && is_file($logoTempPath)) {
+                    @unlink($logoTempPath);
+                }
+            }, $namaFile, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Content-Disposition' => 'attachment; filename="' . $namaFile . '"',
+            ]);
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Gagal memproses template label. ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Unduh label SATU aset (.xlsx) dari template label master.
+     * Hanya memanfaatkan blok awal (B2:F7) untuk mengisi data aset yang dipilih.
+     */
+    public function cetakLabelSatuan($id)
+    {
+        $aset = Aset::with(['barang', 'penempatanAktif.ruangan'])->findOrFail($id);
+
+        $template = TemplateDokumen::where('kode_template', 'label')->first();
+        if (!$template || !$template->file_path || !Storage::disk('public')->exists($template->file_path)) {
+            return back()->with('error', 'File template label belum diunggah.');
+        }
+
+        try {
+            $spreadsheet = IOFactory::load(Storage::disk('public')->path($template->file_path));
+            while ($spreadsheet->getSheetCount() > 1) {
+                $spreadsheet->removeSheetByIndex(1);
+            }
+
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Label Aset');
+
+            $srcStartRow = 2;
+            $srcEndRow   = 7;
+            $labelHeight = 6;
+            $colStart = Coordinate::columnIndexFromString('B');
+            $colEnd   = Coordinate::columnIndexFromString('F');
+
+            $noKartu    = $aset->nomor_kartu_barang ?? '-';
+            $namaBarang = $aset->barang?->nama_barang ?? '-';
+            $merk       = $aset->merk ?? '-';
+            $tahun      = $aset->tanggal_perolehan ? \Carbon\Carbon::parse($aset->tanggal_perolehan)->format('Y') : date('Y');
+            $ruangan    = $aset->penempatanAktif?->ruangan?->nama_ruangan ?? 'Sekretariat';
+            $lokasi     = $aset->pemegangSaatIni?->pegawai?->nama_pegawai ?? $ruangan;
+
+            for ($r = $srcStartRow; $r < ($srcStartRow + $labelHeight); $r++) {
+                for ($c = $colStart; $c <= $colEnd; $c++) {
+                    $colStr = Coordinate::stringFromColumnIndex($c);
+                    $cell   = $sheet->getCell($colStr . $r);
+                    $val    = (string) $cell->getValue();
+
+                    if ($val !== '' && str_contains($val, '{')) {
+                        $newVal = str_replace(
+                            ['{no_kartu}', '{nama_barang}', '{merk_tipe}', '{tahun}', '{lokasi_user}', '{ruangan}'],
+                            [$noKartu, $namaBarang, $merk, $tahun, $lokasi, $ruangan],
+                            $val
+                        );
+                        $cell->setValue($newVal);
+                    }
+                }
+            }
+
+            $namaFile = 'Label_' . Str::slug($aset->barang?->nama_barang ?? 'Aset', '_') . '.xlsx';
+            $writer = IOFactory::createWriter($spreadsheet, 'Xlsx');
+
+            return response()->streamDownload(function () use ($writer) {
+                $writer->save('php://output');
+            }, $namaFile, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Content-Disposition' => 'attachment; filename="' . $namaFile . '"',
+            ]);
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Gagal memproses template label. ' . $e->getMessage());
+        }
     }
 
     /**
@@ -284,7 +603,10 @@ class AsetBarangController extends Controller
             }
 
             $pemegangLama = $aset->pemegangSaatIni?->pegawai?->id_pegawai;
-            $this->mutatePemegang($aset, $pemegangLama, $pemegangBaru, $data['keterangan'] ?? null);
+            $mutasi = $this->mutatePemegang($aset, $pemegangLama, $pemegangBaru, $data['keterangan'] ?? null);
+
+            // Auto-download BAST setelah reload: flash URL tersedia satu kali di blade.
+            session()->flash('download_bast_url', route('mutasi-aset.bast.download', $mutasi->id_mutasi));
 
             $warning = null;
             $penempatanAktif = PenempatanAset::where('id_aset', $aset->id_aset)->where('status', 'aktif')->exists();
@@ -347,22 +669,47 @@ class AsetBarangController extends Controller
     }
 
     /**
-     * Hapus aset (pemegang_aset ikut terhapus via cascade).
+     * Usulkan penghapusan aset (bukan hard delete, sesuai SOP BMD):
+     * status aset -> 'diusulkan_hapus' (hilang dari daftar aktif) dan
+     * catat usulan ke tabel usulan_penghapusans untuk diproses admin.
      */
     public function destroy(Aset $aset)
     {
-        $aset->delete();
+        if ($aset->status_aset !== 'aktif') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Hanya aset berstatus aktif yang dapat diusulkan penghapusan.',
+            ], 422);
+        }
+
+        if (UsulanPenghapusan::where('id_aset', $aset->id_aset)->where('status_usulan', 'diajukan')->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Aset sudah memiliki usulan penghapusan yang aktif.',
+            ], 422);
+        }
+
+        $aset->update(['status_aset' => 'diusulkan_hapus']);
+
+        UsulanPenghapusan::create([
+            'id_aset' => $aset->id_aset,
+            'id_pegawai_penghapus' => auth()->user()?->pegawai?->id_pegawai,
+            'tanggal_usulan' => now()->toDateString(),
+            'alasan_penghapusan' => 'Lainnya',
+            'status_usulan' => 'diajukan',
+            'keterangan' => 'Diusulkan melalui tombol hapus pada daftar aset.',
+        ]);
 
         return response()->json([
             'success' => true,
-            'message' => 'Aset berhasil dihapus.',
+            'message' => 'Aset diusulkan penghapusan dan dikeluarkan dari daftar aset aktif.',
         ]);
     }
 
     /**
      * Tutup pemegang lama, buka pemegang baru, pindah ruangan, catat riwayat mutasi.
      */
-    private function mutatePemegang(Aset $aset, $pemegangLamaId, $pemegangBaruId, ?string $keterangan): void
+    private function mutatePemegang(Aset $aset, $pemegangLamaId, $pemegangBaruId, ?string $keterangan): MutasiAset
     {
         $now = now()->toDateString();
 
@@ -401,6 +748,8 @@ class AsetBarangController extends Controller
             'ruangan_lama' => $ruanganLama,
             'ruangan_baru' => $ruanganBaru,
         ]);
+
+        return $mutasi;
     }
 
     /**

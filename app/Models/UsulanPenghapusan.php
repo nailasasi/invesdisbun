@@ -19,11 +19,12 @@ class UsulanPenghapusan extends Model
 
     protected $fillable = [
         'id_pegawai_penghapus', 'tanggal_usulan', 'alasan_penghapusan',
-        'status_usulan', 'keterangan', 'id_aset',
+        'status_usulan', 'keterangan', 'id_aset', 'no_sk', 'tanggal_sk',
     ];
 
     protected $casts = [
         'tanggal_usulan' => 'date',
+        'tanggal_sk' => 'date',
     ];
 
     public function pegawaiPenghapus()

@@ -17,10 +17,11 @@ class RiwayatPlat extends Model
 
     protected $primaryKey = 'id_plat';
 
-    protected $fillable = ['id_kendaraan', 'nomor_plat', 'tanggal_berlaku', 'status'];
+    protected $fillable = ['id_kendaraan', 'nomor_plat', 'tanggal_berlaku', 'status', 'ganti_plat'];
 
     protected $casts = [
         'tanggal_berlaku' => 'date',
+        'ganti_plat' => 'boolean',
     ];
 
     public function kendaraan()

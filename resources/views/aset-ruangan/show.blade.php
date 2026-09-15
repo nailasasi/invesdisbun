@@ -3,13 +3,40 @@
 @section('title', 'Detail Aset Ruangan')
 
 @section('content')
-    <x-page-header title="{{ $ruangan->nama_ruangan }}" subtitle="Aset yang ditempatkan di ruangan ini">
-        <x-slot name="actions">
-            <x-button href="{{ route('aset-ruangan.index') }}" variant="secondary" icon="M11 17l-5-5m0 0l5-5m-5 5h12">
-                Kembali
-            </x-button>
-        </x-slot>
-    </x-page-header>
+    {{-- Navigasi Kembali Minimalis di Atas Judul --}}
+    <div class="mb-3">
+        <a href="{{ route('aset-ruangan.index') }}"
+           class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 transition hover:text-slate-900">
+            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+            <span>Kembali ke Aset Ruangan</span>
+        </a>
+    </div>
+
+    {{-- Header Judul & Aksi Utama --}}
+    <div class="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div>
+            <h1 class="text-2xl font-extrabold tracking-tight text-slate-900">{{ $ruangan->nama_ruangan }}</h1>
+            <p class="mt-1 text-sm text-slate-500">Aset yang ditempatkan di ruangan ini</p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2.5">
+            <a href="{{ route('aset-ruangan.label.download', $ruangan->id_ruangan) }}"
+               class="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-1.5 text-xs font-bold text-amber-700 shadow-2xs transition hover:bg-amber-100"
+               title="Unduh Semua Label Aset di Ruangan Ini">
+                <svg class="h-3.5 w-3.5 text-amber-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                <span>Cetak Semua Label</span>
+            </a>
+
+            {{-- Cetak KIR (Biru / Sky Pastel) --}}
+            <a href="{{ route('aset-ruangan.kir.download', $ruangan->id_ruangan) }}"
+               target="_blank"
+               class="inline-flex items-center gap-1.5 rounded-xl border border-sky-200 bg-sky-50/80 px-3 py-1.5 text-xs font-bold text-sky-700 shadow-2xs transition hover:bg-sky-100"
+               title="Unduh Kartu Inventaris Ruangan (KIR)">
+                <svg class="h-3.5 w-3.5 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                <span>Cetak KIR</span>
+            </a>
+        </div>
+    </div>
 
     <x-alert type="success" />
     <x-alert type="error" />
@@ -88,10 +115,15 @@
                             </td>
                             @endif
                             @if ($isAdminAset)
-                            <td class="whitespace-nowrap px-6 py-4 text-right text-sm">
-                                <button type="button" data-detach-target="{{ $aset->id_aset }}" data-detach-name="{{ $aset->barang?->nama_barang ?? $aset->nomor_kartu_barang }}" class="inline-flex items-center gap-2 rounded-xl bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100">
-                                    Keluarkan
+                            <td class="whitespace-nowrap px-3 py-4 text-sm">
+                                <div class="inline-flex items-center gap-1 rounded-2xl border border-slate-200/70 bg-slate-50/60 p-1 shadow-2xs">
+                                <a href="{{ route('aset-barang.cetak.label.single', $aset->id_aset) }}" target="_blank" title="Cetak Label" class="flex h-7 w-7 items-center justify-center rounded-xl bg-amber-50 text-amber-600 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
+                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.01"/></svg>
+                                </a>
+                                <button type="button" data-detach-target="{{ $aset->id_aset }}" data-detach-name="{{ $aset->barang?->nama_barang ?? $aset->nomor_kartu_barang }}" title="Keluarkan" class="flex h-7 w-7 items-center justify-center rounded-xl bg-red-50 text-red-600 transition hover:bg-red-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
+                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                                 </button>
+                                </div>
                             </td>
                             @endif
                         </tr>
@@ -107,10 +139,9 @@
 
     @if ($isAdminAset)
     {{-- Modal Keluarkan Aset --}}
-    <div id="detach-modal" class="fixed inset-0 z-50 hidden overflow-y-auto">
-        <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" data-detach-close></div>
-        <div class="flex min-h-full items-center justify-center p-4">
-        <div class="relative z-10 w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+    <div id="detach-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
+        <div class="fixed inset-0" data-detach-close></div>
+        <div class="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
             <div class="flex items-start gap-4">
                 <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-100">
                     <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
@@ -125,11 +156,10 @@
                 <form id="detach-form" method="POST" action="">
                     @csrf
                     @method('DELETE')
-                    <button type="submit" class="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700">Keluarkan</button>
+<button type="submit" class="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700">Keluarkan</button>
                 </form>
             </div>
-        </div>
-        </div>
+    </div>
     </div>
 
     @push('scripts')

@@ -22,7 +22,7 @@ class Aset extends Model
     protected $fillable = [
         'id_barang', 'nomor_kartu_barang', 'merk', 'tanggal_pengadaan',
         'tanggal_perolehan', 'tanggal_habis_pakai', 'nilai_perolehan',
-        'kondisi', 'status_aset',
+        'kondisi', 'status_aset', 'is_kendaraan',
     ];
 
     protected $casts = [
@@ -30,6 +30,7 @@ class Aset extends Model
         'tanggal_perolehan' => 'date',
         'tanggal_habis_pakai' => 'date',
         'nilai_perolehan' => 'decimal:2',
+        'is_kendaraan' => 'boolean',
     ];
 
     public function barang()
@@ -70,6 +71,16 @@ class Aset extends Model
     public function tanah()
     {
         return $this->hasOne(Tanah::class, 'id_aset');
+    }
+
+    public function scopeKendaraan($query)
+    {
+        return $query->where('is_kendaraan', true);
+    }
+
+    public function scopeBarang($query)
+    {
+        return $query->where('is_kendaraan', false);
     }
 
     /**

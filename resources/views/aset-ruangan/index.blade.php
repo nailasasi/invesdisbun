@@ -19,14 +19,19 @@
     <x-card :padding="false">
         @if ($isAdminAset)
         <form method="GET" action="{{ route('aset-ruangan.index') }}" class="flex flex-col gap-3 border-b border-slate-100 px-6 py-4 sm:flex-row sm:items-center">
-            <select name="ruangan" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition sm:w-72">
-                <option value="">Semua Ruangan</option>
-                @foreach ($ruanganOptions as $r)
-                    <option value="{{ $r->id_ruangan }}" @selected(request('ruangan') == $r->id_ruangan)>{{ $r->nama_ruangan }}</option>
-                @endforeach
-            </select>
-            <button type="submit" class="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700">
-                Filter
+            <div class="relative flex-1 sm:max-w-sm">
+                <svg class="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/></svg>
+                <input
+                    type="text"
+                    name="search"
+                    value="{{ request('search') }}"
+                    placeholder="Cari nama ruangan..."
+                    autocomplete="off"
+                    class="block w-full rounded-xl border border-slate-300 py-2 pl-11 pr-4 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition"
+                >
+            </div>
+            <button type="submit" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700">
+                Cari
             </button>
         </form>
         @endif
@@ -38,9 +43,9 @@
                         <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">#</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Nama Ruangan</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Lantai</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">SKPD</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Jumlah Aset</th>
-                        <th scope="col" class="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Aksi</th>
+                        <th scope="col" class="px-6 py-3 text-right whitespace-nowrap text-xs font-semibold uppercase tracking-wider text-slate-500">Aksi</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 bg-white">
@@ -57,24 +62,39 @@
                             <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-500">{{ $ruanganList->firstItem() + $i }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">{{ $ruangan->nama_ruangan }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $ruangan->lantai ?? '-' }}</td>
-                            <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $ruangan->skpd?->nama_skpd ?? '-' }}</td>
+                            <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                @if ($ruangan->status === 'Nonaktif')
+                                    <span class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">Nonaktif</span>
+                                @else
+                                    <span class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">Aktif</span>
+                                @endif
+                            </td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm">
                                 <span class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
                                     {{ $ruangan->jumlah_aset }}
                                 </span>
                             </td>
-                            <td class="whitespace-nowrap px-6 py-4 text-right text-sm">
-                                <div class="flex items-center justify-end gap-2">
-                                    <a href="{{ route('aset-ruangan.show', $ruangan->id_ruangan) }}" class="inline-flex items-center gap-2 rounded-xl bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100">
-                                        Detail
+                            <td class="whitespace-nowrap px-3 py-4 text-right text-sm">
+                                <div class="inline-flex items-center gap-1 rounded-2xl border border-slate-200/70 bg-slate-50/60 p-1 shadow-2xs">
+                                    <a href="{{ route('aset-ruangan.show', $ruangan->id_ruangan) }}" title="Lihat Inventaris Ruangan" class="flex h-7 w-7 items-center justify-center rounded-xl bg-white text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
+                                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                                     </a>
                                     @if ($isAdminAset)
-                                        <button type="button" data-edit-modal="{{ $editJson }}" class="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-200">
-                                            Edit
+                                        <button type="button" data-edit-modal="{{ $editJson }}" title="Edit Ruangan" class="flex h-7 w-7 items-center justify-center rounded-xl bg-blue-50 text-blue-600 transition hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
+                                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>
                                         </button>
-                                        <button type="button" data-delete-target="{{ $ruangan->id_ruangan }}" data-delete-name="{{ $ruangan->nama_ruangan }}" class="inline-flex items-center gap-2 rounded-xl bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100">
-                                            Hapus
-                                        </button>
+                                        <form method="POST" action="{{ route('aset-ruangan.toggle-status', $ruangan->id_ruangan) }}" onsubmit="return confirm('Ubah status ruangan ini?')">
+                                            @csrf
+                                            @if ($ruangan->status === 'Nonaktif')
+                                                <button type="submit" title="Aktifkan Ruangan" class="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
+                                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                                </button>
+                                            @else
+                                                <button type="submit" title="Nonaktifkan Ruangan" class="flex h-7 w-7 items-center justify-center rounded-xl bg-slate-100 text-slate-500 transition hover:bg-amber-50 hover:text-amber-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
+                                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/></svg>
+                                                </button>
+                                            @endif
+                                        </form>
                                     @endif
                                 </div>
                             </td>
@@ -95,10 +115,9 @@
 
     @if ($isAdminAset)
     {{-- Modal Tambah / Edit Ruangan --}}
-    <div id="ruangan-modal" class="fixed inset-0 z-50 hidden overflow-y-auto">
-        <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" data-modal-close></div>
-        <div class="flex min-h-full items-center justify-center p-4">
-        <div class="relative z-10 w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
+    <div id="ruangan-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
+        <div class="fixed inset-0" data-modal-close></div>
+        <div class="relative w-full max-w-md rounded-2xl bg-white shadow-2xl">
             <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
                 <div>
                     <h3 id="modal-title" class="text-lg font-semibold text-slate-900">Tambah Ruangan</h3>
@@ -126,29 +145,6 @@
                     </button>
                 </div>
             </form>
-            </div>
-        </div>
-    </div>
-
-    {{-- Modal Konfirmasi Hapus --}}
-    <div id="delete-modal" class="fixed inset-0 z-50 hidden overflow-y-auto">
-        <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" data-delete-close></div>
-        <div class="flex min-h-full items-center justify-center p-4">
-        <div class="relative z-10 w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <div class="flex items-start gap-4">
-                <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-100">
-                    <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                </div>
-                <div class="min-w-0">
-                    <h3 class="text-lg font-semibold text-slate-900">Hapus Ruangan</h3>
-                    <p class="mt-1 text-sm text-slate-500">Apakah Anda yakin ingin menghapus <span id="delete-name" class="font-medium text-slate-700"></span>? Tindakan ini tidak dapat dibatalkan.</p>
-                </div>
-            </div>
-            <div class="mt-6 flex justify-end gap-2">
-                <button type="button" data-delete-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
-                <button type="button" id="btn-delete-confirm" class="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700">Hapus</button>
-            </div>
-        </div>
         </div>
     </div>
 
@@ -157,10 +153,8 @@
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
         const storeUrl = @json(route('aset-ruangan.store'));
         const updateUrl = @json(route('aset-ruangan.update', ['ruangan' => '__ID__']));
-        const destroyUrl = @json(route('aset-ruangan.destroy', ['ruangan' => '__ID__']));
 
         const modal = document.getElementById('ruangan-modal');
-        const deleteModal = document.getElementById('delete-modal');
         const form = document.getElementById('ruangan-form');
 
         function openModal() {
@@ -173,16 +167,6 @@
             modal.classList.remove('flex');
             document.body.classList.remove('overflow-hidden');
             document.getElementById('form-error').classList.add('hidden');
-        }
-        function openDeleteModal(id, name) {
-            document.getElementById('delete-name').textContent = name;
-            deleteModal.setAttribute('data-current-id', id);
-            deleteModal.classList.remove('hidden');
-            deleteModal.classList.add('flex');
-        }
-        function closeDeleteModal() {
-            deleteModal.classList.add('hidden');
-            deleteModal.classList.remove('flex');
         }
 
         const btnTambah = document.getElementById('btn-tambah');
@@ -210,12 +194,6 @@
                 document.getElementById('modal-subtitle').textContent = 'Perbarui data ruangan.';
                 document.getElementById('btn-submit').textContent = 'Perbarui';
                 openModal();
-            });
-        });
-
-        document.querySelectorAll('[data-delete-target]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                openDeleteModal(btn.dataset.deleteTarget, btn.dataset.deleteName);
             });
         });
 
@@ -248,24 +226,7 @@
             }
         });
 
-        document.getElementById('btn-delete-confirm').addEventListener('click', async () => {
-            const id = deleteModal.getAttribute('data-current-id');
-            const btn = document.getElementById('btn-delete-confirm');
-            btn.textContent = 'Menghapus...';
-            btn.disabled = true;
-            try {
-                const res = await fetch(destroyUrl.replace('__ID__', id), { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken } });
-                if (res.ok) { window.location.reload(); }
-                else { alert('Gagal menghapus data.'); btn.textContent = 'Hapus'; btn.disabled = false; }
-            } catch (err) {
-                alert('Koneksi bermasalah.');
-                btn.textContent = 'Hapus';
-                btn.disabled = false;
-            }
-        });
-
         modal.querySelectorAll('[data-modal-close]').forEach(el => el.addEventListener('click', closeModal));
-        deleteModal.querySelectorAll('[data-delete-close]').forEach(el => el.addEventListener('click', closeDeleteModal));
     </script>
     @endpush
     @endif

@@ -17,7 +17,7 @@ class Kendaraan extends Model
 
     protected $primaryKey = 'id_kendaraan';
 
-    protected $fillable = ['id_aset', 'jenis_kendaraan', 'nomor_rangka', 'nomor_mesin', 'merk', 'tipe'];
+    protected $fillable = ['id_aset', 'jenis_kendaraan', 'nomor_rangka', 'nomor_mesin', 'merk', 'tipe', 'pemegang', 'foto', 'keterangan'];
 
     public function aset()
     {
@@ -37,5 +37,15 @@ class Kendaraan extends Model
     public function izin()
     {
         return $this->hasMany(IzinKendaraan::class, 'id_kendaraan');
+    }
+
+    public function platAktif()
+    {
+        return $this->hasOne(RiwayatPlat::class, 'id_kendaraan')->where('status', 'Aktif');
+    }
+
+    public function pajakAktif()
+    {
+        return $this->hasOne(PajakKendaraan::class, 'id_kendaraan')->where('status', 'Aktif');
     }
 }

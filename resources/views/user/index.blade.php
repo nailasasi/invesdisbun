@@ -81,10 +81,9 @@
     </x-card>
 
     {{-- Modal Tambah / Edit User --}}
-    <div id="user-modal" class="fixed inset-0 z-50 hidden overflow-y-auto">
-        <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" data-modal-close></div>
-        <div class="flex min-h-full items-center justify-center p-4">
-        <div class="relative z-10 w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-xl">
+    <div id="user-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
+        <div class="fixed inset-0" data-modal-close></div>
+        <div class="relative w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
             <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
                 <div>
                     <h3 id="modal-title" class="text-lg font-semibold text-slate-900">Tambah User</h3>
@@ -98,7 +97,7 @@
             <form id="user-form" method="POST" action="{{ route('user.store') }}" autocomplete="off">
                 @csrf
                 <input type="hidden" id="field-id" name="id" value="">
-                <div class="max-h-[70vh] space-y-5 overflow-y-auto px-6 py-6">
+                <div class="max-h-[90vh] space-y-5 overflow-y-auto px-6 py-6">
                     <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
                         <div class="space-y-1.5">
                             <label for="field-nip" class="block text-sm font-medium text-slate-700">NIP <span class="text-red-500">*</span></label>
@@ -170,15 +169,13 @@
                     </button>
                 </div>
             </form>
-            </div>
         </div>
     </div>
 
     {{-- Modal Ubah Role --}}
-    <div id="role-modal" class="fixed inset-0 z-50 hidden overflow-y-auto">
-        <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" data-role-close></div>
-        <div class="flex min-h-full items-center justify-center p-4">
-        <div class="relative z-10 w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+    <div id="role-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
+        <div class="fixed inset-0" data-role-close></div>
+        <div class="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
             <div class="flex items-start gap-4">
                 <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-indigo-100">
                     <svg class="h-6 w-6 text-indigo-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
@@ -203,15 +200,13 @@
                     <button type="submit" id="btn-role-confirm" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">Simpan</button>
                 </div>
             </form>
-            </div>
         </div>
     </div>
 
     {{-- Modal Konfirmasi Hapus --}}
-    <div id="delete-modal" class="fixed inset-0 z-50 hidden overflow-y-auto">
-        <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" data-delete-close></div>
-        <div class="flex min-h-full items-center justify-center p-4">
-        <div class="relative z-10 w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+    <div id="delete-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
+        <div class="fixed inset-0" data-delete-close></div>
+        <div class="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
             <div class="flex items-start gap-4">
                 <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-100">
                     <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>

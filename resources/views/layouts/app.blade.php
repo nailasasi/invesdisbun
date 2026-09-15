@@ -55,7 +55,8 @@
             <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M5 21V7a2 2 0 012-2h10a2 2 0 012 2v14M9 21v-4h6v4M9 10h.01M15 10h.01M9 14h.01M15 14h.01"/></svg>
             Aset Ruangan
           </a>
-          <a href="#" class="flex items-center gap-3 rounded-xl px-3 py-2.5 font-medium text-slate-400 transition hover:bg-white/5 hover:text-white">
+          <a href="{{ route('kendaraan.index') }}"
+             class="flex items-center gap-3 rounded-xl px-3 py-2.5 font-medium transition {{ request()->routeIs('kendaraan.*') ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-glow' : 'text-slate-400 hover:bg-white/5 hover:text-white' }}">
             <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 18H3V5h11v13H9m-4 0a2 2 0 104 0m-4 0a2 2 0 114 0m4-8h5l3 3v5h-8m0 0a2 2 0 104 0m-4 0a2 2 0 114 0"/></svg>
             Kendaraan
           </a>
@@ -72,7 +73,8 @@
         @if (auth()->user()?->role?->nama_role === 'Admin Aset')
         <div>
           <p class="mb-1 px-3 text-[10px] font-bold tracking-widest text-slate-600 uppercase">Pengelolaan Aset</p>
-          <a href="#" class="flex items-center gap-3 rounded-xl px-3 py-2.5 font-medium text-slate-400 transition hover:bg-white/5 hover:text-white">
+          <a href="{{ route('monitoring-aset.index') }}"
+             class="flex items-center gap-3 rounded-xl px-3 py-2.5 font-medium transition {{ request()->routeIs('monitoring-aset.*') ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-glow' : 'text-slate-400 hover:bg-white/5 hover:text-white' }}">
             <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
             Monitoring Aset
           </a>
@@ -81,7 +83,8 @@
             <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v6h6M20 20v-6h-6M20 9a8 8 0 00-14.32-3.296L4 8m16 8l-1.68 2.296A8 8 0 014 15"/></svg>
             Mutasi Aset
           </a>
-          <a href="#" class="flex items-center gap-3 rounded-xl px-3 py-2.5 font-medium text-slate-400 transition hover:bg-white/5 hover:text-white">
+          <a href="{{ route('penghapusan.index') }}"
+             class="flex items-center gap-3 rounded-xl px-3 py-2.5 font-medium transition {{ request()->routeIs('penghapusan.*') ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-glow' : 'text-slate-400 hover:bg-white/5 hover:text-white' }}">
             <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14zM10 11v6m4-6v6"/></svg>
             Penghapusan Aset
           </a>
@@ -96,7 +99,8 @@
             <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
             Laporan Bulanan
           </a>
-          <a href="#" class="flex items-center gap-3 rounded-xl px-3 py-2.5 font-medium text-slate-400 transition hover:bg-white/5 hover:text-white">
+          <a href="{{ route('template-dokumen.index') }}"
+             class="flex items-center gap-3 rounded-xl px-3 py-2.5 font-medium transition {{ request()->routeIs('template-dokumen.*') ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-glow' : 'text-slate-400 hover:bg-white/5 hover:text-white' }}">
             <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 3h7l5 5v13a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2zm7 0v5h5"/></svg>
             Template Dokumen
           </a>
@@ -244,6 +248,8 @@
         });
     }
 </script>
+
+@stack('modals')
 
 @stack('scripts')
 

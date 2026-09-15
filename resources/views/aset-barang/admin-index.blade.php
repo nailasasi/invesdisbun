@@ -3,6 +3,12 @@
 @section('title', 'Aset Barang')
 
 @section('content')
+    @if (session('download_bast_url'))
+        <script>
+            window.location.href = "{{ session('download_bast_url') }}";
+        </script>
+    @endif
+
     <x-page-header title="Aset Barang" subtitle="Seluruh aset beserta pemegangnya">
         <x-slot name="actions">
             <x-button type="button" id="btn-tambah" icon="M12 4v16m8-8H4">
@@ -83,7 +89,16 @@
                             <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">
                                 <a href="{{ route('aset-barang.aset.detail', $aset->id_aset) }}" class="text-slate-900 transition hover:text-emerald-600 hover:underline">{{ $aset->barang?->nama_barang ?? '-' }}</a>
                             </td>
-                            <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $aset->nomor_kartu_barang ?? '-' }}</td>
+                            <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                <div title="{{ $aset->nomor_kartu_barang }}" class="inline-flex max-w-[200px] items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
+                                    <span class="block max-w-[170px] truncate font-mono text-[11px] text-slate-700 leading-none">{{ $aset->nomor_kartu_barang ?? '-' }}</span>
+                                    @if ($aset->nomor_kartu_barang)
+                                        <button type="button" data-copy-kartu data-copy-value="{{ $aset->nomor_kartu_barang }}" title="Salin Nomor Kartu" class="inline-flex items-center justify-center shrink-0 text-slate-400 transition hover:text-slate-600">
+                                            <svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                                        </button>
+                                    @endif
+                                </div>
+                            </td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $aset->merk ?? '-' }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $aset->nilai_perolehan ? 'Rp ' . number_format((float) $aset->nilai_perolehan, 0, ',', '.') : '-' }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm">
@@ -99,20 +114,19 @@
                                     <span class="text-slate-400">-</span>
                                 @endif
                             </td>
-                            <td class="whitespace-nowrap px-6 py-4 text-right text-sm">
-                                <div class="flex items-center justify-end gap-2">
-                                    <a href="{{ route('aset-barang.aset.detail', $aset->id_aset) }}" title="Lihat Detail" class="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
+                            <td class="whitespace-nowrap px-3 py-4 text-sm">
+                                <div class="inline-flex items-center gap-1 rounded-2xl border border-slate-200/70 bg-slate-50/60 p-1 shadow-2xs">
+                                    <a href="{{ route('aset-barang.aset.detail', $aset->id_aset) }}" title="Detail" class="flex h-7 w-7 items-center justify-center rounded-xl bg-white text-slate-600 transition hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
                                         <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                                        Detail
                                     </a>
-                                    <button type="button" data-mutasi-modal="{{ $aset->id_aset }}" class="inline-flex items-center gap-2 rounded-xl bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-600 transition hover:bg-indigo-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
-                                        Mutasi
+                                    <a href="{{ route('aset-barang.cetak.label.single', $aset->id_aset) }}" target="_blank" title="Cetak Label" class="flex h-7 w-7 items-center justify-center rounded-xl bg-amber-50 text-amber-600 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
+                                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.01"/></svg>
+                                    </a>
+                                    <button type="button" data-mutasi-modal="{{ $aset->id_aset }}" title="Mutasi" class="flex h-7 w-7 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 transition hover:bg-indigo-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+                                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 4v12m0 0l4-4m-4 4l-4-4"/></svg>
                                     </button>
-                                    <button type="button" data-edit-modal="{{ $aset->id_aset }}" class="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
-                                        Edit
-                                    </button>
-                                    <button type="button" data-delete-target="{{ $aset->id_aset }}" data-delete-name="{{ $aset->barang?->nama_barang ?? $aset->nomor_kartu_barang }}" class="inline-flex items-center gap-2 rounded-xl bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
-                                        Hapus
+                                    <button type="button" data-delete-target="{{ $aset->id_aset }}" data-delete-name="{{ $aset->barang?->nama_barang ?? $aset->nomor_kartu_barang }}" title="Hapus" class="flex h-7 w-7 items-center justify-center rounded-xl bg-red-50 text-red-600 transition hover:bg-red-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
+                                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                                     </button>
                                 </div>
                             </td>
@@ -131,222 +145,6 @@
         </div>
     </x-card>
 
-    {{-- Modal Tambah / Edit Aset --}}
-    <div id="aset-modal" class="fixed inset-0 z-50 hidden overflow-y-auto">
-        <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" data-modal-close></div>
-        <div class="flex min-h-full items-center justify-center p-4">
-        <div class="relative z-10 w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-xl">
-            <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
-                <div>
-                    <h3 id="modal-title" class="text-lg font-semibold text-slate-900">Tambah Aset</h3>
-                    <p id="modal-subtitle" class="mt-0.5 text-sm text-slate-500">Lengkapi data aset dan pilih pemegangnya.</p>
-                </div>
-                <button type="button" data-modal-close class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Tutup">
-                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                </button>
-            </div>
-
-            <form id="aset-form" method="POST" action="{{ route('aset-barang.store.flat') }}" autocomplete="off">
-                @csrf
-                <input type="hidden" id="field-id" name="id" value="">
-                <div class="max-h-[70vh] space-y-5 overflow-y-auto px-6 py-6">
-                    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                        <div id="placement-fields" class="contents">
-                        <div class="space-y-1.5">
-                            <label for="field-pegawai" class="block text-sm font-medium text-slate-700">Pemegang</label>
-                            <select id="field-pegawai" name="id_pegawai" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                                <option value="" selected>-- Pilih Pegawai --</option>
-                                @foreach ($allPegawai as $p)
-                                    <option value="{{ $p->id_pegawai }}" data-ruangan="{{ $p->id_ruangan ?? '' }}">{{ $p->nama_pegawai }}</option>
-                                @endforeach
-                            </select>
-                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_pegawai"></p>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="field-ruangan" class="block text-sm font-medium text-slate-700">Ruangan</label>
-                            <select id="field-ruangan" name="id_ruangan" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                                <option value="" selected>-- Pilih Ruangan --</option>
-                                @foreach ($ruanganOptions as $r)
-                                    <option value="{{ $r->id_ruangan }}">{{ $r->nama_ruangan }}</option>
-                                @endforeach
-                            </select>
-                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_ruangan"></p>
-                        </div>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="field-barang" class="block text-sm font-medium text-slate-700">Nama Barang <span class="text-red-500">*</span></label>
-                            <input type="text" id="field-barang" name="nama_barang" required maxlength="100" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: Laptop">
-                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="nama_barang"></p>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="field-kartu" class="block text-sm font-medium text-slate-700">Nomor Kartu Barang <span class="text-red-500">*</span></label>
-                            <input type="text" id="field-kartu" name="nomor_kartu_barang" maxlength="50" required class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: KIB-001">
-                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="nomor_kartu_barang"></p>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="field-merk" class="block text-sm font-medium text-slate-700">Merk</label>
-                            <input type="text" id="field-merk" name="merk" maxlength="100" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: Canon">
-                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="merk"></p>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="field-pengadaan" class="block text-sm font-medium text-slate-700">Tanggal Pengadaan</label>
-                            <input type="date" id="field-pengadaan" name="tanggal_pengadaan" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="tanggal_pengadaan"></p>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="field-perolehan" class="block text-sm font-medium text-slate-700">Tanggal Perolehan</label>
-                            <input type="date" id="field-perolehan" name="tanggal_perolehan" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="tanggal_perolehan"></p>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="field-habis-pakai" class="block text-sm font-medium text-slate-700">Tanggal Habis Pakai</label>
-                            <input type="date" id="field-habis-pakai" name="tanggal_habis_pakai" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="tanggal_habis_pakai"></p>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="field-nilai" class="block text-sm font-medium text-slate-700">Nilai Perolehan</label>
-                            <input type="number" id="field-nilai" name="nilai_perolehan" step="0.01" min="0" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: 5000000">
-                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="nilai_perolehan"></p>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="field-kondisi" class="block text-sm font-medium text-slate-700">Kondisi <span class="text-red-500">*</span></label>
-                            <select id="field-kondisi" name="kondisi" required class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                                <option value="" selected>-- Pilih Kondisi --</option>
-                                @foreach ($kondisiList as $kondisi)
-                                    <option value="{{ $kondisi }}">{{ $kondisi }}</option>
-                                @endforeach
-                            </select>
-                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="kondisi"></p>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="field-status" class="block text-sm font-medium text-slate-700">Status Aset <span class="text-red-500">*</span></label>
-                            <input type="text" id="field-status" name="status_aset" required maxlength="50" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: Aktif">
-                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="status_aset"></p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="flex items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
-                    <button type="button" data-modal-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
-                    <button type="submit" id="btn-submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700">
-                        Simpan
-                    </button>
-                </div>
-            </form>
-            </div>
-        </div>
-    </div>
-
-    {{-- Modal Mutasi Aset --}}
-    <div id="mutasi-modal" class="fixed inset-0 z-50 hidden overflow-y-auto">
-        <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" data-mutasi-close></div>
-        <div class="flex min-h-full items-center justify-center p-4">
-        <div class="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-xl">
-            <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
-                <div>
-                    <h3 class="text-lg font-semibold text-slate-900">Mutasi Aset</h3>
-                    <p class="mt-0.5 text-sm text-slate-500" id="mutasi-aset-info">Pilih jenis mutasi untuk aset ini.</p>
-                </div>
-                <button type="button" data-mutasi-close class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Tutup">
-                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                </button>
-            </div>
-
-            <form id="mutasi-form" method="POST" autocomplete="off">
-                @csrf
-                <input type="hidden" id="mutasi-aset-id" name="id_aset" value="">
-                <div class="max-h-[70vh] space-y-5 overflow-y-auto px-6 py-6">
-                    <div class="space-y-1.5">
-                        <label for="mutasi-aset-name" class="block text-sm font-medium text-slate-700">Aset</label>
-                        <div id="mutasi-aset-name" class="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-700"></div>
-                    </div>
-
-                    <div class="space-y-1.5">
-                        <label class="block text-sm font-medium text-slate-700">Jenis Mutasi <span class="text-red-500">*</span></label>
-                        <div class="grid grid-cols-2 gap-2">
-                            <button type="button" id="tipe-pegawai" data-tipe="pegawai" class="rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition">
-                                Ganti Pemegang
-                            </button>
-                            <button type="button" id="tipe-ruangan" data-tipe="ruangan" class="rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition">
-                                Pindah Ruangan
-                            </button>
-                        </div>
-                        <input type="hidden" id="mutasi-tipe" name="tipe" value="">
-                        <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="tipe"></p>
-                    </div>
-
-                    <div id="mutasi-field-pegawai" class="space-y-1.5 hidden">
-                        <label for="mutasi-pegawai" class="block text-sm font-medium text-slate-700">Pemegang Baru <span class="text-red-500">*</span></label>
-                        <select id="mutasi-pegawai" name="id_pegawai" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                            <option value="" selected>-- Pilih Pemegang Baru --</option>
-                            @foreach ($allPegawai as $p)
-                                <option value="{{ $p->id_pegawai }}">{{ $p->nama_pegawai }}</option>
-                            @endforeach
-                        </select>
-                        <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_pegawai"></p>
-                        <p class="text-xs text-slate-400">Aset akan otomatis mengikuti ruangan kerja pemegang baru.</p>
-                    </div>
-
-                    <div id="mutasi-field-ruangan" class="space-y-1.5 hidden">
-                        <label for="mutasi-ruangan" class="block text-sm font-medium text-slate-700">Ruangan Tujuan <span class="text-red-500">*</span></label>
-                        <select id="mutasi-ruangan" name="id_ruangan" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                            <option value="" selected>-- Pilih Ruangan Tujuan --</option>
-                            @foreach ($ruanganOptions as $r)
-                                <option value="{{ $r->id_ruangan }}">{{ $r->nama_ruangan }}</option>
-                            @endforeach
-                        </select>
-                        <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_ruangan"></p>
-                    </div>
-
-                    <div class="space-y-1.5">
-                        <label for="mutasi-keterangan" class="block text-sm font-medium text-slate-700">Keterangan</label>
-                        <textarea id="mutasi-keterangan" name="keterangan" rows="2" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: serah terima antar pegawai"></textarea>
-                    </div>
-                </div>
-
-                <div class="flex items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
-                    <button type="button" data-mutasi-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
-                    <button type="submit" id="btn-mutasi-submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700">
-                        Simpan Mutasi
-                    </button>
-                </div>
-            </form>
-            </div>
-        </div>
-    </div>
-
-    {{-- Modal Konfirmasi Hapus --}}
-    <div id="delete-modal" class="fixed inset-0 z-50 hidden overflow-y-auto">
-        <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" data-delete-close></div>
-        <div class="flex min-h-full items-center justify-center p-4">
-        <div class="relative z-10 w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <div class="flex items-start gap-4">
-                <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-100">
-                    <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                </div>
-                <div class="min-w-0">
-                    <h3 class="text-lg font-semibold text-slate-900">Hapus Aset</h3>
-                    <p class="mt-1 text-sm text-slate-500">Apakah Anda yakin ingin menghapus <span id="delete-name" class="font-medium text-slate-700"></span>? Tindakan ini tidak dapat dibatalkan.</p>
-                </div>
-            </div>
-            <div class="mt-6 flex justify-end gap-2">
-                <button type="button" data-delete-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
-                <button type="button" id="btn-delete-confirm" class="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700">Hapus</button>
-            </div>
-        </div>
-        </div>
-    </div>
-
     @push('scripts')
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
@@ -360,6 +158,36 @@
         const mutasiModal = document.getElementById('mutasi-modal');
         const form = document.getElementById('aset-form');
 
+        // Copy nomor kartu barang (clipboard API + fallback)
+        function fallbackCopy(text, done) {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); done(); } catch (e) {}
+            document.body.removeChild(ta);
+        }
+
+        document.querySelectorAll('[data-copy-kartu]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const text = btn.dataset.copyValue || '';
+                const done = () => {
+                    const original = btn.innerHTML;
+                    btn.innerHTML = '<svg class="h-3.5 w-3.5 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+                    btn.classList.add('text-emerald-600');
+                    btn.classList.remove('text-slate-400');
+                    setTimeout(() => { btn.innerHTML = original; btn.classList.remove('text-emerald-600'); btn.classList.add('text-slate-400'); }, 1200);
+                };
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+                } else {
+                    fallbackCopy(text, done);
+                }
+            });
+        });
+
         function showErrors(errors) {
             form.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
             Object.keys(errors).forEach(field => {
@@ -369,13 +197,11 @@
         }
 
         function openModal() {
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
+            modal.style.visibility = 'visible';
             document.body.classList.add('overflow-hidden');
         }
         function closeModal() {
-            modal.classList.add('hidden');
-            modal.classList.remove('flex');
+            modal.style.visibility = 'hidden';
             document.body.classList.remove('overflow-hidden');
             form.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
         }
@@ -384,13 +210,11 @@
             if (!deleteModal) return;
             document.getElementById('delete-name').textContent = name;
             deleteModal.setAttribute('data-current-id', id);
-            deleteModal.classList.remove('hidden');
-            deleteModal.classList.add('flex');
+            deleteModal.style.visibility = 'visible';
         }
         function closeDeleteModal() {
             if (!deleteModal) return;
-            deleteModal.classList.add('hidden');
-            deleteModal.classList.remove('flex');
+            deleteModal.style.visibility = 'hidden';
         }
 
         // Tombol Tambah
@@ -506,20 +330,20 @@
             const btnConfirm = document.getElementById('btn-delete-confirm');
             btnConfirm.addEventListener('click', async () => {
                 const id = deleteModal.getAttribute('data-current-id');
-                btnConfirm.textContent = 'Menghapus...';
+                btnConfirm.textContent = 'Memproses...';
                 btnConfirm.disabled = true;
                 try {
                     const res = await fetch(updateUrl.replace('__ID__', id), { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken } });
                     if (res.ok) {
                         window.location.reload();
                     } else {
-                        alert('Gagal menghapus data.');
-                        btnConfirm.textContent = 'Hapus';
+                        alert('Gagal mengajukan usulan penghapusan.');
+                        btnConfirm.textContent = 'Usulkan Hapus';
                         btnConfirm.disabled = false;
                     }
                 } catch (err) {
                     alert('Koneksi bermasalah.');
-                    btnConfirm.textContent = 'Hapus';
+                    btnConfirm.textContent = 'Usulkan Hapus';
                     btnConfirm.disabled = false;
                 }
             });
@@ -562,14 +386,12 @@
             document.getElementById('mutasi-aset-id').value = id;
             document.getElementById('mutasi-aset-name').textContent = name;
             setMutasiMode(hasPemegang ? 'pegawai' : 'ruangan');
-            mutasiModal.classList.remove('hidden');
-            mutasiModal.classList.add('flex');
+            mutasiModal.style.visibility = 'visible';
             document.body.classList.add('overflow-hidden');
         }
         function closeMutasiModal() {
             if (!mutasiModal) return;
-            mutasiModal.classList.add('hidden');
-            mutasiModal.classList.remove('flex');
+            mutasiModal.style.visibility = 'hidden';
             document.body.classList.remove('overflow-hidden');
         }
         if (mutasiModal) {
@@ -632,4 +454,218 @@
         }
     </script>
     @endpush
+
+    @push('modals')
+    {{-- Modal Tambah / Edit Aset --}}
+    <div id="aset-modal" class="overflow-y-auto p-4"
+         style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 99999; background-color: rgba(15, 23, 42, 0.6); display: flex; align-items: center; justify-content: center; visibility: hidden;">
+        <div class="fixed inset-0" data-modal-close></div>
+        <div class="relative w-full max-w-4xl rounded-2xl bg-white shadow-2xl">
+            <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
+                <div>
+                    <h3 id="modal-title" class="text-lg font-semibold text-slate-900">Tambah Aset</h3>
+                    <p id="modal-subtitle" class="mt-0.5 text-sm text-slate-500">Lengkapi data aset dan pilih pemegangnya.</p>
+                </div>
+                <button type="button" data-modal-close class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Tutup">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <form id="aset-form" method="POST" action="{{ route('aset-barang.store.flat') }}" autocomplete="off">
+                @csrf
+                <input type="hidden" id="field-id" name="id" value="">
+                <div class="max-h-[90vh] space-y-5 overflow-y-auto px-6 py-6">
+                    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                        <div id="placement-fields" class="contents">
+                        <div class="space-y-1.5">
+                            <label for="field-pegawai" class="block text-sm font-medium text-slate-700">Pemegang</label>
+                            <select id="field-pegawai" name="id_pegawai" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                                <option value="" selected>-- Pilih Pegawai --</option>
+                                @foreach ($allPegawai as $p)
+                                    <option value="{{ $p->id_pegawai }}" data-ruangan="{{ $p->id_ruangan ?? '' }}">{{ $p->nama_pegawai }}</option>
+                                @endforeach
+                            </select>
+                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_pegawai"></p>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label for="field-ruangan" class="block text-sm font-medium text-slate-700">Ruangan</label>
+                            <select id="field-ruangan" name="id_ruangan" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                                <option value="" selected>-- Pilih Ruangan --</option>
+                                @foreach ($ruanganOptions as $r)
+                                    <option value="{{ $r->id_ruangan }}">{{ $r->nama_ruangan }}</option>
+                                @endforeach
+                            </select>
+                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_ruangan"></p>
+                        </div>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label for="field-barang" class="block text-sm font-medium text-slate-700">Nama Barang <span class="text-red-500">*</span></label>
+                            <input type="text" id="field-barang" name="nama_barang" required maxlength="100" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: Laptop">
+                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="nama_barang"></p>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label for="field-kartu" class="block text-sm font-medium text-slate-700">Nomor Kartu Barang <span class="text-red-500">*</span></label>
+                            <input type="text" id="field-kartu" name="nomor_kartu_barang" maxlength="50" required class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: KIB-001">
+                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="nomor_kartu_barang"></p>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label for="field-merk" class="block text-sm font-medium text-slate-700">Merk</label>
+                            <input type="text" id="field-merk" name="merk" maxlength="100" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: Canon">
+                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="merk"></p>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label for="field-pengadaan" class="block text-sm font-medium text-slate-700">Tanggal Pengadaan</label>
+                            <input type="date" id="field-pengadaan" name="tanggal_pengadaan" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="tanggal_pengadaan"></p>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label for="field-perolehan" class="block text-sm font-medium text-slate-700">Tanggal Perolehan</label>
+                            <input type="date" id="field-perolehan" name="tanggal_perolehan" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="tanggal_perolehan"></p>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label for="field-habis-pakai" class="block text-sm font-medium text-slate-700">Tanggal Habis Pakai</label>
+                            <input type="date" id="field-habis-pakai" name="tanggal_habis_pakai" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="tanggal_habis_pakai"></p>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label for="field-nilai" class="block text-sm font-medium text-slate-700">Nilai Perolehan</label>
+                            <input type="number" id="field-nilai" name="nilai_perolehan" step="0.01" min="0" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: 5000000">
+                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="nilai_perolehan"></p>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label for="field-kondisi" class="block text-sm font-medium text-slate-700">Kondisi <span class="text-red-500">*</span></label>
+                            <select id="field-kondisi" name="kondisi" required class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                                <option value="" selected>-- Pilih Kondisi --</option>
+                                @foreach ($kondisiList as $kondisi)
+                                    <option value="{{ $kondisi }}">{{ $kondisi }}</option>
+                                @endforeach
+                            </select>
+                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="kondisi"></p>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label for="field-status" class="block text-sm font-medium text-slate-700">Status Aset <span class="text-red-500">*</span></label>
+                            <input type="text" id="field-status" name="status_aset" required maxlength="50" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: aktif">
+                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="status_aset"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
+                    <button type="button" data-modal-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
+                    <button type="submit" id="btn-submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700">
+                        Simpan
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {{-- Modal Mutasi Aset --}}
+    <div id="mutasi-modal" class="overflow-y-auto"
+         style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 99999; background-color: rgba(15, 23, 42, 0.6); display: flex; align-items: center; justify-content: center; padding: 1rem; visibility: hidden;">
+        <div class="fixed inset-0" data-mutasi-close></div>
+        <div class="relative w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex items-start justify-between">
+                <div>
+                    <h3 class="text-lg font-semibold text-slate-900">Mutasi Aset</h3>
+                    <p class="mt-0.5 text-sm text-slate-500" id="mutasi-aset-info">Pilih jenis mutasi untuk aset ini.</p>
+                </div>
+                <button type="button" data-mutasi-close class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Tutup">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <form id="mutasi-form" method="POST" autocomplete="off" class="mt-5 space-y-4">
+                @csrf
+                <input type="hidden" id="mutasi-aset-id" name="id_aset" value="">
+                <div class="space-y-1.5">
+                    <label for="mutasi-aset-name" class="block text-sm font-medium text-slate-700">Aset</label>
+                    <div id="mutasi-aset-name" class="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-700"></div>
+                </div>
+
+                <div class="space-y-1.5">
+                    <label class="block text-sm font-medium text-slate-700">Jenis Mutasi <span class="text-red-500">*</span></label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" id="tipe-pegawai" data-tipe="pegawai" class="rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition">
+                            Ganti Pemegang
+                        </button>
+                        <button type="button" id="tipe-ruangan" data-tipe="ruangan" class="rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition">
+                            Pindah Ruangan
+                        </button>
+                    </div>
+                    <input type="hidden" id="mutasi-tipe" name="tipe" value="">
+                    <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="tipe"></p>
+                </div>
+
+                <div id="mutasi-field-pegawai" class="space-y-1.5 hidden">
+                    <label for="mutasi-pegawai" class="block text-sm font-medium text-slate-700">Pemegang Baru <span class="text-red-500">*</span></label>
+                    <select id="mutasi-pegawai" name="id_pegawai" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                        <option value="" selected>-- Pilih Pemegang Baru --</option>
+                        @foreach ($allPegawai as $p)
+                            <option value="{{ $p->id_pegawai }}">{{ $p->nama_pegawai }}</option>
+                        @endforeach
+                    </select>
+                    <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_pegawai"></p>
+                    <p class="text-xs text-slate-400">Aset akan otomatis mengikuti ruangan kerja pemegang baru.</p>
+                </div>
+
+                <div id="mutasi-field-ruangan" class="space-y-1.5 hidden">
+                    <label for="mutasi-ruangan" class="block text-sm font-medium text-slate-700">Ruangan Tujuan <span class="text-red-500">*</span></label>
+                    <select id="mutasi-ruangan" name="id_ruangan" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                        <option value="" selected>-- Pilih Ruangan Tujuan --</option>
+                        @foreach ($ruanganOptions as $r)
+                            <option value="{{ $r->id_ruangan }}">{{ $r->nama_ruangan }}</option>
+                        @endforeach
+                    </select>
+                    <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_ruangan"></p>
+                </div>
+
+                <div class="space-y-1.5">
+                    <label for="mutasi-keterangan" class="block text-sm font-medium text-slate-700">Keterangan</label>
+                    <textarea id="mutasi-keterangan" name="keterangan" rows="2" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: serah terima antar pegawai"></textarea>
+                </div>
+
+                <div class="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
+                    <button type="button" data-mutasi-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
+                    <button type="submit" id="btn-mutasi-submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700">
+                        Simpan Mutasi
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {{-- Modal Konfirmasi Hapus --}}
+    <div id="delete-modal" class="overflow-y-auto"
+         style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 99999; background-color: rgba(15, 23, 42, 0.6); display: flex; align-items: center; justify-content: center; padding: 1rem; visibility: hidden;">
+        <div class="fixed inset-0" data-delete-close></div>
+        <div class="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex items-start gap-4">
+                <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-100">
+                    <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                </div>
+                <div class="min-w-0">
+                    <h3 class="text-lg font-semibold text-slate-900">Usulkan Penghapusan Aset</h3>
+                    <p class="mt-1 text-sm text-slate-500"><span id="delete-name" class="font-medium text-slate-700"></span> akan masuk antrean usulan penghapusan dan hilang dari daftar aset aktif. Pembatalan dapat dilakukan di halaman Penghapusan.</p>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end gap-2">
+                <button type="button" data-delete-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
+                <button type="button" id="btn-delete-confirm" class="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700">Usulkan Hapus</button>
+            </div>
+        </div>
+    </div>
+    @endpush
+
 @endsection

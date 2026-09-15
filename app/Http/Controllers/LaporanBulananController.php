@@ -20,22 +20,29 @@ class LaporanBulananController extends Controller
 
         $asetPerPegawai = PemegangAset::with(['pegawai.skpd', 'aset.barang.kategori'])
             ->where('status', 'aktif')
+            ->whereHas('aset', fn ($a) => $a->where('is_kendaraan', false))
             ->get()
             ->groupBy(fn ($item) => $item->pegawai->nama_pegawai ?? 'Tidak Diketahui');
 
         $asetPerRuangan = PenempatanAset::with(['ruangan.skpd', 'aset.barang.kategori'])
             ->where('status', 'aktif')
+            ->whereHas('aset', fn ($a) => $a->where('is_kendaraan', false))
             ->get()
             ->groupBy(fn ($item) => $item->ruangan->nama_ruangan ?? 'Tidak Diketahui');
 
         $mutasiBulanIni = MutasiAset::with(['details.aset.barang', 'details.pegawaiLama', 'details.pegawaiBaru', 'details.ruanganLama', 'details.ruanganBaru'])
+            ->whereHas('details.aset', fn ($a) => $a->where('is_kendaraan', false))
             ->whereBetween('tanggal_mutasi', [$startOfMonth, $endOfMonth])
             ->latest('tanggal_mutasi')
             ->get();
 
-        $totalAset = Aset::count();
-        $totalAsetPegawai = PemegangAset::where('status', 'aktif')->count();
-        $totalAsetRuangan = PenempatanAset::where('status', 'aktif')->count();
+        $totalAset = Aset::barang()->count();
+        $totalAsetPegawai = PemegangAset::where('status', 'aktif')
+            ->whereHas('aset', fn ($a) => $a->where('is_kendaraan', false))
+            ->count();
+        $totalAsetRuangan = PenempatanAset::where('status', 'aktif')
+            ->whereHas('aset', fn ($a) => $a->where('is_kendaraan', false))
+            ->count();
         $totalMutasi = $mutasiBulanIni->count();
 
         return view('laporan.laporan_bulanan', compact(

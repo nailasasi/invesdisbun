@@ -7,9 +7,9 @@
     'id' => '',
 ])
 
-<div id="{{ $id }}" data-modal-body class="fixed inset-0 z-50 hidden items-center justify-center">
-    <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" data-close></div>
-    <div class="relative z-10 mx-auto w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+<div id="{{ $id }}" data-modal-body class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
+    <div class="fixed inset-0" data-close></div>
+    <div class="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
         <div class="flex items-start gap-4">
             <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-100">
                 <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
