@@ -15,7 +15,7 @@
   <div id="sidebar-backdrop" class="fixed inset-0 z-40 hidden bg-slate-900/60 backdrop-blur-sm lg:hidden"></div>
 
   {{-- SIDEBAR --}}
-  <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 flex w-72 shrink-0 -translate-x-full flex-col bg-slate-900 text-slate-400 transition-transform duration-300 ease-in-out lg:static lg:z-auto lg:translate-x-0">
+  <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 flex w-72 shrink-0 -translate-x-full flex-col bg-slate-900 text-slate-400 transition-all duration-300 ease-in-out lg:static lg:z-auto lg:translate-x-0 lg:overflow-hidden">
 
     <div class="relative overflow-hidden px-6 py-6">
       <div class="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-emerald-500/20 blur-2xl"></div>
@@ -140,7 +140,7 @@
     {{-- HEADER --}}
     <header class="z-20 flex shrink-0 items-center justify-between gap-3 border-b border-slate-200/70 bg-white/80 px-4 py-3 backdrop-blur-xl lg:px-6">
       <div class="flex min-w-0 items-center gap-3">
-        <button id="sidebar-toggle" class="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 shadow-soft transition hover:bg-slate-50 hover:text-slate-700 lg:hidden" aria-label="Buka menu">
+        <button id="sidebar-toggle" class="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 shadow-soft transition hover:bg-slate-50 hover:text-slate-700" onclick="toggleSidebar()" aria-label="Buka/Tutup menu">
           <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
         <div class="min-w-0">
@@ -209,7 +209,7 @@
 <script>
     const sidebar = document.getElementById('sidebar');
     const backdrop = document.getElementById('sidebar-backdrop');
-    const sidebarToggle = document.getElementById('sidebar-toggle');
+    const desktopQuery = window.matchMedia('(min-width: 1024px)');
 
     function openSidebar() {
         sidebar.classList.remove('-translate-x-full');
@@ -221,10 +221,12 @@
         backdrop.classList.add('hidden');
         document.body.classList.remove('overflow-hidden');
     }
-    if (sidebarToggle) {
-        sidebarToggle.addEventListener('click', () => {
+    function toggleSidebar() {
+        if (desktopQuery.matches) {
+            sidebar.classList.toggle('lg:w-0');
+        } else {
             sidebar.classList.contains('-translate-x-full') ? openSidebar() : closeSidebar();
-        });
+        }
     }
     if (backdrop) {
         backdrop.addEventListener('click', closeSidebar);

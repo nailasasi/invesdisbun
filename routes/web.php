@@ -257,6 +257,14 @@ Route::middleware('auth')->group(function () {
             Route::post('{kendaraan}/plat', [KendaraanController::class, 'storePlat'])
                 ->name('plat.store');
 
+            Route::post('{kendaraan}/mutasi-pemegang', [KendaraanController::class, 'mutasiPemegang'])
+                ->name('mutasi-pemegang.store');
+
+            Route::get('{kendaraan}/mutasi/{id_mutasi}/sppkd', [MutasiAsetController::class, 'downloadSPPKD'])
+                ->name('mutasi.sppkd.download');
+            Route::get('{kendaraan}/mutasi/{id_mutasi}/bast', [MutasiAsetController::class, 'downloadBASTKendaraan'])
+                ->name('mutasi.bast.download');
+
             Route::post('{kendaraan}/pajak', [PajakKendaraanController::class, 'store'])
                 ->name('pajak.store');
             Route::delete('{kendaraan}/pajak/{pajak}', [PajakKendaraanController::class, 'destroy'])

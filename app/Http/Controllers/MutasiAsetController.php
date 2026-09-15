@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\MutasiAset;
+use App\Models\Kendaraan;
 use App\Models\TemplateDokumen;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -114,6 +115,166 @@ class MutasiAsetController extends Controller
             '{/barang}'         => '',
         ];
 
+        $this->applyReplacements($phpWord, $swap);
+
+        $namaFile = 'BAST_' . Str::slug($aset->barang->nama_barang ?? 'Aset', '_') . '_' . $tgl->format('Ymd') . '.docx';
+        $tempPath = tempnam(sys_get_temp_dir(), 'BAST_');
+        $phpWord->saveAs($tempPath);
+
+        return response()->download($tempPath, $namaFile)->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Unduh BAST Kendaraan (Berita Acara Serah Terima Kendaraan Dinas).
+     * Template: 'bast_kendaraan' (unggah di Pengaturan Dokumen).
+     */
+    public function downloadBASTKendaraan(Kendaraan $kendaraan, $id_mutasi)
+    {
+        $mutasi = MutasiAset::with(['details', 'details.aset.barang', 'details.pegawaiLama', 'details.pegawaiBaru'])
+            ->findOrFail($id_mutasi);
+
+        if ($mutasi->jenis_mutasi !== 'Ganti Pemegang') {
+            return back()->with('error', 'Dokumen BAST hanya tersedia untuk mutasi Ganti Pemegang.');
+        }
+
+        $detail = $mutasi->details->first();
+        if (!$detail || !$detail->aset || (int) $detail->id_aset !== (int) $kendaraan->id_aset) {
+            return back()->with('error', 'Detail mutasi tidak ditemukan untuk kendaraan ini.');
+        }
+
+        $template = TemplateDokumen::where('kode_template', 'bast_kendaraan')->first();
+        if (!$template || !$template->file_path || !Storage::disk('public')->exists($template->file_path)) {
+            return back()->with('error', 'Template BAST Kendaraan belum diunggah di Pengaturan Dokumen.');
+        }
+
+        $phpWord = new TemplateProcessor(storage_path('app/public/' . $template->file_path));
+
+        $tgl = \Carbon\Carbon::parse($mutasi->tanggal_mutasi ?? now())->locale('id');
+
+        $p1 = $detail->pegawaiLama;
+        $p2 = $detail->pegawaiBaru;
+        $aset = $detail->aset;
+        $knd = Kendaraan::where('id_aset', $aset->id_aset)->first();
+        $platAktif = $knd?->platAktif;
+
+        // Sesuaikan placeholder dengan template 'bast_kendaraan'.
+        $values = [
+            'hari' => $tgl->translatedFormat('l'),
+            'tanggal_terbilang' => $this->terbilang((int) $tgl->format('d')),
+            'bulan' => $tgl->translatedFormat('F'),
+            'tahun_terbilang' => $this->terbilang((int) $tgl->format('Y')),
+            'nama_pihak_pertama' => $p1->nama_pegawai ?? '-',
+            'nip_pihak_pertama' => $p1->nip ?? '-',
+            'jabatan_pihak_pertama' => $p1->jabatan ?? '-',
+            'nama_pihak_kedua' => $p2->nama_pegawai ?? '-',
+            'nip_pihak_kedua' => $p2->nip ?? '-',
+            'jabatan_pihak_kedua' => $p2->jabatan ?? '-',
+            'nomor' => '1',
+            'no_plat' => $platAktif?->nomor_plat ?? '-',
+            'jenis_kendaraan' => $knd?->jenis_kendaraan ?? '-',
+            'no_rangka' => $knd?->nomor_rangka ?? '-',
+            'no_mesin' => $knd?->nomor_mesin ?? '-',
+        ];
+
+        foreach ($values as $key => $value) {
+            $phpWord->setValue($key, $value);
+        }
+
+        $swap = [];
+        foreach ($values as $key => $value) {
+            $swap['{' . $key . '}'] = $value;
+        }
+        $swap['{#kendaraan}'] = '';
+        $swap['{/kendaraan}'] = '';
+
+        $this->applyReplacements($phpWord, $swap);
+
+        $namaFile = 'BAST_Kendaraan_' . Str::slug($aset->barang->nama_barang ?? 'Kendaraan', '_') . '_' . $tgl->format('Ymd') . '.docx';
+        $tempPath = tempnam(sys_get_temp_dir(), 'BAST_');
+        $phpWord->saveAs($tempPath);
+
+        return response()->download($tempPath, $namaFile)->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Unduh SPPKD (Surat Penunjukan Pemakaian Kendaraan Dinas).
+     * Template: 'sppkd' (unggah di Pengaturan Dokumen).
+     */
+    public function downloadSPPKD(Kendaraan $kendaraan, $id_mutasi)
+    {
+        $mutasi = MutasiAset::with(['details', 'details.aset.barang', 'details.pegawaiBaru'])
+            ->findOrFail($id_mutasi);
+
+        if ($mutasi->jenis_mutasi !== 'Ganti Pemegang') {
+            return back()->with('error', 'Dokumen SPPKD hanya tersedia untuk mutasi Ganti Pemegang.');
+        }
+
+        $detail = $mutasi->details->first();
+        if (!$detail || !$detail->aset || (int) $detail->id_aset !== (int) $kendaraan->id_aset) {
+            return back()->with('error', 'Detail mutasi tidak ditemukan untuk kendaraan ini.');
+        }
+
+        $template = TemplateDokumen::where('kode_template', 'sppkd')->first();
+        if (!$template || !$template->file_path || !Storage::disk('public')->exists($template->file_path)) {
+            return back()->with('error', 'Template SPPKD belum diunggah di Pengaturan Dokumen.');
+        }
+
+        $phpWord = new TemplateProcessor(storage_path('app/public/' . $template->file_path));
+
+        $tgl = \Carbon\Carbon::parse($mutasi->tanggal_mutasi ?? now())->locale('id');
+
+        $p2 = $detail->pegawaiBaru;
+        $aset = $detail->aset;
+        $knd = Kendaraan::where('id_aset', $aset->id_aset)->first();
+        $platAktif = $knd?->platAktif;
+
+        // Ambil nomor surat dari keterangan jika dicatat saat mutasi.
+        $nomorSurat = '';
+        if ($mutasi->keterangan && preg_match('/Nomor Surat: ([^\.]+)/', $mutasi->keterangan, $m)) {
+            $nomorSurat = trim($m[1]);
+        }
+
+        // Sesuaikan placeholder dengan template 'sppkd'.
+        $values = [
+            'nomor' => $nomorSurat ?: '1',
+            'nama_asn' => $p2->nama_pegawai ?? '-',
+            'nip_asn' => $p2->nip ?? '-',
+            'jabatan_asn' => $p2->jabatan ?? '-',
+            'tanggal' => (int) $tgl->format('d'),
+            'bulan' => $tgl->translatedFormat('F'),
+            'tahun' => (int) $tgl->format('Y'),
+            'no_plat' => $platAktif?->nomor_plat ?? '-',
+            'jenis_kendaraan' => $knd?->jenis_kendaraan ?? '-',
+            'no_rangka' => $knd?->nomor_rangka ?? '-',
+            'no_mesin' => $knd?->nomor_mesin ?? '-',
+        ];
+
+        foreach ($values as $key => $value) {
+            $phpWord->setValue($key, $value);
+        }
+
+        $swap = [];
+        foreach ($values as $key => $value) {
+            $swap['{' . $key . '}'] = $value;
+        }
+        $swap['{#kendaraan}'] = '';
+        $swap['{/kendaraan}'] = '';
+
+        $this->applyReplacements($phpWord, $swap);
+
+        $namaFile = 'SPPKD_' . Str::slug($p2->nama_pegawai ?? 'Kendaraan', '_') . '_' . $tgl->format('Ymd') . '.docx';
+        $tempPath = tempnam(sys_get_temp_dir(), 'SPPKD_');
+        $phpWord->saveAs($tempPath);
+
+        return response()->download($tempPath, $namaFile)->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Terapkan penggantian placeholder lintas-run ({token}) di seluruh bagian
+     * dokumen Word (main part, header, footer).
+     */
+    private function applyReplacements(TemplateProcessor $phpWord, array $swap): void
+    {
         try {
             $reflection = new \ReflectionClass($phpWord);
             foreach (['tempDocumentMainPart', 'tempDocumentHeaders', 'tempDocumentFooters'] as $propName) {
@@ -133,12 +294,6 @@ class MutasiAsetController extends Controller
         } catch (\Throwable $th) {
             // Abaikan; placeholder yang tersisa tetap tampil agar terlihat oleh pembuat template.
         }
-
-        $namaFile = 'BAST_' . Str::slug($aset->barang->nama_barang ?? 'Aset', '_') . '_' . $tgl->format('Ymd') . '.docx';
-        $tempPath = tempnam(sys_get_temp_dir(), 'BAST_');
-        $phpWord->saveAs($tempPath);
-
-        return response()->download($tempPath, $namaFile)->deleteFileAfterSend(true);
     }
 
     /**

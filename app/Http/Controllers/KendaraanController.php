@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Aset;
+use App\Models\DetailMutasiAset;
 use App\Models\KategoriAset;
 use App\Models\Kendaraan;
 use App\Models\MasterBarang;
+use App\Models\MutasiAset;
 use App\Models\PajakKendaraan;
 use App\Models\Pegawai;
 use App\Models\RiwayatPlat;
@@ -89,9 +91,18 @@ class KendaraanController extends Controller
         $pengemudiOptions = \App\Models\Pegawai::orderBy('nama_pegawai')->get(['id_pegawai', 'nama_pegawai']);
         $pegawais = Pegawai::orderBy('nama_pegawai', 'asc')->get();
 
+        // Riwayat mutasi/ganti pemegang kendaraan ini (untuk tabel Riwayat Pemegang).
+        $riwayatMutasi = DetailMutasiAset::with([
+            'mutasi.userPenginput.pegawai', 'pegawaiLama', 'pegawaiBaru',
+        ])
+            ->where('id_aset', $kendaraan->id_aset)
+            ->orderByDesc('id_detail')
+            ->get();
+
         return view('kendaraan.show', compact(
             'kendaraan', 'isAdminAset', 'kondisiList', 'jenisList',
-            'statusPlatList', 'jenisPajakList', 'pengajuOptions', 'pengemudiOptions', 'pegawais'
+            'statusPlatList', 'jenisPajakList', 'pengajuOptions', 'pengemudiOptions', 'pegawais',
+            'riwayatMutasi'
         ));
     }
 
@@ -260,6 +271,78 @@ class KendaraanController extends Controller
             'success' => true,
             'message' => 'Kendaraan diusulkan penghapusan dan dikeluarkan dari daftar aktif.',
         ]);
+    }
+
+    /**
+     * Mutasi Pemegang Kendaraan: ganti pemegang kendaraan dinas ke pegawai lain.
+     * Perbarui kolom `kendaraan.pemegang`, catat riwayat ke tabel
+     * mutasi_aset + detail_mutasi_aset, lalu siapkan unduhan SPPKD & BAST.
+     */
+    public function mutasiPemegang(Request $request, Kendaraan $kendaraan)
+    {
+        $data = $request->validate([
+            'id_pegawai_baru' => ['required', 'exists:pegawai,id_pegawai'],
+            'tanggal_mutasi' => ['nullable', 'date'],
+            'nomor_surat' => ['nullable', 'string', 'max:150'],
+            'keterangan' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $aset = $kendaraan->aset;
+
+        if (!$aset || $aset->status_aset !== 'aktif') {
+            return back()->with('error', 'Mutasi pemegang hanya dapat dilakukan pada kendaraan berstatus aktif.')->withInput();
+        }
+
+        $pegawaiBaru = Pegawai::findOrFail($data['id_pegawai_baru']);
+
+        // Pemegang lama disimpan sebagai teks bebas di kendaraan.pemegang;
+        // petakan ke pegawai bila namanya cocok agar terlihat pada riwayat & BAST.
+        $pegawaiLama = null;
+        if ($kendaraan->pemegang) {
+            $pegawaiLama = Pegawai::where('nama_pegawai', $kendaraan->pemegang)->first();
+        }
+
+        if ($pegawaiLama && $pegawaiLama->id_pegawai === $pegawaiBaru->id_pegawai) {
+            return back()->with('error', 'Pemegang baru tidak boleh sama dengan pemegang lama.')->withInput();
+        }
+
+        $nomorSurat = trim($data['nomor_surat'] ?? '');
+        $catatan = trim($data['keterangan'] ?? '');
+        $keterangan = 'Serah terima dari ' . ($kendaraan->pemegang ?: 'Pemegang lama');
+        if ($nomorSurat !== '') {
+            $keterangan .= '. Nomor Surat: ' . $nomorSurat;
+        }
+        if ($catatan !== '') {
+            $keterangan .= '. ' . $catatan;
+        }
+
+        $mutasi = MutasiAset::create([
+            'tanggal_mutasi' => $data['tanggal_mutasi'] ?? now()->toDateString(),
+            'jenis_mutasi' => 'Ganti Pemegang',
+            'keterangan' => $keterangan,
+            'id_user_penginput' => auth()->id(),
+            'status_mutasi' => 'selesai',
+        ]);
+
+        DetailMutasiAset::create([
+            'id_mutasi' => $mutasi->id_mutasi,
+            'id_aset' => $aset->id_aset,
+            'pegawai_lama' => $pegawaiLama?->id_pegawai,
+            'pegawai_baru' => $pegawaiBaru->id_pegawai,
+            'ruangan_lama' => null,
+            'ruangan_baru' => null,
+        ]);
+
+        $kendaraan->update(['pemegang' => $pegawaiBaru->nama_pegawai]);
+
+        // Siapkan tombol unduh di modal sukses: SPPKD + BAST Kendaraan.
+        session()->flash('mutasi-berkas', [
+            'sppkd' => route('kendaraan.mutasi.sppkd.download', [$kendaraan->id_kendaraan, $mutasi->id_mutasi]),
+            'bast' => route('kendaraan.mutasi.bast.download', [$kendaraan->id_kendaraan, $mutasi->id_mutasi]),
+            'pemegang' => $pegawaiBaru->nama_pegawai,
+        ]);
+
+        return back()->with('success', 'Pemegang kendaraan berhasil diganti ke ' . $pegawaiBaru->nama_pegawai . '.');
     }
 
     // ---------- Riwayat Plat ----------

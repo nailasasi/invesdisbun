@@ -40,14 +40,24 @@
 
     {{-- Info Kendaraan --}}
     <x-card>
-        <div class="mb-4 flex items-center justify-between">
-            <h3 class="text-base font-semibold text-slate-900">Informasi Kendaraan</h3>
+        <div class="mb-6 flex items-center justify-between gap-3 border-b border-slate-100 pb-4">
+            <div>
+                <h3 class="text-base font-bold text-slate-800">Informasi Kendaraan</h3>
+                <p class="text-xs text-slate-400">Data teknis dan legalitas kendaraan dinas</p>
+            </div>
             @if ($isAdmin)
-                <button type="button" data-edit-kendaraan="{{ $kendaraan->id_kendaraan }}"
-                        class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700">
-                    <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                    Edit
-                </button>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="openModalMutasiKendaraan()"
+                            class="inline-flex items-center gap-1.5 rounded-2xl bg-sky-600 px-3.5 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-sky-700">
+                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3 3-3m-3 3V10"/></svg>
+                        <span>Mutasi Pemegang</span>
+                    </button>
+                    <button type="button" data-edit-kendaraan="{{ $kendaraan->id_kendaraan }}"
+                            class="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-600 shadow-xs transition hover:bg-slate-50 hover:text-slate-900">
+                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                        <span>Edit Data</span>
+                    </button>
+                </div>
             @endif
         </div>
         @if ($kendaraan->foto)
@@ -325,6 +335,71 @@
         </div>
     </x-card>
 
+    {{-- Riwayat Pemegang / Mutasi --}}
+    <x-card :padding="false" class="mt-6">
+        <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+            <div>
+                <h3 class="text-base font-semibold text-slate-900">Riwayat Pemegang / Mutasi</h3>
+                <p class="text-xs text-slate-400">Serah terima pemegang kendaraan berikut dokumen terkait</p>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-200">
+                <thead class="bg-slate-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Tanggal</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Pemegang Lama</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Pemegang Baru</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Jenis</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Keterangan</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Diinput Oleh</th>
+                        @if ($isAdmin)
+                            <th class="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Dokumen</th>
+                        @endif
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 bg-white">
+                    @forelse ($riwayatMutasi as $rd)
+                        @php
+                            $pLamaTeks = $rd->pegawaiLama?->nama_pegawai
+                                ?? (($rd->mutasi?->keterangan && preg_match('/Serah terima dari ([^\.]+)/', $rd->mutasi->keterangan, $m1)) ? $m1[1] : '-');
+                        @endphp
+                        <tr class="transition hover:bg-slate-50">
+                            <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-700">
+                                {{ $rd->mutasi?->tanggal_mutasi ? \Carbon\Carbon::parse($rd->mutasi->tanggal_mutasi)->format('d M Y') : '-' }}
+                            </td>
+                            <td class="px-6 py-4 text-sm text-slate-700">{{ $pLamaTeks }}</td>
+                            <td class="px-6 py-4 text-sm font-medium text-slate-900">{{ $rd->pegawaiBaru?->nama_pegawai ?? '-' }}</td>
+                            <td class="px-6 py-4 text-sm">
+                                <span class="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700">{{ $rd->mutasi?->jenis_mutasi ?? 'Ganti Pemegang' }}</span>
+                            </td>
+                            <td class="max-w-xs px-6 py-4 text-sm text-slate-600">
+                                <span class="block truncate" title="{{ $rd->mutasi?->keterangan ?? '' }}">{{ $rd->mutasi?->keterangan ?? '-' }}</span>
+                            </td>
+                            <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $rd->mutasi?->userPenginput?->pegawai?->nama_pegawai ?? '-' }}</td>
+                            @if ($isAdmin)
+                                <td class="whitespace-nowrap px-6 py-4 text-right text-sm">
+                                    <a href="{{ route('kendaraan.mutasi.sppkd.download', [$kendaraan->id_kendaraan, $rd->id_mutasi]) }}"
+                                       class="inline-flex items-center rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-200">
+                                        SPPKD
+                                    </a>
+                                    <a href="{{ route('kendaraan.mutasi.bast.download', [$kendaraan->id_kendaraan, $rd->id_mutasi]) }}"
+                                       class="ml-1 inline-flex items-center rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100">
+                                        BAST
+                                    </a>
+                                </td>
+                            @endif
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="{{ $isAdmin ? 7 : 6 }}" class="px-6 py-10 text-center text-sm text-slate-400">Belum ada riwayat mutasi pemegang.</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </x-card>
+
     {{-- MODAL PLAT --}}
     @if ($isAdmin)
     <div id="plat-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
@@ -500,6 +575,88 @@
         </div>
     </div>
 
+    {{-- MODAL MUTASI PEMEGANG --}}
+    @if ($isAdmin)
+    <div id="mutasi-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
+        <div class="fixed inset-0" data-modal-close></div>
+        <div class="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+            <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
+                <div>
+                    <h3 class="text-lg font-semibold text-slate-900">Mutasi Pemegang Kendaraan</h3>
+                    <p class="text-sm text-slate-500">Serah terima kendaraan ke pegawai lain</p>
+                </div>
+                <button type="button" data-modal-close class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"><svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+            </div>
+            <form method="POST" action="{{ route('kendaraan.mutasi-pemegang.store', $kendaraan->id_kendaraan) }}" class="space-y-4 px-6 py-6">
+                @csrf
+                <div class="space-y-1.5">
+                    <label class="block text-sm font-medium text-slate-700">Pemegang Lama</label>
+                    <input type="text" value="{{ $kendaraan->pemegang ?? '-' }}" readonly class="block w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-sm text-slate-500">
+                </div>
+                <div class="space-y-1.5">
+                    <label for="mutasi-pegawai-baru" class="block text-sm font-medium text-slate-700">Pemegang Baru <span class="text-red-500">*</span></label>
+                    <select id="mutasi-pegawai-baru" name="id_pegawai_baru" required class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-400 transition">
+                        <option value="">-- Pilih Pegawai --</option>
+                        @foreach ($pegawais as $p)
+                            <option value="{{ $p->id_pegawai }}" @selected(old('id_pegawai_baru') == $p->id_pegawai)>{{ $p->nama_pegawai }}@if($p->nip) ({{ $p->nip }})@endif</option>
+                        @endforeach
+                    </select>
+                    @error('id_pegawai_baru')
+                        <p class="text-xs font-medium text-red-600">{{ $message }}</p>
+                    @enderror
+                </div>
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div class="space-y-1.5">
+                        <label for="mutasi-tanggal" class="block text-sm font-medium text-slate-700">Tanggal Mutasi</label>
+                        <input type="date" id="mutasi-tanggal" name="tanggal_mutasi" value="{{ old('tanggal_mutasi', \Carbon\Carbon::today()->format('Y-m-d')) }}" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-400 transition">
+                    </div>
+                    <div class="space-y-1.5">
+                        <label for="mutasi-nomor-surat" class="block text-sm font-medium text-slate-700">Nomor Surat (opsional)</label>
+                        <input type="text" id="mutasi-nomor-surat" name="nomor_surat" maxlength="150" value="{{ old('nomor_surat') }}" placeholder="contoh: 123/SPPKD/2026" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-400 transition">
+                    </div>
+                </div>
+                <div class="space-y-1.5">
+                    <label for="mutasi-keterangan" class="block text-sm font-medium text-slate-700">Alasan / Catatan</label>
+                    <textarea id="mutasi-keterangan" name="keterangan" rows="3" maxlength="1000" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-400 transition" placeholder="contoh: Penggantian pemegang karena mutasi jabatan">{{ old('keterangan') }}</textarea>
+                </div>
+                <div class="flex items-center justify-end gap-2 pt-2">
+                    <button type="button" data-modal-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
+                    <button type="submit" class="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-sky-700">Simpan Mutasi</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    @endif
+
+    {{-- MODAL BERKAS (setelah mutasi berhasil) --}}
+    @if (session('mutasi-berkas'))
+        @php $berkas = session('mutasi-berkas'); @endphp
+        <div id="berkas-modal" class="fixed inset-0 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs" style="z-index:60">
+            <div class="fixed inset-0" data-modal-close></div>
+            <div class="relative w-full max-w-md rounded-2xl bg-white shadow-2xl">
+                <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
+                    <div>
+                        <h3 class="text-lg font-semibold text-slate-900">Mutasi Pemegang Berhasil</h3>
+                        <p class="text-sm text-slate-500">Pemegang baru: <span class="font-medium text-slate-700">{{ $berkas['pemegang'] }}</span></p>
+                    </div>
+                    <button type="button" data-modal-close class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"><svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+                </div>
+                <div class="space-y-3 px-6 py-6">
+                    <p class="text-sm text-slate-600">Unduh dokumen yang dibutuhkan untuk proses administratif serah terima:</p>
+                    <a href="{{ $berkas['sppkd'] }}" class="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                        Unduh SPPKD (.docx)
+                    </a>
+                    <a href="{{ $berkas['bast'] }}" class="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                        Unduh BAST Kendaraan (.docx)
+                    </a>
+                    <button type="button" data-modal-close class="w-full rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Tutup</button>
+                </div>
+            </div>
+        </div>
+    @endif
+
     @push('scripts')
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
@@ -668,6 +825,18 @@
             }
             if (res.ok) window.location.reload();
         });
+
+        // Mutasi pemegang (admin) & modal berkas setelah mutasi berhasil
+        const mutasiBerkasModal = document.getElementById('mutasi-modal');
+        if (mutasiBerkasModal) {
+            wireClose(mutasiBerkasModal);
+            window.openModalMutasiKendaraan = () => openModal(mutasiBerkasModal);
+        }
+        const berkasModal = document.getElementById('berkas-modal');
+        if (berkasModal) {
+            wireClose(berkasModal);
+            openModal(berkasModal);
+        }
     </script>
     @endpush
 
