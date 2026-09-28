@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\MutasiAset;
 use App\Models\Kendaraan;
+use App\Models\DetailMutasiAset;
 use App\Models\TemplateDokumen;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -17,23 +18,44 @@ class MutasiAsetController extends Controller
      */
     public function index(Request $request)
     {
+        $kategori = in_array($request->query('kategori'), ['barang', 'kendaraan'], true)
+            ? $request->query('kategori')
+            : 'barang';
         $search = $request->query('search');
 
-        $mutasiList = MutasiAset::with(['details.aset.barang', 'details.pegawaiLama', 'details.pegawaiBaru', 'details.ruanganLama', 'details.ruanganBaru', 'userPenginput.pegawai'])
-            ->whereHas('details.aset', fn ($a) => $a->where('is_kendaraan', false))
-            ->when($search, function ($query, $search) {
-                $query->where(function ($q) use ($search) {
-                    $q->where('jenis_mutasi', 'like', "%{$search}%")
-                        ->orWhere('keterangan', 'like', "%{$search}%")
-                        ->orWhereHas('details.aset.barang', fn ($b) => $b->where('nama_barang', 'like', "%{$search}%"))
-                        ->orWhereHas('details.pegawaiBaru', fn ($p) => $p->where('nama_pegawai', 'like', "%{$search}%"));
-                });
-            })
-            ->orderByDesc('id_mutasi')
+        $query = MutasiAset::with([
+            'details.aset.barang',
+            'details.aset.kendaraan',
+            'details.pegawaiLama',
+            'details.pegawaiBaru',
+            'details.ruanganLama',
+            'details.ruanganBaru',
+            'userPenginput.pegawai',
+        ]);
+
+        // Tab kategori: seluruh mutasi dinas (aset barang & kendaraan) terpusat di sini.
+        if ($kategori === 'kendaraan') {
+            $query->whereHas('details.aset', fn ($a) => $a->where('is_kendaraan', true));
+        } else {
+            $query->whereHas('details.aset', fn ($a) => $a->where('is_kendaraan', false));
+        }
+
+        $query->when($search, function ($query, $search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('jenis_mutasi', 'like', "%{$search}%")
+                    ->orWhere('keterangan', 'like', "%{$search}%")
+                    ->orWhereHas('details.aset.barang', fn ($b) => $b->where('nama_barang', 'like', "%{$search}%"))
+                    ->orWhereHas('details.aset.kendaraan', fn ($k) => $k->where('pemegang', 'like', "%{$search}%")
+                        ->orWhere('jenis_kendaraan', 'like', "%{$search}%"))
+                    ->orWhereHas('details.pegawaiBaru', fn ($p) => $p->where('nama_pegawai', 'like', "%{$search}%"));
+            });
+        });
+
+        $mutasiList = $query->orderByDesc('id_mutasi')
             ->paginate(10)
             ->withQueryString();
 
-        return view('mutasi-aset.index', compact('mutasiList'));
+        return view('mutasi-aset.index', compact('mutasiList', 'kategori'));
     }
 
     /**
@@ -156,6 +178,7 @@ class MutasiAsetController extends Controller
         $aset = $detail->aset;
         $knd = Kendaraan::where('id_aset', $aset->id_aset)->first();
         $platAktif = $knd?->platAktif;
+        $namaKendaraan = $aset?->barang?->nama_barang ?? $knd?->merk ?? '-';
 
         // Sesuaikan placeholder dengan template 'bast_kendaraan'.
         $values = [
@@ -171,7 +194,7 @@ class MutasiAsetController extends Controller
             'jabatan_pihak_kedua' => $p2->jabatan ?? '-',
             'nomor' => '1',
             'no_plat' => $platAktif?->nomor_plat ?? '-',
-            'jenis_kendaraan' => $knd?->jenis_kendaraan ?? '-',
+            'jenis_kendaraan' => $namaKendaraan,
             'no_rangka' => $knd?->nomor_rangka ?? '-',
             'no_mesin' => $knd?->nomor_mesin ?? '-',
         ];
@@ -227,6 +250,7 @@ class MutasiAsetController extends Controller
         $aset = $detail->aset;
         $knd = Kendaraan::where('id_aset', $aset->id_aset)->first();
         $platAktif = $knd?->platAktif;
+        $namaKendaraan = $aset?->barang?->nama_barang ?? $knd?->merk ?? '-';
 
         // Ambil nomor surat dari keterangan jika dicatat saat mutasi.
         $nomorSurat = '';
@@ -244,7 +268,7 @@ class MutasiAsetController extends Controller
             'bulan' => $tgl->translatedFormat('F'),
             'tahun' => (int) $tgl->format('Y'),
             'no_plat' => $platAktif?->nomor_plat ?? '-',
-            'jenis_kendaraan' => $knd?->jenis_kendaraan ?? '-',
+            'jenis_kendaraan' => $namaKendaraan,
             'no_rangka' => $knd?->nomor_rangka ?? '-',
             'no_mesin' => $knd?->nomor_mesin ?? '-',
         ];
@@ -267,6 +291,43 @@ class MutasiAsetController extends Controller
         $phpWord->saveAs($tempPath);
 
         return response()->download($tempPath, $namaFile)->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Unduh SPPKD kendaraan cukup dengan id_mutasi (tanpa mengirim id kendaraan).
+     * Digunakan modal sukses mutasi di index kendaraan & menu Mutasi Aset.
+     */
+    public function downloadSPPKDById($id_mutasi)
+    {
+        $detail = DetailMutasiAset::where('id_mutasi', $id_mutasi)->first();
+        if (!$detail) {
+            return back()->with('error', 'Detail mutasi tidak ditemukan.');
+        }
+
+        $kendaraan = Kendaraan::where('id_aset', $detail->id_aset)->first();
+        if (!$kendaraan) {
+            return back()->with('error', 'Kendaraan tidak ditemukan.');
+        }
+
+        return $this->downloadSPPKD($kendaraan, $id_mutasi);
+    }
+
+    /**
+     * Unduh BAST kendaraan cukup dengan id_mutasi (tanpa mengirim id kendaraan).
+     */
+    public function downloadBASTKendaraanById($id_mutasi)
+    {
+        $detail = DetailMutasiAset::where('id_mutasi', $id_mutasi)->first();
+        if (!$detail) {
+            return back()->with('error', 'Detail mutasi tidak ditemukan.');
+        }
+
+        $kendaraan = Kendaraan::where('id_aset', $detail->id_aset)->first();
+        if (!$kendaraan) {
+            return back()->with('error', 'Kendaraan tidak ditemukan.');
+        }
+
+        return $this->downloadBASTKendaraan($kendaraan, $id_mutasi);
     }
 
     /**

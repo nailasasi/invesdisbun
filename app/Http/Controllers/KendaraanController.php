@@ -13,18 +13,22 @@ use App\Models\Pegawai;
 use App\Models\RiwayatPlat;
 use App\Models\UsulanPenghapusan;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use PhpOffice\PhpSpreadsheet\IOFactory;
-use PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
+use PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing;
 
 class KendaraanController extends Controller
 {
     const KONDISI = ['Baik', 'Rusak Ringan', 'Rusak Berat'];
+
     const JENIS_KENDARAAN = ['Roda Dua (Sepeda Motor)', 'Roda Empat (Mobil)', 'Truk', 'Pick Up', 'Bus', 'Lainnya'];
+
     const STATUS_PLAT = ['Aktif', 'Tidak Aktif'];
+
     const KATEGORI_KENDARAAN = 'Kendaraan';
 
     /**
@@ -65,7 +69,7 @@ class KendaraanController extends Controller
     }
 
     /**
-     * Detail satu kendaraan: info + plat + pajak + riwayat izin.
+     * Detail satu kendaraan: info aset + riwayat plat + pajak kendaraan.
      */
     public function show(Kendaraan $kendaraan)
     {
@@ -77,9 +81,6 @@ class KendaraanController extends Controller
                 ->orderByDesc('created_at')
                 ->limit(3),
             'pajak' => fn ($q) => $q->orderByDesc('id_pajak'),
-            'izin' => fn ($q) => $q->orderByDesc('id_izin'),
-            'izin.pengaju',
-            'izin.pengemudi',
         ]);
 
         $isAdminAset = auth()->user()?->role?->nama_role === 'Admin Aset';
@@ -87,8 +88,6 @@ class KendaraanController extends Controller
         $jenisList = self::JENIS_KENDARAAN;
         $statusPlatList = self::STATUS_PLAT;
         $jenisPajakList = ['PKB', 'SWDKLLJ', 'Pajak Bumi', 'Lainnya'];
-        $pengajuOptions = \App\Models\Pegawai::orderBy('nama_pegawai')->get(['id_pegawai', 'nama_pegawai']);
-        $pengemudiOptions = \App\Models\Pegawai::orderBy('nama_pegawai')->get(['id_pegawai', 'nama_pegawai']);
         $pegawais = Pegawai::orderBy('nama_pegawai', 'asc')->get();
 
         // Riwayat mutasi/ganti pemegang kendaraan ini (untuk tabel Riwayat Pemegang).
@@ -101,7 +100,7 @@ class KendaraanController extends Controller
 
         return view('kendaraan.show', compact(
             'kendaraan', 'isAdminAset', 'kondisiList', 'jenisList',
-            'statusPlatList', 'jenisPajakList', 'pengajuOptions', 'pengemudiOptions', 'pegawais',
+            'statusPlatList', 'jenisPajakList', 'pegawais',
             'riwayatMutasi'
         ));
     }
@@ -134,7 +133,7 @@ class KendaraanController extends Controller
             'is_kendaraan' => true,
         ]);
 
-       $kendaraan = Kendaraan::create([
+        $kendaraan = Kendaraan::create([
             'id_aset' => $aset->id_aset,
             'jenis_kendaraan' => $this->cell($row, $colMap['jenis'] ?? '') ?: null,
             'nomor_rangka' => $this->cell($row, $colMap['rangka'] ?? '') ?: null,
@@ -233,7 +232,7 @@ class KendaraanController extends Controller
     {
         $aset = $kendaraan->aset;
 
-        if (!$aset) {
+        if (! $aset) {
             return response()->json([
                 'success' => false,
                 'message' => 'Data aset kendaraan tidak ditemukan.',
@@ -289,7 +288,7 @@ class KendaraanController extends Controller
 
         $aset = $kendaraan->aset;
 
-        if (!$aset || $aset->status_aset !== 'aktif') {
+        if (! $aset || $aset->status_aset !== 'aktif') {
             return back()->with('error', 'Mutasi pemegang hanya dapat dilakukan pada kendaraan berstatus aktif.')->withInput();
         }
 
@@ -308,12 +307,12 @@ class KendaraanController extends Controller
 
         $nomorSurat = trim($data['nomor_surat'] ?? '');
         $catatan = trim($data['keterangan'] ?? '');
-        $keterangan = 'Serah terima dari ' . ($kendaraan->pemegang ?: 'Pemegang lama');
+        $keterangan = 'Serah terima dari '.($kendaraan->pemegang ?: 'Pemegang lama');
         if ($nomorSurat !== '') {
-            $keterangan .= '. Nomor Surat: ' . $nomorSurat;
+            $keterangan .= '. Nomor Surat: '.$nomorSurat;
         }
         if ($catatan !== '') {
-            $keterangan .= '. ' . $catatan;
+            $keterangan .= '. '.$catatan;
         }
 
         $mutasi = MutasiAset::create([
@@ -335,14 +334,10 @@ class KendaraanController extends Controller
 
         $kendaraan->update(['pemegang' => $pegawaiBaru->nama_pegawai]);
 
-        // Siapkan tombol unduh di modal sukses: SPPKD + BAST Kendaraan.
-        session()->flash('mutasi-berkas', [
-            'sppkd' => route('kendaraan.mutasi.sppkd.download', [$kendaraan->id_kendaraan, $mutasi->id_mutasi]),
-            'bast' => route('kendaraan.mutasi.bast.download', [$kendaraan->id_kendaraan, $mutasi->id_mutasi]),
-            'pemegang' => $pegawaiBaru->nama_pegawai,
-        ]);
+        // Simpan id mutasi untuk modal unduh dokumen di halaman index.
+        session()->flash('mutasi_kendaraan_id', $mutasi->id_mutasi);
 
-        return back()->with('success', 'Pemegang kendaraan berhasil diganti ke ' . $pegawaiBaru->nama_pegawai . '.');
+        return back()->with('success', 'Pemegang kendaraan berhasil diganti ke '.$pegawaiBaru->nama_pegawai.'.');
     }
 
     // ---------- Riwayat Plat ----------
@@ -406,7 +401,7 @@ class KendaraanController extends Controller
                 continue;
             }
             $nama = $this->cell($row, $colMap['nama'] ?? '');
-            if (!$nama) {
+            if (! $nama) {
                 continue;
             }
 
@@ -479,12 +474,12 @@ class KendaraanController extends Controller
             $message .= " {$photoWarnings} foto tidak dapat dipetakan ke baris data.";
         }
         if ($errors) {
-            $message .= ' ' . count($errors) . ' baris gagal.';
+            $message .= ' '.count($errors).' baris gagal.';
         }
 
         return back()->with(
             $errors ? 'error' : 'success',
-            $errors ? $message . ' -> ' . implode(' | ', $errors) : $message
+            $errors ? $message.' -> '.implode(' | ', $errors) : $message
         );
     }
 
@@ -493,8 +488,8 @@ class KendaraanController extends Controller
      */
     private function buildHeaderMap(array $headerRow): array
     {
-      $aliases = [
-           'nama' => [ 'jenis kendaraan','nama kendaraan','nama barang','kendaraan',],
+        $aliases = [
+            'nama' => ['jenis kendaraan', 'nama kendaraan', 'nama barang', 'kendaraan'],
             'merk' => ['merk', 'merek', 'brand'],
             'tipe' => ['tipe', 'type', 'model'],
             'jenis' => ['jenis', 'jenis kendaraan', 'jenis kend', 'roda', 'tipe kendaraan'],
@@ -527,6 +522,7 @@ class KendaraanController extends Controller
                 }
             }
         }
+
         return $map;
     }
 
@@ -535,6 +531,7 @@ class KendaraanController extends Controller
         $s = trim((string) ($value ?? ''));
         $s = mb_strtolower($s);
         $s = preg_replace('/[^a-z0-9]+/', ' ', $s);
+
         return trim($s);
     }
 
@@ -556,6 +553,7 @@ class KendaraanController extends Controller
                 $result[$row] = $path;
             }
         }
+
         return $result;
     }
 
@@ -567,7 +565,7 @@ class KendaraanController extends Controller
 
             if ($drawing instanceof MemoryDrawing) {
                 $image = $drawing->getImageResource();
-                if (!$image) {
+                if (! $image) {
                     return null;
                 }
                 $ext = strtolower($drawing->getMimeType()) === 'image/png' ? 'png' : 'jpg';
@@ -586,12 +584,13 @@ class KendaraanController extends Controller
                 }
             }
 
-            if (!$bytes) {
+            if (! $bytes) {
                 return null;
             }
 
-            $name = 'kendaraan/' . Str::uuid()->toString() . '.' . $ext;
+            $name = 'kendaraan/'.Str::uuid()->toString().'.'.$ext;
             Storage::disk('public')->put($name, $bytes);
+
             return $name;
         } catch (\Throwable $e) {
             return null;
@@ -604,6 +603,7 @@ class KendaraanController extends Controller
             return false;
         }
         $s = mb_strtolower(trim((string) $value));
+
         return in_array($s, ['ya', 'y', 'iya', 'yes', 'true', '1'], true);
     }
 
@@ -617,6 +617,7 @@ class KendaraanController extends Controller
                 $list[] = $clean;
             }
         }
+
         return $list;
     }
 
@@ -649,7 +650,7 @@ class KendaraanController extends Controller
     private function syncPajak(Kendaraan $kendaraan, Request $request, ?array $data = null): void
     {
         $berakhir = $request->input('pajak_tanggal_berakhir', $data['pajak_tanggal_berakhir'] ?? null);
-        if (!$berakhir) {
+        if (! $berakhir) {
             return;
         }
 
@@ -675,9 +676,10 @@ class KendaraanController extends Controller
 
     private function storeFoto(Request $request): ?string
     {
-        if (!$request->hasFile('foto')) {
+        if (! $request->hasFile('foto')) {
             return null;
         }
+
         return $request->file('foto')->store('kendaraan', 'public');
     }
 
@@ -688,8 +690,9 @@ class KendaraanController extends Controller
             return $s;
         }
         do {
-            $candidate = 'KND-' . date('YmdHis') . random_int(10, 99);
-        } while (\App\Models\Aset::where('nomor_kartu_barang', $candidate)->exists());
+            $candidate = 'KND-'.date('YmdHis').random_int(10, 99);
+        } while (Aset::where('nomor_kartu_barang', $candidate)->exists());
+
         return $candidate;
     }
 
@@ -752,6 +755,7 @@ class KendaraanController extends Controller
             return null;
         }
         $s = trim((string) $val);
+
         return $s === '' ? null : $s;
     }
 
@@ -759,12 +763,13 @@ class KendaraanController extends Controller
     {
         // Ambil bagian pertama jika ada pemisah (> /)
         $first = preg_split('/[>\/]/', $plat)[0] ?? $plat;
+
         return trim(preg_replace('/\s+/', ' ', $first));
     }
 
     private function parseDate($value): ?string
     {
-        if (!$value) {
+        if (! $value) {
             return null;
         }
         if ($value instanceof \DateTimeInterface) {
@@ -775,7 +780,7 @@ class KendaraanController extends Controller
             return null;
         }
         try {
-            return \Illuminate\Support\Carbon::parse($s)->format('Y-m-d');
+            return Carbon::parse($s)->format('Y-m-d');
         } catch (\Throwable $e) {
             return null;
         }
@@ -790,9 +795,10 @@ class KendaraanController extends Controller
         $s = str_replace(['Rp', ' '], '', $s);
         $s = str_replace('.', '', $s);
         $s = str_replace(',', '.', $s);
-        if (!is_numeric($s)) {
+        if (! is_numeric($s)) {
             return null;
         }
+
         return (float) $s;
     }
 }

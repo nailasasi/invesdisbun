@@ -191,10 +191,17 @@
                                     @else
                                         <span class="text-slate-300">—</span>
                                     @endif
-                                    <a href="{{ route('aset-barang.aset.detail', $item->id_aset) }}"
-                                       class="inline-flex rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 transition hover:bg-slate-50">
-                                        Detail
-                                    </a>
+                                    @if ($item->is_kendaraan)
+                                        <a href="{{ route('kendaraan.show', $item->id_kendaraan ?? $item->id_aset) }}"
+                                           class="inline-flex rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 transition hover:bg-slate-50">
+                                            Detail
+                                        </a>
+                                    @else
+                                        <a href="{{ route('aset-barang.aset.detail', $item->id_aset) }}"
+                                           class="inline-flex rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 transition hover:bg-slate-50">
+                                            Detail
+                                        </a>
+                                    @endif
                                 </div>
                             </td>
                         </tr>

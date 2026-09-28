@@ -35,6 +35,12 @@ class TemplateDokumenSeeder extends Seeder
                 'nama_template' => 'TEMPLATE LABEL',
                 'tipe_berkas' => 'excel',
             ],
+            [
+                'kode_template' => 'surat_izin_kendaraan',
+                'nama_template' => 'SURAT IZIN KENDARAAN',
+                'tipe_berkas' => 'word',
+                'deskripsi' => 'Format file Word (.docx) untuk cetak surat izin pemakaian kendaraan dinas.',
+            ],
         ];
 
         foreach ($templates as $tpl) {

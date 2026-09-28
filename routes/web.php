@@ -36,6 +36,8 @@ Route::middleware('auth')->group(function () {
 
     Route::get('dashboard', [DashboardController::class, 'index'])
         ->name('dashboard');
+    Route::post('dashboard/tutup-notifikasi', [DashboardController::class, 'dismissNotification'])
+        ->name('dashboard.dismiss-notification');
 
     Route::post('logout', [LoginController::class, 'logout'])
         ->name('logout');
@@ -128,9 +130,9 @@ Route::middleware('auth')->group(function () {
     });
 
     // ==========================================
-    // TANAH (Admin Aset & Admin UPT P2DP)
+    // TANAH (Admin Aset & UPT P2BTP)
     // ==========================================
-    Route::middleware('role:Admin Aset,Admin UPT P2DP')->group(function () {
+    Route::middleware('role:Admin Aset,UPT P2BTP')->group(function () {
         Route::get('tanah', [TanahController::class, 'index'])
             ->name('tanah.index');
         Route::get('tanah/create', [TanahController::class, 'create'])
@@ -145,28 +147,46 @@ Route::middleware('auth')->group(function () {
             ->name('tanah.update');
     });
 
-    // Retribusi Tanah
-    Route::prefix('tanah/{tanah}/retribusi')->name('tanah.retribusi.')->group(function () {
-        Route::get('/create', [RetribusiTanahController::class, 'create'])
-            ->name('create');
-        Route::post('/', [RetribusiTanahController::class, 'store'])
-            ->name('store');
+    // Retribusi Tanah (hanya Admin Aset & UPT P2BTP)
+    Route::middleware('role:Admin Aset,UPT P2BTP')->group(function () {
+        Route::prefix('tanah/{tanah}/retribusi')->name('tanah.retribusi.')->group(function () {
+            Route::get('/create', [RetribusiTanahController::class, 'create'])
+                ->name('create');
+            Route::post('/', [RetribusiTanahController::class, 'store'])
+                ->name('store');
+        });
+
+        Route::get('/retribusi/{retribusi}/edit', [RetribusiTanahController::class, 'edit'])
+            ->name('tanah.retribusi.edit');
+        Route::put('/retribusi/{retribusi}', [RetribusiTanahController::class, 'update'])
+            ->name('tanah.retribusi.update');
+        Route::delete('/retribusi/{retribusi}', [RetribusiTanahController::class, 'destroy'])
+            ->name('tanah.retribusi.destroy');
+
+        // Dokumen PBB Tanah
+        Route::get('/tanah/{tanah}/dokumen-pbb/create', [DokumenPbbTanahController::class, 'create'])
+            ->name('tanah.dokumen.create');
+        Route::post('/tanah/{tanah}/dokumen-pbb', [DokumenPbbTanahController::class, 'store'])
+            ->name('tanah.dokumen.store');
+        Route::delete('/dokumen-pbb/{dokumen}', [DokumenPbbTanahController::class, 'destroy'])
+            ->name('tanah.dokumen.destroy');
     });
 
-    Route::get('/retribusi/{retribusi}/edit', [RetribusiTanahController::class, 'edit'])
-        ->name('tanah.retribusi.edit');
-    Route::put('/retribusi/{retribusi}', [RetribusiTanahController::class, 'update'])
-        ->name('tanah.retribusi.update');
-    Route::delete('/retribusi/{retribusi}', [RetribusiTanahController::class, 'destroy'])
-        ->name('tanah.retribusi.destroy');
-
-    // Dokumen PBB Tanah
-    Route::get('/tanah/{tanah}/dokumen-pbb/create', [DokumenPbbTanahController::class, 'create'])
-        ->name('tanah.dokumen.create');
-    Route::post('/tanah/{tanah}/dokumen-pbb', [DokumenPbbTanahController::class, 'store'])
-        ->name('tanah.dokumen.store');
-    Route::delete('/dokumen-pbb/{dokumen}', [DokumenPbbTanahController::class, 'destroy'])
-        ->name('tanah.dokumen.destroy');
+    // ==========================================
+    // LAYANAN - SURAT IZIN KENDARAAN DINAS
+    // ==========================================
+    Route::prefix('layanan/izin-kendaraan')->name('layanan.izin-kendaraan.')->group(function () {
+        Route::get('', [IzinKendaraanController::class, 'index'])
+            ->name('index');
+        Route::post('', [IzinKendaraanController::class, 'store'])
+            ->name('store');
+        Route::post('{izin}/status', [IzinKendaraanController::class, 'updateStatus'])
+            ->name('status');
+        Route::post('{izin}/selesai', [IzinKendaraanController::class, 'returnKendaraan'])
+            ->name('selesai');
+        Route::get('{izin}/download', [IzinKendaraanController::class, 'downloadSurat'])
+            ->name('download');
+    });
 
     // ==========================================
     // USER MANAGEMENT
@@ -237,7 +257,7 @@ Route::middleware('auth')->group(function () {
             ->name('show');
 
         // Pengajuan izin pakai kendaraan
-        Route::post('{kendaraan}/izin', [IzinKendaraanController::class, 'store'])
+        Route::post('{kendaraan}/izin', [IzinKendaraanController::class, 'kendaraanStore'])
             ->name('izin.store');
 
         Route::middleware('role:Admin Aset')->group(function () {
@@ -264,6 +284,12 @@ Route::middleware('auth')->group(function () {
                 ->name('mutasi.sppkd.download');
             Route::get('{kendaraan}/mutasi/{id_mutasi}/bast', [MutasiAsetController::class, 'downloadBASTKendaraan'])
                 ->name('mutasi.bast.download');
+
+            // Unduh dokumen mutasi kendaraan cukup dengan id_mutasi (dipakai modal sukses & menu Mutasi Aset).
+            Route::get('mutasi/{id_mutasi}/sppkd', [MutasiAsetController::class, 'downloadSPPKDById'])
+                ->name('sppkd.download');
+            Route::get('mutasi/{id_mutasi}/bast', [MutasiAsetController::class, 'downloadBASTKendaraanById'])
+                ->name('bast.download');
 
             Route::post('{kendaraan}/pajak', [PajakKendaraanController::class, 'store'])
                 ->name('pajak.store');

@@ -13,11 +13,12 @@ class Kendaraan extends Model
      * @var string
      */
     protected $table = 'kendaraan';
+
     use HasFactory;
 
     protected $primaryKey = 'id_kendaraan';
 
-    protected $fillable = ['id_aset', 'jenis_kendaraan', 'nomor_rangka', 'nomor_mesin', 'merk', 'tipe', 'pemegang', 'foto', 'keterangan'];
+    protected $fillable = ['id_aset', 'jenis_kendaraan', 'nomor_rangka', 'nomor_mesin', 'merk', 'tipe', 'pemegang', 'foto', 'keterangan', 'status_penggunaan'];
 
     public function aset()
     {

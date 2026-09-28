@@ -41,13 +41,12 @@
                         <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="jenis_kendaraan"></p>
                     </div>
                     <div class="space-y-1">
-                        <label for="field-pemegang" class="block text-xs font-medium text-slate-700">Pemegang Kendaraan</label>
-                        <input type="text" id="field-pemegang" name="pemegang" list="listPegawai" maxlength="150" autocomplete="off" class="block w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: Kepala Dinas">
-                        <datalist id="listPegawai">
-                            @foreach ($pegawais as $pegawai)
-                                <option value="{{ $pegawai->nama_pegawai }}"></option>
-                            @endforeach
-                        </datalist>
+                        <label class="block text-xs font-medium text-slate-700">Pemegang Saat Ini</label>
+                        <div class="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5">
+                            <span id="field-pemegang-value" class="text-xs font-medium text-slate-800">{{ $kendaraan->pemegang ?? 'Belum ada pemegang' }}</span>
+                            <span class="text-[10px] italic text-slate-400">Ganti via ikon Mutasi di tabel</span>
+                        </div>
+                        <input type="hidden" id="field-pemegang" name="pemegang" value="{{ $kendaraan->pemegang ?? '' }}">
                         <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="pemegang"></p>
                     </div>
                     <div class="space-y-1">

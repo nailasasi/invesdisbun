@@ -51,6 +51,10 @@
                             <h3 class="text-xs font-extrabold uppercase tracking-wide text-slate-900">{{ $tpl->nama_template }}</h3>
                         </div>
 
+                        @if(!empty($tpl->deskripsi))
+                            <p class="mt-2 text-[11px] leading-relaxed text-slate-500">{{ $tpl->deskripsi }}</p>
+                        @endif
+
                         {{-- Nama File & Tanggal --}}
                         <p class="mt-2 truncate font-mono text-[13px] text-slate-400">
                             {{ $tpl->nama_file_asli ?? 'Belum ada file diunggah' }}

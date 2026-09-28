@@ -42,6 +42,16 @@
           </a>
         </div>
 
+        {{-- LAYANAN --}}
+        <div>
+          <p class="mb-1 px-3 text-[10px] font-bold tracking-widest text-slate-600 uppercase">Layanan</p>
+          <a href="{{ route('layanan.izin-kendaraan.index') }}"
+             class="flex items-center gap-3 rounded-xl px-3 py-2.5 font-medium transition {{ request()->routeIs('layanan.izin-kendaraan.*') ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-glow' : 'text-slate-400 hover:bg-white/5 hover:text-white' }}">
+            <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+            Surat Izin Kendaraan
+          </a>
+        </div>
+
         {{-- DATA ASET --}}
         <div>
           <p class="mb-1 px-3 text-[10px] font-bold tracking-widest text-slate-600 uppercase">Data Aset</p>
@@ -60,6 +70,7 @@
             <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 18H3V5h11v13H9m-4 0a2 2 0 104 0m-4 0a2 2 0 114 0m4-8h5l3 3v5h-8m0 0a2 2 0 104 0m-4 0a2 2 0 114 0"/></svg>
             Kendaraan
           </a>
+          @if (in_array(auth()->user()?->role?->nama_role, ['Admin Aset', 'UPT P2BTP']))
           <a href="{{ route('tanah.index') }}"
             class="flex items-center gap-3 rounded-xl px-3 py-2.5 font-medium transition {{ request()->routeIs('tanah.*') ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-glow' : 'text-slate-400 hover:bg-white/5 hover:text-white' }}">
             <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -67,6 +78,7 @@
             </svg>
             Tanah
           </a>
+          @endif
         </div>
 
         {{-- PENGELOLAAN ASET --}}
@@ -91,7 +103,8 @@
         </div>
         @endif
 
-        {{-- DOKUMEN --}}
+        {{-- DOKUMEN (khusus Admin Aset) --}}
+        @if (auth()->user()?->role?->nama_role === 'Admin Aset')
         <div>
           <p class="mb-1 px-3 text-[10px] font-bold tracking-widest text-slate-600 uppercase">Dokumen</p>
           <a href="{{ route('laporan.bulanan') }}"
@@ -105,6 +118,7 @@
             Template Dokumen
           </a>
         </div>
+        @endif
 
         @if (auth()->user()?->role?->nama_role === 'Admin Aset')
         <div>

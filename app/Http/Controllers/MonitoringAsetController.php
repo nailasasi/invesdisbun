@@ -113,7 +113,7 @@ class MonitoringAsetController extends Controller
         $status = $request->query('status');
 
         return Aset::query()
-            ->with(['barang', 'penempatanAktif.ruangan', 'pemegangSaatIni.pegawai'])
+            ->with(['barang', 'kendaraan', 'penempatanAktif.ruangan', 'pemegangSaatIni.pegawai'])
             ->where(fn ($q) => $q->whereNull('status_aset')->orWhere('status_aset', '!=', 'dihapuskan'))
             ->when($search !== '', fn ($q) => $q->where(function ($q2) use ($search) {
                 $q2->whereHas('barang', fn ($b) => $b->where('nama_barang', 'like', "%{$search}%"))
@@ -215,6 +215,8 @@ class MonitoringAsetController extends Controller
 
         return (object) [
             'id_aset' => $aset->id_aset,
+            'id_kendaraan' => $aset->kendaraan?->id_kendaraan,
+            'is_kendaraan' => (bool) $aset->is_kendaraan,
             'nama_barang' => $aset->barang?->nama_barang,
             'nomor_kartu' => $aset->nomor_kartu_barang,
             'lokasi' => $aset->penempatanAktif?->ruangan?->nama_ruangan,

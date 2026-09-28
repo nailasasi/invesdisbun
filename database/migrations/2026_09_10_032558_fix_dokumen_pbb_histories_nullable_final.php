@@ -6,17 +6,18 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-
     public function up(): void
     {
 
         Schema::table('dokumen_pbb_histories', function (Blueprint $table) {
 
-            // hapus index lama
-            $table->dropIndex('dokumen_pbb_histories_id_pbb_foreign');
+            // hapus constraint foreign key lama beserta index pendukungnya,
+            // karena index tidak dapat dihapus selama masih dipakai constraint FK.
+            $table->dropForeign([
+                'id_pbb',
+            ]);
 
         });
-
 
         Schema::table('dokumen_pbb_histories', function (Blueprint $table) {
 
@@ -26,7 +27,6 @@ return new class extends Migration
                 ->change();
 
         });
-
 
         Schema::table('dokumen_pbb_histories', function (Blueprint $table) {
 
@@ -40,18 +40,16 @@ return new class extends Migration
 
     }
 
-
     public function down(): void
     {
 
         Schema::table('dokumen_pbb_histories', function (Blueprint $table) {
 
             $table->dropForeign([
-                'id_pbb'
+                'id_pbb',
             ]);
 
         });
 
     }
-
 };

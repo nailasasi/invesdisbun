@@ -118,6 +118,15 @@
                                         <a href="{{ route('kendaraan.show', $k->id_kendaraan) }}" title="Detail Kendaraan" class="flex h-7 w-7 items-center justify-center rounded-xl bg-white text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
                                             <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                                         </a>
+                                        <button type="button" onclick="openMutasiKendaraan({{ $k->id_kendaraan }})"
+                                                data-mutasi-pemegang="{{ $k->id_kendaraan }}"
+                                                data-mutasi-nama="{{ $k->aset?->barang?->nama_barang ?? 'Kendaraan' }}"
+                                                data-mutasi-plat="{{ $platAktif->nomor_plat ?? '' }}"
+                                                data-mutasi-pemegang-lama="{{ $k->pemegang ?? '' }}"
+                                                title="Mutasi Pemegang"
+                                                class="flex h-7 w-7 items-center justify-center rounded-xl bg-indigo-50/70 text-indigo-500 transition hover:bg-indigo-100 hover:text-indigo-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+                                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
+                                        </button>
                                         <button type="button" data-delete-target="{{ $k->id_kendaraan }}" data-delete-name="{{ $k->aset?->barang?->nama_barang ?? 'Kendaraan' }}" title="Hapus Kendaraan" class="flex h-7 w-7 items-center justify-center rounded-xl bg-red-50 text-red-600 transition hover:bg-red-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
                                             <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                                         </button>
@@ -185,7 +194,8 @@
                          message="Kendaraan akan masuk antrean usulan penghapusan dan hilang dari daftar aktif. Pembatalan dilakukan di halaman Penghapusan."
                          confirm-label="Usulkan Hapus"
                          confirm-variant="danger" />
-    @endif
+
+        @endif
 
     @push('scripts')
     <script>
@@ -277,6 +287,8 @@
                 document.getElementById('field-nama').value = d.nama_kendaraan ?? '';
                 document.getElementById('field-jenis').value = d.jenis_kendaraan ?? '';
                 document.getElementById('field-pemegang').value = d.pemegang ?? '';
+                const pemegangValue = document.getElementById('field-pemegang-value');
+                if (pemegangValue) pemegangValue.textContent = d.pemegang || 'Belum ada pemegang';
                 document.getElementById('field-keterangan').value = d.keterangan ?? '';
                 document.getElementById('field-kartu').value = d.nomor_kartu_barang ?? '';
                 document.getElementById('field-plat').value = d.plat_nomor ?? '';
@@ -360,12 +372,183 @@
                 }
             });
         }
+
+        {{-- Mutasi pemegang handling --}}
+        const mutasiStoreUrl = @json(route('kendaraan.mutasi-pemegang.store', ['kendaraan' => '__ID__']));
+        const mutasiModal = document.getElementById('mutasi-modal');
+        const mutasiForm = document.getElementById('mutasi-form');
+
+        function openMutasiKendaraan(id) {
+            const row = document.querySelector(`[data-mutasi-pemegang="${id}"]`);
+            const plat = row.dataset.mutasiPlat || '';
+            document.getElementById('mutasi-kendaraan-id').value = id;
+            document.getElementById('mutasi-kendaraan-name').textContent = (row.dataset.mutasiNama || 'Kendaraan') + (plat ? ' — ' + plat : '');
+            document.getElementById('mutasi-pemegang-lama').textContent = row.dataset.mutasiPemegangLama || 'Belum ada pemegang';
+            document.getElementById('mutasi-pegawai-baru').value = '';
+            document.getElementById('mutasi-tanggal').value = new Date().toISOString().slice(0, 10);
+            document.getElementById('mutasi-nomor-surat').value = '';
+            document.getElementById('mutasi-keterangan').value = '';
+            mutasiForm.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
+            mutasiForm.action = mutasiStoreUrl.replace('__ID__', id);
+            mutasiModal.classList.remove('hidden');
+            mutasiModal.classList.add('flex');
+            document.body.classList.add('overflow-hidden');
+        }
+        function closeMutasiPemegang() {
+            mutasiModal.classList.add('hidden');
+            mutasiModal.classList.remove('flex');
+            document.body.classList.remove('overflow-hidden');
+        }
+        if (mutasiModal) {
+            mutasiModal.querySelectorAll('[data-mutasi-close]').forEach(el => el.addEventListener('click', closeMutasiPemegang));
+        }
+        if (mutasiForm) {
+            mutasiForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const submit = mutasiForm.querySelector('button[type="submit"]');
+                const original = submit.textContent;
+                submit.textContent = 'Menyimpan...';
+                submit.disabled = true;
+                const body = new FormData(mutasiForm);
+                try {
+                    const res = await fetch(mutasiForm.action, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken }, body });
+                    if (res.status === 422) {
+                        const data = await res.json();
+                        const err = mutasiForm.querySelector('[data-error-for="id_pegawai_baru"]');
+                        if (err) {
+                            err.textContent = (data.errors && data.errors.id_pegawai_baru) ? data.errors.id_pegawai_baru[0] : 'Pilih pemegang baru yang valid.';
+                            err.classList.remove('hidden');
+                        }
+                        submit.textContent = original;
+                        submit.disabled = false;
+                        return;
+                    }
+                    if (res.ok) {
+                        window.location.reload();
+                    } else {
+                        alert('Terjadi kesalahan. Coba lagi.');
+                        submit.textContent = original;
+                        submit.disabled = false;
+                    }
+                } catch (err) {
+                    alert('Koneksi bermasalah. Coba lagi.');
+                    submit.textContent = original;
+                    submit.disabled = false;
+                }
+            });
+        }
+
+        {{-- Berkas modal sukses mutasi --}}
+        const berkasModal = document.getElementById('berkas-modal');
+        if (berkasModal) {
+            berkasModal.querySelectorAll('[data-modal-close]').forEach(el => el.addEventListener('click', () => {
+                berkasModal.classList.add('hidden');
+                berkasModal.classList.remove('flex');
+                document.body.classList.remove('overflow-hidden');
+            }));
+            berkasModal.classList.remove('hidden');
+            berkasModal.classList.add('flex');
+            document.body.classList.add('overflow-hidden');
+        }
     </script>
     @endpush
 
     @if ($isAdminAset)
         @push('modals')
             @include('kendaraan._edit-modal')
+
+            {{-- MODAL MUTASI PEMEGANG (body level, luar kontainer overflow main) --}}
+            <div id="mutasi-modal" class="fixed inset-0 z-50 hidden items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-xs">
+                <div class="fixed inset-0" data-mutasi-close></div>
+                <div class="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+                    <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
+                        <div>
+                            <h3 class="text-lg font-semibold text-slate-900">Mutasi Pemegang Kendaraan</h3>
+                            <p class="text-sm text-slate-500">Serah terima kendaraan ke pegawai lain</p>
+                        </div>
+                        <button type="button" data-mutasi-close class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600">
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                    <form id="mutasi-form" method="POST" class="space-y-4 px-6 py-6">
+                        @csrf
+                        <input type="hidden" id="mutasi-kendaraan-id" name="id_kendaraan" value="">
+                        <div class="space-y-1.5">
+                            <label class="block text-sm font-medium text-slate-700">Kendaraan</label>
+                            <div id="mutasi-kendaraan-name" class="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-sm font-medium text-slate-800"></div>
+                        </div>
+                        <div class="space-y-1.5">
+                            <label class="block text-sm font-medium text-slate-700">Pemegang Lama</label>
+                            <div class="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-sm text-slate-600">
+                                <span id="mutasi-pemegang-lama" class="font-medium text-slate-800"></span>
+                                <span class="text-[11px] italic text-slate-400">Diubah melalui formulir ini</span>
+                            </div>
+                        </div>
+                        <div class="space-y-1.5">
+                            <label for="mutasi-pegawai-baru" class="block text-sm font-medium text-slate-700">Pemegang Baru <span class="text-red-500">*</span></label>
+                            <select id="mutasi-pegawai-baru" name="id_pegawai_baru" required class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 transition">
+                                <option value="">-- Pilih Pegawai --</option>
+                                @foreach ($pegawais as $p)
+                                    <option value="{{ $p->id_pegawai }}" @selected(old('id_pegawai_baru') == $p->id_pegawai)>{{ $p->nama_pegawai }}@if($p->nip) ({{ $p->nip }})@endif</option>
+                                @endforeach
+                            </select>
+                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_pegawai_baru"></p>
+                        </div>
+                        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div class="space-y-1.5">
+                                <label for="mutasi-tanggal" class="block text-sm font-medium text-slate-700">Tanggal Mutasi</label>
+                                <input type="date" id="mutasi-tanggal" name="tanggal_mutasi" value="{{ old('tanggal_mutasi', now()->format('Y-m-d')) }}" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 transition">
+                            </div>
+                            <div class="space-y-1.5">
+                                <label for="mutasi-nomor-surat" class="block text-sm font-medium text-slate-700">Nomor Surat <span class="text-[11px] font-normal text-slate-400">(opsional)</span></label>
+                                <input type="text" id="mutasi-nomor-surat" name="nomor_surat" maxlength="150" value="{{ old('nomor_surat') }}" placeholder="cth. /442/BKD/2026" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 transition">
+                            </div>
+                        </div>
+                        <div class="space-y-1.5">
+                            <label for="mutasi-keterangan" class="block text-sm font-medium text-slate-700">Alasan / Catatan</label>
+                            <textarea id="mutasi-keterangan" name="keterangan" rows="3" maxlength="1000" placeholder="cth. Serah terima karena rotasi jabatan" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 transition">{{ old('keterangan') }}</textarea>
+                        </div>
+                        <div class="flex items-center justify-end gap-2 pt-2">
+                            <button type="button" data-mutasi-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50">Batal</button>
+                            <button type="submit" class="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-sky-700">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 4v12m0 0l4-4m-4 4l-4-4"/></svg>
+                                Simpan Mutasi
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
         @endpush
+
+        @if ($berkasId = session('mutasi_kendaraan_id'))
+        @push('modals')
+            {{-- MODAL SUKSES UNDUH DOKUMEN MUTASI (body level) --}}
+            <div id="berkas-modal" class="fixed inset-0 z-50 hidden items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-xs">
+                <div class="fixed inset-0" data-modal-close></div>
+                <div class="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+                    <div class="flex flex-col items-center text-center">
+                        <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
+                            <svg class="h-6 w-6 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                        </div>
+                        <h3 class="text-lg font-semibold text-slate-900">Mutasi Kendaraan Berhasil</h3>
+                        <p class="mt-1 text-sm text-slate-500">Unduh dokumen untuk disahkan dan ditandatangani.</p>
+                        <div class="mt-4 w-full space-y-2">
+                            <a href="{{ route('kendaraan.sppkd.download', $berkasId) }}" target="_blank"
+                               class="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 7l-4-4-4 4M12 3v13"/></svg>
+                                Unduh Dokumen SPPKD (.docx)
+                            </a>
+                            <a href="{{ route('kendaraan.bast.download', $berkasId) }}" target="_blank"
+                               class="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 7l-4-4-4 4M12 3v13"/></svg>
+                                Unduh BAST Kendaraan (.docx)
+                            </a>
+                        </div>
+                        <button data-modal-close class="mt-5 rounded-xl bg-slate-100 px-5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">Selesai</button>
+                    </div>
+                </div>
+            </div>
+        @endpush
+    @endif
     @endif
 @endsection

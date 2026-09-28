@@ -13,14 +13,17 @@ class IzinKendaraan extends Model
      * @var string
      */
     protected $table = 'izin_kendaraan';
+
     use HasFactory;
 
     protected $primaryKey = 'id_izin';
 
     protected $fillable = [
-        'id_kendaraan', 'id_pegawai_pengaju', 'tanggal_berangkat', 'waktu_berangkat',
-        'tanggal_kembali', 'waktu_kembali', 'tujuan', 'jenis_pengemudi',
+        'id_kendaraan', 'id_pegawai_pengaju', 'id_pengurus_barang', 'tanggal_berangkat', 'waktu_berangkat',
+        'tanggal_kembali', 'waktu_kembali', 'tujuan', 'durasi', 'jenis_pengemudi',
         'id_pegawai_pengemudi', 'nama_pengemudi', 'status_approval', 'file_surat',
+        'catatan_pengembalian', 'foto_pengembalian', 'waktu_pengembalian', 'alasan_penolakan',
+        'dismissed_at',
     ];
 
     protected $casts = [
@@ -28,6 +31,8 @@ class IzinKendaraan extends Model
         'tanggal_kembali' => 'date',
         'waktu_berangkat' => 'datetime',
         'waktu_kembali' => 'datetime',
+        'waktu_pengembalian' => 'datetime',
+        'dismissed_at' => 'datetime',
     ];
 
     public function kendaraan()
@@ -43,5 +48,10 @@ class IzinKendaraan extends Model
     public function pengemudi()
     {
         return $this->belongsTo(Pegawai::class, 'id_pegawai_pengemudi');
+    }
+
+    public function penyerah()
+    {
+        return $this->belongsTo(Pegawai::class, 'id_pengurus_barang');
     }
 }
