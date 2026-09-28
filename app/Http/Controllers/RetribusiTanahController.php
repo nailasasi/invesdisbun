@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Tanah;
 use App\Models\RetribusiTanah;
+use App\Models\Tanah;
 use Illuminate\Http\Request;
 
 class RetribusiTanahController extends Controller
@@ -27,7 +27,7 @@ class RetribusiTanahController extends Controller
             'status_pemanfaatan' => [
                 'nullable',
                 'string',
-                'max:50'
+                'max:50',
             ],
 
             'biaya_pengurusan' => ['nullable', 'numeric', 'min:0'],
@@ -42,9 +42,21 @@ class RetribusiTanahController extends Controller
 
         RetribusiTanah::create($validated);
 
+        $this->syncPenerimaanPad($tanah);
+
         return redirect()
             ->route('tanah.show', $tanah)
             ->with('success', 'Data retribusi berhasil ditambahkan.');
+    }
+
+    /**
+     * Sinkronisasi akumulasi penerimaan PAD ke kolom pada tanah induk.
+     */
+    private function syncPenerimaanPad(Tanah $tanah): void
+    {
+        $tanah->forceFill([
+            'penerimaan_pad' => (float) $tanah->retribusi()->sum('PAD'),
+        ])->save();
     }
 
     /**
@@ -67,13 +79,13 @@ class RetribusiTanahController extends Controller
         Request $request,
         RetribusiTanah $retribusi
     ) {
-       $validated = $request->validate([
+        $validated = $request->validate([
             'tahun' => ['nullable', 'integer', 'min:2000', 'max:2100'],
 
             'status_pemanfaatan' => [
                 'nullable',
                 'string',
-                'max:50'
+                'max:50',
             ],
 
             'biaya_pengurusan' => ['nullable', 'numeric', 'min:0'],
@@ -85,6 +97,8 @@ class RetribusiTanahController extends Controller
         ]);
 
         $retribusi->update($validated);
+
+        $this->syncPenerimaanPad($retribusi->tanah);
 
         return redirect()
             ->route('tanah.show', $retribusi->tanah)
@@ -99,6 +113,8 @@ class RetribusiTanahController extends Controller
         $tanah = $retribusi->tanah;
 
         $retribusi->delete();
+
+        $this->syncPenerimaanPad($tanah);
 
         return redirect()
             ->route('tanah.show', $tanah)

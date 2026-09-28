@@ -42,6 +42,7 @@ class Tanah extends Model
     'satuan',
     'foto_tanah',
     'video_tanah',
+    'penerimaan_pad',
 ];
 
     protected $casts = [

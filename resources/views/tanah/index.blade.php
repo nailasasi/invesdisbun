@@ -38,27 +38,49 @@
         </div>
 
 
-        {{-- TOMBOL TAMBAH --}}
+        {{-- TOMBOL IMPORT + TAMBAH --}}
         @if(in_array(auth()->user()?->role?->nama_role, ['Admin Aset', 'Admin UPT P2DP']))
-            <a href="{{ route('tanah.create') }}"
-               class="inline-flex items-center gap-2 px-4 py-2.5
-                      bg-emerald-500 hover:bg-emerald-600
-                      text-white text-sm font-semibold
-                      rounded-xl shadow-sm transition">
+            <div class="flex items-center gap-2">
 
-                <svg xmlns="http://www.w3.org/2000/svg"
-                     class="w-4 h-4"
-                     fill="none"
-                     viewBox="0 0 24 24"
-                     stroke="currentColor">
-                    <path stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2"
-                          d="M12 4v16m8-8H4"/>
-                </svg>
+                <button type="button" onclick="openModalImportTanah()"
+                        class="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200
+                               bg-white px-4 py-2.5 text-xs font-semibold
+                               text-slate-700 shadow-2xs transition hover:bg-slate-50">
 
-                Tambah Tanah
-            </a>
+                    <svg xmlns="http://www.w3.org/2000/svg"
+                         class="w-4 h-4 text-emerald-600"
+                         fill="none"
+                         viewBox="0 0 24 24"
+                         stroke="currentColor">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8-4-4m0 0L8 8m4-4v12"/>
+                    </svg>
+
+                    Import Excel
+                </button>
+
+                <a href="{{ route('tanah.create') }}"
+                   class="inline-flex items-center gap-2 px-4 py-2.5
+                          bg-emerald-500 hover:bg-emerald-600
+                          text-white text-sm font-semibold
+                          rounded-xl shadow-sm transition">
+
+                    <svg xmlns="http://www.w3.org/2000/svg"
+                         class="w-4 h-4"
+                         fill="none"
+                         viewBox="0 0 24 24"
+                         stroke="currentColor">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M12 4v16m8-8H4"/>
+                    </svg>
+
+                    Tambah Tanah
+                </a>
+            </div>
         @endif
 
     </div>
@@ -252,8 +274,8 @@
                 </th>
 
 
-                <th class="px-4 py-3 text-center font-bold">
-                    Arsip PBB 2026
+                <th class="px-3 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Dokumen PBB
                 </th>
 
 
@@ -290,11 +312,6 @@
 
                             <div class="font-bold">
                             {{ $tanah->kib ?? '-' }}
-                            </div>
-
-                            <div class="text-xs text-slate-500">
-                            No Excel :
-                            {{ $tanah->no_excel ?? '-' }}
                             </div>
 
                             </td>
@@ -352,12 +369,13 @@
 
                             <td class="px-4 py-4 text-right">
 
-                            Rp {{ number_format(
-                            $tanah->retribusi_sum_PAD ?? 0,
-                            0,
-                            ',',
-                            '.'
-                            )}}
+                            @php
+                                $padJumlah = $tanah->retribusi?->sum(fn ($r) => (float) ($r->PAD ?? 0)) ?? 0;
+                                if ($padJumlah <= 0) {
+                                    $padJumlah = (float) ($tanah->penerimaan_pad ?? $tanah->pad ?? 0);
+                                }
+                            @endphp
+                            Rp {{ number_format($padJumlah, 0, ',', '.') }}
 
                             </td>
 
@@ -365,12 +383,10 @@
 
                             <td class="px-4 py-4 text-right">
 
-                            Rp {{ number_format(
-                            $tanah->retribusi_sum_total_tarif_sewa ?? 0,
-                            0,
-                            ',',
-                            '.'
-                            )}}
+                            @php
+                                $targetRetribusi = $tanah->retribusi?->sum(fn ($r) => (float) ($r->total_tarif_sewa ?? 0)) ?? 0;
+                            @endphp
+                            Rp {{ number_format($targetRetribusi, 0, ',', '.') }}
 
                             </td>
 
@@ -398,29 +414,25 @@
 
 
 
-                            <td class="px-4 py-4 text-center">
+                            <td class="px-3 py-2.5 text-xs">
+                            @php
+                                $latestPbb = $tanah->dokumenPbb->sortByDesc('tahun_pbb')->first();
+                            @endphp
 
-
-                            @if($tanah->dokumenPbb->count())
-
-                            <a href="{{asset(
-                            'storage/'.$tanah->dokumenPbb->first()->file_pbb
-                            )}}"
-                            target="_blank"
-                            class="text-blue-600">
-
-                            Lihat
-
-                            </a>
-
+                            @if ($latestPbb)
+                                <a href="{{ asset('storage/' . $latestPbb->file_pbb) }}" target="_blank"
+                                   class="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 transition hover:bg-emerald-100">
+                                    <svg class="h-3.5 w-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                    </svg>
+                                    <span>PBB {{ $latestPbb->tahun_pbb ?? '' }}</span>
+                                </a>
                             @else
-
-                            -
-
+                                <span class="inline-flex items-center rounded-lg bg-slate-50 px-2 py-0.5 text-[11px] text-slate-400">
+                                    Belum Ada
+                                </span>
                             @endif
-
-
-                            </td>
+                        </td>
 
 
 
@@ -569,4 +581,7 @@
     </div>
 
 </div>
+
+    {{-- Modal Import Tanah Terpisah --}}
+    @include('tanah.partials.modal-import')
 @endsection

@@ -9,12 +9,13 @@ use App\Http\Controllers\DokumenSppbiController;
 use App\Http\Controllers\IzinKendaraanController;
 use App\Http\Controllers\KendaraanController;
 use App\Http\Controllers\LaporanBulananController;
-use App\Http\Controllers\MutasiAsetController;
 use App\Http\Controllers\MonitoringAsetController;
-use App\Http\Controllers\PenghapusanAsetController;
+use App\Http\Controllers\MutasiAsetController;
 use App\Http\Controllers\PajakKendaraanController;
+use App\Http\Controllers\PenghapusanAsetController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RetribusiTanahController;
+use App\Http\Controllers\RkbmdController;
 use App\Http\Controllers\TanahController;
 use App\Http\Controllers\TemplateDokumenController;
 use App\Http\Controllers\UserController;
@@ -139,6 +140,10 @@ Route::middleware('auth')->group(function () {
             ->name('tanah.create');
         Route::post('tanah', [TanahController::class, 'store'])
             ->name('tanah.store');
+        Route::get('tanah/template', [TanahController::class, 'downloadTemplate'])
+            ->name('tanah.template');
+        Route::post('tanah/import', [TanahController::class, 'import'])
+            ->name('tanah.import');
         Route::get('tanah/{tanah}', [TanahController::class, 'show'])
             ->name('tanah.show');
         Route::get('tanah/{tanah}/edit', [TanahController::class, 'edit'])
@@ -301,5 +306,34 @@ Route::middleware('auth')->group(function () {
             Route::delete('{kendaraan}/izin/{izin}', [IzinKendaraanController::class, 'destroy'])
                 ->name('izin.destroy');
         });
+    });
+
+    // ==========================================
+    // RKBMD (Rencana Kebutuhan Barang Milik Daerah)
+    // ==========================================
+    Route::prefix('rkbmd')->name('rkbmd.')->group(function () {
+        Route::get('', [RkbmdController::class, 'index'])
+            ->name('index');
+        Route::get('template-usulan', [RkbmdController::class, 'downloadTemplate'])
+            ->name('template');
+        Route::get('ekspor', [RkbmdController::class, 'export'])
+            ->name('export');
+        Route::post('import', [RkbmdController::class, 'import'])
+            ->name('import');
+        Route::post('', [RkbmdController::class, 'store'])
+            ->name('store');
+        Route::patch('{usulan}', [RkbmdController::class, 'update'])
+            ->name('update');
+        Route::post('{usulan}/ajukan', [RkbmdController::class, 'submit'])
+            ->name('submit');
+        Route::post('{usulan}/keputusan', [RkbmdController::class, 'decide'])
+            ->name('decide');
+        Route::delete('{usulan}', [RkbmdController::class, 'destroy'])
+            ->name('destroy');
+
+        Route::post('arsip', [RkbmdController::class, 'storeArsip'])
+            ->name('arsip.store');
+        Route::delete('arsip/{arsip}', [RkbmdController::class, 'destroyArsip'])
+            ->name('arsip.destroy');
     });
 });
