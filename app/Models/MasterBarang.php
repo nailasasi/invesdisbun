@@ -19,7 +19,7 @@ class MasterBarang extends Model
 
     public $timestamps = false;
 
-    protected $fillable = ['kode_barang', 'nama_barang', 'satuan', 'id_kategori'];
+    protected $fillable = ['kode_barang', 'nama_barang', 'id_kategori'];
 
     public function kategori()
     {

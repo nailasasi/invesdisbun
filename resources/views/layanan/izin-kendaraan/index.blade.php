@@ -15,22 +15,24 @@
     {{-- ================================================================== --}}
     {{-- KARTU 1 · INFORMASI & PANDUAN (full-width, paling atas)          --}}
     {{-- ================================================================== --}}
-    <div class="overflow-hidden rounded-2xl bg-white shadow-sm">
-        <div class="flex flex-wrap items-center justify-between gap-3 bg-slate-50/70 px-6 py-4">
+    <x-card :padding="false">
+        <x-action-bar>
             <div class="flex flex-wrap items-center gap-3">
-                <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
+                <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-disbun-50 text-disbun-700">
                     <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a1 1 0 01-1 1h-2a1 1 0 01-1-1v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
                 </span>
-                <h2 class="text-base font-bold text-slate-900">Informasi &amp; Panduan Pengajuan</h2>
-                <span class="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200">Alur Resmi</span>
+                <h2 class="text-sm font-extrabold tracking-tight text-slate-800">Informasi
+                <span class="rounded-full border border-disbun-100 bg-disbun-50 px-2.5 py-1 text-[11px] font-bold text-disbun-700">Alur Resmi</span>
             </div>
+            <x-slot name="actions">
             <p class="flex items-center gap-2 text-xs text-slate-500">
-                <svg class="h-4 w-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                <svg class="h-4 w-4 text-disbun-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
                 Pastikan data diisi sesuai SPT (Surat Perintah Tugas)
             </p>
-        </div>
+            </x-slot>
+        </x-action-bar>
 
-        <div class="grid grid-cols-1 gap-6 px-6 pb-6 pt-4 md:grid-cols-3">
+        <div class="grid grid-cols-1 gap-6 p-6 md:grid-cols-3">
             <div class="flex items-center gap-4 rounded-xl bg-white p-4 shadow-sm">
                 <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
                     <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -41,12 +43,12 @@
                 </div>
             </div>
             <div class="flex items-center gap-4 rounded-xl bg-white p-4 shadow-sm">
-                <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
+                <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-disbun-50 text-disbun-700">
                     <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 3h7l5 5v13a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2zm7 0v5h5"/></svg>
                 </span>
                 <div>
                     <p class="flex items-center gap-2 text-sm font-bold text-slate-800">2 · Word (.docx)</p>
-                    <p class="mt-0.5 text-xs leading-relaxed text-slate-500">Setelah disetujui Admin Aset, dokumen <span class="font-semibold text-emerald-700">Word (.docx)</span> dapat diunduh.</p>
+                    <p class="mt-0.5 text-xs leading-relaxed text-slate-500">Setelah disetujui Admin Aset, dokumen <span class="font-semibold text-disbun-700">Word (.docx)</span> dapat diunduh.</p>
                 </div>
             </div>
             <div class="flex items-center gap-4 rounded-xl bg-white p-4 shadow-sm">
@@ -59,16 +61,16 @@
                 </div>
             </div>
         </div>
-    </div>
+    </x-card>
 
     {{-- ================================================================== --}}
     {{-- KARTU 2 · FORMULIR PENGAJUAN                                    --}}
     {{-- ================================================================== --}}
-    <div class="rounded-3xl border border-slate-200/80 bg-white shadow-soft">
-        <div class="border-b border-slate-100 px-6 py-5">
-            <h2 class="text-lg font-bold text-slate-900">Formulir Pengajuan Izin Kendaraan Dinas</h2>
+    <x-card :padding="false">
+        <x-action-bar>
+            <h2 class="text-sm font-extrabold tracking-tight text-slate-800">Formulir Pengajuan
             <p class="mt-0.5 text-sm text-slate-500">Ajukan pemakaian kendaraan dinas untuk keperluan tugas / perjalanan dinas.</p>
-        </div>
+        </x-action-bar>
 
         <form method="POST" action="{{ route('layanan.izin-kendaraan.store') }}" class="p-6">
             @csrf
@@ -123,27 +125,27 @@
                     Batal
                 </button>
                 <button type="submit"
-                    class="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-b from-emerald-500 to-emerald-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-600/30 transition hover:brightness-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2">
+                    class="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-b from-disbun-600 to-disbun-700 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-disbun-700/30 transition hover:brightness-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-disbun-500 focus-visible:ring-offset-2">
                     Simpan &amp; Ajukan Surat
                     <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
                 </button>
             </div>
         </form>
-    </div>
+    </x-card>
 
     {{-- ================================================================== --}}
     {{-- BAGIAN BAWAH · RIWAYAT & STATUS PENGAJUAN                       --}}
     {{-- ================================================================== --}}
-    <div>
-        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div>
-                <h2 class="text-lg font-bold text-slate-900">Riwayat &amp; Status Pengajuan Izin Kendaraan</h2>
-                <p class="text-xs text-slate-400">{{ $isAdminAset ? 'Seluruh pengajuan dari semua pegawai.' : 'Menampilkan pengajuan milik Anda.' }}</p>
-            </div>
-        </div>
 
-        <div class="rounded-3xl border border-slate-200/80 bg-white shadow-soft">
-            <div class="overflow-x-auto p-2">
+    <x-card :padding="false">
+        <x-action-bar>
+            <div class="min-w-0">
+                <h2 class="text-sm font-extrabold tracking-tight text-slate-800">Riwayat &amp; Status Pengajuan Izin Kendaraan</h2>
+                <p class="mt-0.5 text-xs text-slate-400">{{ $isAdminAset ? 'Seluruh pengajuan dari semua pegawai.' : 'Menampilkan pengajuan milik Anda.' }}</p>
+            </div>
+        </x-action-bar>
+
+            <div class="overflow-x-auto">
                 <table class="w-full min-w-[900px] text-left text-sm">
                     <thead>
                         <tr class="border-b border-slate-100 text-xs uppercase tracking-wider text-slate-400">
@@ -162,8 +164,8 @@
                         @forelse ($izinList as $izin)
                             @php
                                 $badge = match ($izin->status_approval) {
-                                    'Disetujui' => 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-                                    'Selesai' => 'bg-teal-50 text-teal-700 ring-teal-200',
+                                    'Disetujui' => 'bg-disbun-50 text-disbun-700 ring-disbun-100',
+                                    'Selesai' => 'bg-disbun-50 text-disbun-700 ring-disbun-100',
                                     'Ditolak' => 'bg-red-50 text-red-700 ring-red-200',
                                     default => 'bg-amber-50 text-amber-700 ring-amber-200',
                                 };
@@ -240,7 +242,7 @@
                                     <div class="flex items-center justify-end gap-1.5">
                                         @if ($izin->status_approval === 'Disetujui')
                                             <a href="{{ route('layanan.izin-kendaraan.download', $izin->id_izin) }}"
-                                               class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                                               class="inline-flex items-center gap-1.5 rounded-2xl bg-disbun-50 px-3 py-1.5 text-xs font-bold text-disbun-700 transition hover:bg-disbun-100"
                                                title="Unduh surat izin (.docx)">
                                                 <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0 0l-4-4m4 4l4-4"/></svg>
                                                 Unduh Surat
@@ -260,7 +262,7 @@
                                         @if ($bisaLihatBukti)
                                             <button type="button"
                                                     data-open-modal="modalBukti-{{ $izin->id_izin }}"
-                                                    class="inline-flex items-center gap-1.5 rounded-xl bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 transition hover:bg-teal-100"
+                                                    class="inline-flex items-center gap-1.5 rounded-2xl bg-disbun-50 px-3 py-1.5 text-xs font-bold text-disbun-700 transition hover:bg-disbun-100"
                                                     title="Lihat detail & bukti pengembalian">
                                                 <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                                                 Lihat Bukti
@@ -272,7 +274,7 @@
                                                 @csrf
                                                 <input type="hidden" name="status_approval" value="Disetujui">
                                                 <button type="submit"
-                                                    class="inline-flex items-center rounded-xl bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                                                    class="inline-flex items-center rounded-2xl bg-disbun-50 px-2.5 py-1.5 text-xs font-bold text-disbun-700 transition hover:bg-disbun-100"
                                                     title="Setujui">
                                                     Setujui
                                                 </button>
@@ -297,8 +299,7 @@
                     </tbody>
                 </table>
             </div>
-        </div>
-    </div>
+    </x-card>
 
     @push('modals')
         @foreach ($izinList as $izin)
@@ -354,7 +355,7 @@
                                     Foto Bukti Kondisi <span class="font-normal text-slate-400">(opsional)</span>
                                 </label>
                                 <input type="file" id="foto-{{ $izin->id_izin }}" name="foto_pengembalian" accept="image/jpeg,image/png"
-                                       class="block w-full cursor-pointer rounded-xl border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500 file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-emerald-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-emerald-700 hover:bg-slate-100">
+                                       class="block w-full cursor-pointer rounded-xl border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500 file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-disbun-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-disbun-700 hover:bg-slate-100">
                             </div>
 
                             <div>
@@ -428,7 +429,7 @@
                             <div class="rounded-xl bg-slate-50 px-3 py-2.5">
                                 <p class="text-xs text-slate-400">Status</p>
                                 <p class="mt-1">
-                                    <span class="inline-flex items-center rounded-full bg-teal-50 px-2.5 py-0.5 text-xs font-semibold text-teal-700 ring-1 ring-inset ring-teal-200">
+                                    <span class="inline-flex items-center rounded-full border border-disbun-100 bg-disbun-50 px-2.5 py-0.5 text-xs font-bold text-disbun-700">
                                         Selesai
                                     </span>
                                 </p>

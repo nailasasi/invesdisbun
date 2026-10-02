@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Aset;
 use App\Models\UsulanPenghapusan;
+use App\Services\AsetScope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -15,6 +16,10 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class MonitoringAsetController extends Controller
 {
+    public function __construct(private readonly AsetScope $scope)
+    {
+    }
+
     /**
      * Pusat pengawasan nilai buku & masa manfaat aset.
      */
@@ -113,8 +118,9 @@ class MonitoringAsetController extends Controller
         $status = $request->query('status');
 
         return Aset::query()
-            ->with(['barang', 'kendaraan', 'penempatanAktif.ruangan', 'pemegangSaatIni.pegawai'])
+            ->with(['barang', 'kendaraan', 'penempatanAktif.ruangan', 'pemegangSaatIni.pegawai', 'skpd', 'lokasi'])
             ->where(fn ($q) => $q->whereNull('status_aset')->orWhere('status_aset', '!=', 'dihapuskan'))
+            ->tap(fn ($q) => $this->scope->terapkan($q))
             ->when($search !== '', fn ($q) => $q->where(function ($q2) use ($search) {
                 $q2->whereHas('barang', fn ($b) => $b->where('nama_barang', 'like', "%{$search}%"))
                     ->orWhere('nomor_kartu_barang', 'like', "%{$search}%");

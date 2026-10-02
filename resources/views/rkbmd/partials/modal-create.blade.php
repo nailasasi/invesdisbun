@@ -88,32 +88,27 @@
                     <p class="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Data Usulan BMD</p>
                     <div class="space-y-2.5">
                         <div>
-                            <label for="usulan-cari" class="mb-1 block font-semibold text-slate-700">Cari Master Kode Barang</label>
-                            <input type="text" id="usulan-cari" list="master-barang-list" autocomplete="off"
-                                   placeholder="Ketik kode / nama barang master..."
-                                   class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
-                            <datalist id="master-barang-list">
-                                @foreach ($masterBarangList as $mb)
-                                    <option value="{{ $mb->kode_barang }} - {{ $mb->nama_barang }}">{{ $mb->satuan }}</option>
-                                @endforeach
-                            </datalist>
+                            <label for="search_master_barang" class="mb-1 block font-semibold text-slate-700">Cari Master Kode Barang</label>
+                            <select id="search_master_barang"
+                                    class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"></select>
+                            <p class="mt-1 text-[11px] text-slate-400">Pilih master barang untuk mengisi Kode &amp; Nama Barang otomatis.</p>
                         </div>
                         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
                             <div>
-                                <label for="usulan-kode" class="mb-1 block font-semibold text-slate-700">Kode Barang</label>
-                                <input type="text" id="usulan-kode" name="kode_barang" maxlength="50"
-                                       placeholder="5.02.02.02.001"
+                                <label for="kode_barang" class="mb-1 block font-semibold text-slate-700">Kode Barang</label>
+                                <input type="text" id="kode_barang" name="kode_barang" maxlength="50" readonly
+                                       placeholder="Terisi otomatis dari master barang"
                                        value="{{ old('kode_barang') }}"
-                                       class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                       class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 placeholder-slate-400 placeholder:font-normal focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                             </div>
                             <div>
-                                <label for="usulan-nama" class="mb-1 block font-semibold text-slate-700">
+                                <label for="nama_barang" class="mb-1 block font-semibold text-slate-700">
                                     Nama Barang <span class="text-rose-500">*</span>
                                 </label>
-                                <input type="text" id="usulan-nama" name="nama_barang" maxlength="255"
-                                       placeholder="Laptop Notebook Core i5"
-                                       value="{{ old('nama_barang') }}" required
-                                       class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                <input type="text" id="nama_barang" name="nama_barang" maxlength="255" readonly required
+                                       placeholder="Terisi otomatis dari master barang"
+                                       value="{{ old('nama_barang') }}"
+                                       class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 placeholder-slate-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                             </div>
                             <div>
                                 <label for="usulan-jumlah" class="mb-1 block font-semibold text-slate-700">
@@ -208,7 +203,7 @@
                     Batal
                 </button>
                 <button type="submit"
-                        class="rounded-xl bg-emerald-600 px-5 py-2 text-xs font-bold text-white shadow-2xs transition hover:bg-emerald-700">
+                        class="rounded-xl bg-disbun-700 px-5 py-2 text-xs font-bold text-white shadow-2xs transition hover:bg-disbun-800">
                     Simpan Usulan
                 </button>
             </div>
@@ -217,32 +212,90 @@
 </div>
 
 @push('scripts')
-    <script>
-        // --- Pencarian Master Kode Barang: pilih dari datalist mengisi kode/nama/satuan ---
-        const masterBarang = @json($masterBarangList);
+    {{-- Select2 (butuh jQuery) untuk pencarian master kode barang --}}
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
-        const cariEl = document.getElementById('usulan-cari');
-        if (cariEl) {
-            cariEl.addEventListener('input', function () {
-                const val = cariEl.value;
-                const match = masterBarang.find(function (m) {
-                    const opt = m.kode_barang + ' - ' + m.nama_barang;
-                    return val.trim() === opt;
-                });
-                if (match) {
-                    const namaEl = document.getElementById('usulan-nama');
-                    const kodeEl = document.getElementById('usulan-kode');
+    <script>
+        // --- Pencarian Master Kode Barang (Select2 AJAX) ---
+        const $masterSearch = $('#search_master_barang');
+
+        if ($masterSearch.length && $.fn.select2) {
+            $masterSearch.select2({
+                placeholder: 'Ketik nomor kartu / nama / merk aset...',
+                width: '100%',
+                allowClear: true,
+                ajax: {
+                    url: @json(route('rkbmd.master.search')),
+                    dataType: 'json',
+                    delay: 250,
+                    data: function (params) {
+                        return { q: params.term || '' };
+                    },
+                    processResults: function (data) {
+                        return { results: data };
+                    },
+                    cache: true
+                },
+                templateResult: function (item) {
+                    if (!item.id) {
+                        return '<span class="block px-2 py-1 text-xs text-slate-400">Aset tidak ditemukan</span>';
+                    }
+
+                    return $(
+                        '<div class="flex flex-col gap-0.5 py-0.5">' +
+                        '<span class="text-xs font-semibold text-slate-800">' +
+                        $('<div>').text(item.nama_barang || item.text || '-').html() +
+                        '</span>' +
+                        '<span class="font-mono text-[11px] text-emerald-600">' +
+                        (item.kode_barang ? 'Kode: ' + $('<div>').text(item.kode_barang).html() : '') +
+                        '</span>' +
+                        '</div>'
+                    );
+                },
+                templateSelection: function (item) {
+                    if (!item.id) {
+                        return item.text;
+                    }
+
+                    return item.kode_barang ? item.kode_barang + ' - ' + (item.nama_barang || item.text) : (item.nama_barang || item.text);
+                }
+            });
+
+            // Auto-fill Kode Barang & Nama Barang (readonly) saat item dipilih.
+            $masterSearch.on('select2:select', function (e) {
+                const data = e.params.data;
+
+                $('#kode_barang').val(data.kode_barang || '');
+                $('#nama_barang').val(data.nama_barang || data.text || '');
+
+                if (data.satuan) {
                     const satEl = document.getElementById('usulan-satuan');
-                    if (namaEl) namaEl.value = match.nama_barang || '';
-                    if (kodeEl) kodeEl.value = match.kode_barang || '';
-                    if (satEl && match.satuan) {
+                    if (satEl) {
                         [...satEl.options].forEach(function (o) {
-                            if (o.value === match.satuan) o.selected = true;
+                            if (o.value === data.satuan) {
+                                o.selected = true;
+                            }
                         });
+                        satEl.dispatchEvent(new Event('change'));
                     }
                 }
             });
+
+            // Bersihkan pencarian saat pengguna mengosongkan pilihan.
+            $masterSearch.on('select2:clear', function () {
+                $('#kode_barang').val('');
+                $('#nama_barang').val('');
+            });
         }
+
+        // Dipakai saat form di-reset (mode create/edit) agar label Select2 ikut kosong.
+        window.resetMasterBarangSearch = function () {
+            if (window.jQuery) {
+                $('#search_master_barang').val(null).trigger('change.select2');
+            }
+        };
 
         // --- Sinkronisasi satuan pada Kebutuhan Maksimum & Riil ---
         const satuanUsulan = document.getElementById('usulan-satuan');
@@ -277,8 +330,8 @@
                 setVal('usulan-id-skpd', btn.getAttribute('data-id-skpd'));
                 setVal('usulan-tahun', btn.getAttribute('data-tahun'));
                 setVal('usulan-program', btn.getAttribute('data-program'));
-                setVal('usulan-kode', btn.getAttribute('data-kode'));
-                setVal('usulan-nama', btn.getAttribute('data-nama'));
+                setVal('kode_barang', btn.getAttribute('data-kode'));
+                setVal('nama_barang', btn.getAttribute('data-nama'));
                 setVal('usulan-jumlah', btn.getAttribute('data-jumlah'));
                 setVal('usulan-satuan', btn.getAttribute('data-satuan'));
                 setVal('usulan-kebutuhan-maks', btn.getAttribute('data-kebutuhan-maks'));
@@ -299,6 +352,8 @@
                 const ri = document.getElementById('usulan-satuan-riil');
                 if (ma) ma.value = s;
                 if (ri) ri.value = s;
+
+                if (window.resetMasterBarangSearch) window.resetMasterBarangSearch();
             });
         });
 
@@ -317,6 +372,8 @@
                 const ri = document.getElementById('usulan-satuan-riil');
                 if (ma) ma.value = s;
                 if (ri) ri.value = s;
+
+                if (window.resetMasterBarangSearch) window.resetMasterBarangSearch();
             });
         }
     </script>

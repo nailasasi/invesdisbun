@@ -2,6 +2,8 @@
 
 @section('title', 'Tambah Dokumen PBB')
 
+@section('page-title', 'Tambah Dokumen PBB')
+
 @section('content')
 
 <div class="min-h-screen bg-slate-50 py-8">
@@ -68,7 +70,7 @@
 
 
 <button type="submit"
-        class="rounded-lg bg-emerald-600 px-4 py-2 text-white">
+        class="rounded-lg bg-disbun-700 px-4 py-2 text-white">
     Simpan
 </button>
 

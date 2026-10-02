@@ -28,7 +28,7 @@
 
     $kondisiTeks = trim((string) ($tanah->kondisi ?? ''));
     $kondisiColor = match ($kondisiTeks) {
-        'Baik' => 'bg-emerald-100 text-emerald-700',
+        'Baik' => 'bg-disbun-100 text-disbun-800',
         'Rusak Ringan' => 'bg-amber-100 text-amber-700',
         'Rusak Berat' => 'bg-red-100 text-red-700',
         default => 'bg-slate-100 text-slate-600',
@@ -105,7 +105,7 @@
         </div>
         @if ($canEdit)
             <a href="{{ route('tanah.edit', $tanah->id_tanah) }}"
-               class="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-600 px-4 text-xs font-bold text-white shadow-2xs transition hover:bg-emerald-700">
+               class="inline-flex h-9 items-center gap-1.5 rounded-xl bg-disbun-700 px-4 text-xs font-bold text-white shadow-2xs transition hover:bg-disbun-800">
                 <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
                 </svg>
@@ -163,8 +163,8 @@
                     <p class="mt-2 text-sm text-slate-600">{{ $tanah->deskripsi_objek ?: 'Belum ada deskripsi objek.' }}</p>
 
                     @if ($tanah->penggunaan)
-                        <span class="mt-3 inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
-                            <span class="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                        <span class="mt-3 inline-flex items-center rounded-full bg-disbun-50 px-2.5 py-0.5 text-xs font-medium text-disbun-800">
+                            <span class="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-disbun-600"></span>
                             {{ $tanah->penggunaan }}
                         </span>
                     @endif
@@ -188,7 +188,7 @@
                             <div class="min-w-0">
                                 <p class="text-[11px] font-medium uppercase tracking-wider text-slate-400">Kontak No HP</p>
                                 @if ($tanah->nomor_hp_petugas)
-                                    <a href="tel:{{ $tanah->nomor_hp_petugas }}" class="truncate text-sm font-medium text-slate-800 transition hover:text-emerald-600">{{ $tanah->nomor_hp_petugas }}</a>
+                                    <a href="tel:{{ $tanah->nomor_hp_petugas }}" class="truncate text-sm font-medium text-slate-800 transition hover:text-disbun-700">{{ $tanah->nomor_hp_petugas }}</a>
                                 @else
                                     <p class="truncate text-sm font-medium text-slate-800">-</p>
                                 @endif
@@ -209,7 +209,7 @@
                     {{-- Aksi lokasi --}}
                     @if ($tanah->google_maps)
                         <a href="{{ $tanah->google_maps }}" target="_blank" rel="noopener noreferrer"
-                           class="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-xs transition hover:bg-emerald-700">
+                           class="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-disbun-700 px-4 py-2.5 text-xs font-bold text-white shadow-xs transition hover:bg-disbun-800">
                             <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                             <span>Buka Lokasi di Google Maps</span>
                         </a>
@@ -243,7 +243,7 @@
             <div class="overflow-x-auto">
                 <div class="flex w-max min-w-full items-center gap-1 rounded-2xl border border-slate-200/80 bg-white p-1.5 shadow-2xs">
                     <button type="button" data-tab-target="tab-kib"
-                            class="inline-flex items-center gap-2 whitespace-nowrap rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-xs transition" role="tab">
+                            class="inline-flex items-center gap-2 whitespace-nowrap rounded-xl bg-disbun-700 px-4 py-2 text-xs font-bold text-white shadow-xs transition" role="tab">
                         <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                         Data KIB A &amp; Legalitas
                     </button>
@@ -340,7 +340,7 @@
                         </div>
                         @if ($isAdmin)
                             <a href="{{ route('tanah.retribusi.create', $tanah) }}"
-                               class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-emerald-700">
+                               class="inline-flex items-center gap-1.5 rounded-xl bg-disbun-700 px-3.5 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-disbun-800">
                                 <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
                                 <span>Tambah Retribusi</span>
                             </a>
@@ -462,7 +462,7 @@
                         </div>
                         @if ($isAdmin)
                             <button type="button" data-open-pbb-modal
-                                    class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-emerald-700">
+                                    class="inline-flex items-center gap-1.5 rounded-xl bg-disbun-700 px-3.5 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-disbun-800">
                                 <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
                                 <span>Tambah Dokumen PBB</span>
                             </button>
@@ -498,7 +498,7 @@
                                                             Lihat
                                                         </a>
                                                         <a href="{{ Storage::url($pbb->file_pbb) }}" download
-                                                           class="inline-flex items-center rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100">
+                                                           class="inline-flex items-center rounded-lg bg-disbun-50 px-2.5 py-1.5 text-xs font-medium text-disbun-800 transition hover:bg-disbun-100">
                                                             <svg class="mr-1 h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                                                             Unduh
                                                         </a>
@@ -562,7 +562,7 @@
 
                                     <div>
                                         <div class="flex flex-wrap items-center gap-2">
-                                            <span class="inline-block rounded-md px-2 py-0.5 text-[10px] font-bold uppercase {{ $isCreate ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700' }}">
+                                            <span class="inline-block rounded-md px-2 py-0.5 text-[10px] font-bold uppercase {{ $isCreate ? 'bg-disbun-100 text-disbun-800' : 'bg-slate-100 text-slate-700' }}">
                                                 {{ $isCreate ? 'Tambah Data' : 'Edit Data' }}
                                             </span>
                                             <span class="font-bold text-slate-800">{{ $userName }}</span>
@@ -618,12 +618,12 @@
                     <div class="space-y-1.5">
                         <label for="pbb-file" class="block text-sm font-medium text-slate-700">File PBB <span class="text-red-500">*</span></label>
                         <input type="file" id="pbb-file" name="file_pbb" accept=".pdf,image/jpeg,image/png" required
-                               class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm transition focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-50 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-emerald-700 hover:file:bg-emerald-100">
+                               class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm transition focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400 file:mr-3 file:rounded-lg file:border-0 file:bg-disbun-50 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-disbun-800 hover:file:bg-disbun-100">
                         <p class="text-xs text-slate-400">Format: PDF/JPG/PNG, maksimal 5MB.</p>
                     </div>
                     <div class="flex items-center justify-end gap-2 pt-2">
                         <button type="button" data-modal-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50">Batal</button>
-                        <button type="submit" class="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-bold text-white shadow-xs transition hover:bg-emerald-700">Simpan</button>
+                        <button type="submit" class="rounded-xl bg-disbun-700 px-5 py-2 text-sm font-bold text-white shadow-xs transition hover:bg-disbun-800">Simpan</button>
                     </div>
                 </form>
             </div>
@@ -640,7 +640,7 @@
             function activateTab(id) {
                 tabBtns.forEach((b) => {
                     const on = b.dataset.tabTarget === id;
-                    b.classList.toggle('bg-emerald-600', on);
+                    b.classList.toggle('bg-disbun-700', on);
                     b.classList.toggle('text-white', on);
                     b.classList.toggle('shadow-xs', on);
                     b.classList.toggle('text-slate-600', !on);

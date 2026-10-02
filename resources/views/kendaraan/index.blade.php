@@ -2,54 +2,52 @@
 
 @section('title', 'Kendaraan')
 
-@section('content')
-    <x-page-header title="Kendaraan" subtitle="Data kendaraan dinas beserta pemegangnya">
-        @if ($isAdminAset)
-            <x-slot name="actions">
-                <button type="button" id="btn-import" class="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50">
-                    <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 0L8 8m4-4l4 4m-9 8H5a2 2 0 00-2 2v2a2 2 0 002 2h14a2 2 0 002-2v-2a2 2 0 00-2-2h-2"/></svg>
-                    Import Excel
-                </button>
-                <button type="button" id="btn-tambah" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700">
-                    <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-                    Tambah Kendaraan
-                </button>
-            </x-slot>
-        @endif
-    </x-page-header>
+@section('page-title', 'Kendaraan Dinas')
 
+@section('content')
     <x-alert type="success" />
     <x-alert type="error" />
 
     <x-card :padding="false">
-        <form method="GET" action="{{ route('kendaraan.index') }}" class="flex flex-col gap-3 border-b border-slate-100 px-6 py-4 lg:flex-row lg:items-center">
-            <div class="relative flex-1">
-                <svg class="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/></svg>
-                <input
-                    type="text"
-                    name="search"
-                    value="{{ request('search') }}"
-                    placeholder="Cari nama, kartu, merk, rangka, mesin..."
-                    autocomplete="off"
-                    class="block w-full rounded-xl border border-slate-300 py-2 pl-11 pr-4 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition"
-                >
-            </div>
-            <div class="flex flex-wrap gap-3">
-                <select name="status" class="block rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+        <x-action-bar>
+            <form method="GET" action="{{ route('kendaraan.index') }}" class="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <div class="relative flex-1 sm:max-w-sm">
+                    <svg class="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/></svg>
+                    <input
+                        type="text"
+                        name="search"
+                        value="{{ request('search') }}"
+                        placeholder="Cari nama, kartu, merk, rangka, mesin..."
+                        autocomplete="off"
+                        class="block w-full rounded-xl border border-slate-300 py-2 pl-11 pr-4 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-disbun-600 focus:ring-2 focus:ring-disbun-400 transition"
+                    >
+                </div>
+                <select name="status" class="block rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-disbun-600 focus:ring-2 focus:ring-disbun-400 transition">
                     <option value="">Semua Status</option>
                     <option value="aktif" @selected(request('status') === 'aktif')>Aktif</option>
                     <option value="nonaktif" @selected(request('status') === 'nonaktif')>Non-Aktif</option>
                 </select>
-                <button type="submit" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700">
+                <button type="submit" class="inline-flex items-center gap-2 rounded-2xl bg-disbun-700 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-disbun-800">
                     Cari
                 </button>
                 @if (request('search') || request('status'))
-                    <a href="{{ route('kendaraan.index') }}" class="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50">
+                    <a href="{{ route('kendaraan.index') }}" class="inline-flex items-center rounded-2xl border border-disbun-card-border bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50">
                         Reset
                     </a>
                 @endif
-            </div>
-        </form>
+            </form>
+
+            @if ($isAdminAset)
+                <x-slot name="actions">
+                    <x-button type="button" id="btn-import" variant="secondary" icon="M12 16V4m0 0L8 8m4-4l4 4m-9 8H5a2 2 0 00-2 2v2a2 2 0 002 2h14a2 2 0 002-2v-2a2 2 0 00-2-2h-2">
+                        Import Excel
+                    </x-button>
+                    <x-button type="button" id="btn-tambah" icon="M12 4v16m8-8H4">
+                        Tambah Kendaraan
+                    </x-button>
+                </x-slot>
+            @endif
+        </x-action-bar>
 
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-slate-200">
@@ -74,7 +72,7 @@
                             $platAktif = $k->platAktif;
                             $pajakAktif = $k->pajakAktif;
                             $isLate = $pajakAktif?->tanggal_berakhir ? $pajakAktif->tanggal_berakhir->lt(\Carbon\Carbon::today()) : false;
-                            $pajakColor = $isLate ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700';
+                            $pajakColor = $isLate ? 'bg-red-100 text-red-700' : 'bg-disbun-100 text-disbun-800';
                         @endphp
                         <tr class="transition hover:bg-slate-50">
                             <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-500">{{ $kendaraanList->firstItem() + $index }}</td>
@@ -88,7 +86,7 @@
                                 @endif
                             </td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm">
-                                <a href="{{ route('kendaraan.show', $k->id_kendaraan) }}" class="font-medium text-emerald-600 hover:underline">
+                                <a href="{{ route('kendaraan.show', $k->id_kendaraan) }}" class="font-medium text-disbun-700 hover:underline">
                                     {{ $k->aset?->barang?->nama_barang ?? 'Kendaraan' }}
                                 </a>
                                 <p class="text-xs text-slate-400">{{ $k->aset?->nomor_kartu_barang ?? '-' }}</p>
@@ -183,7 +181,7 @@
                         </div>
                         <div class="mt-6 flex items-center justify-end gap-2">
                             <button type="button" data-import-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
-                            <button type="submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700">Import</button>
+                            <button type="submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-disbun-700 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-disbun-800">Import</button>
                         </div>
                     </form>
                 </div>
@@ -539,7 +537,7 @@
                                 Unduh Dokumen SPPKD (.docx)
                             </a>
                             <a href="{{ route('kendaraan.bast.download', $berkasId) }}" target="_blank"
-                               class="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700">
+                               class="flex items-center justify-center gap-2 rounded-xl bg-disbun-700 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-disbun-800">
                                 <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 7l-4-4-4 4M12 3v13"/></svg>
                                 Unduh BAST Kendaraan (.docx)
                             </a>

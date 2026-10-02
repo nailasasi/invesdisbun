@@ -6,82 +6,40 @@
 
 @section('content')
     <div class="space-y-4">
-        {{-- 1. HEADER (Compact & Rapi) --}}
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-                <h1 class="text-xl font-bold tracking-tight text-slate-800">
-                    Rencana Kebutuhan Barang Milik Daerah (RKBMD)
-                </h1>
-                <p class="mt-0.5 text-xs text-slate-400">
-                    Usulan kebutuhan BMD per unit kerja sesuai Permendagri No. 19/2016
-                </p>
+    {{-- ARSIP DOKUMEN SAH --}}
+    <x-card>
+        <div class="flex flex-wrap items-center justify-between gap-4">
+            <div class="flex min-w-0 items-start gap-3">
+                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-disbun-50 text-disbun-700">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                </div>
+                <div class="min-w-0">
+                    <p class="text-xs font-bold text-slate-800">Arsip Dokumen Sah RKBMD</p>
+                    <p class="mt-0.5 text-[11px] text-slate-400">Dokumen pengesahan bertanda tangan Kepala Dinas &middot; {{ $arsipList->count() }} berkas terarsip</p>
+                </div>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2">
-                {{-- Dropdown Kelola Excel --}}
-                <div class="relative" id="excelMenuWrap">
-                    <button type="button" onclick="toggleExcelMenu()"
-                            class="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50">
-                        <svg class="h-4 w-4 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                        <span>Opsi Excel</span>
-                        <svg class="h-3 w-3 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+            <div class="flex items-center gap-2">
+                @if ($isAdmin)
+                    <button type="button" data-open-modal="modalArsipUpload"
+                            class="inline-flex items-center justify-center gap-1.5 rounded-2xl bg-disbun-700 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-disbun-800">
+                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8-4-4m0 0L8 8m4-4v12"/></svg>
+                        Upload
                     </button>
-
-                    <div id="excelMenu"
-                         class="absolute right-0 z-20 mt-1.5 hidden w-56 rounded-2xl border border-slate-100 bg-white p-1.5 text-xs shadow-xl">
-                        <a href="{{ route('rkbmd.template') }}"
-                           class="flex items-center gap-2 rounded-xl px-2.5 py-2 text-slate-600 transition hover:bg-slate-50 hover:text-slate-900">
-                            <svg class="h-3.5 w-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                            <span>Unduh Template</span>
-                        </a>
-
-                        <button type="button" data-open-modal="modalImportExcel" onclick="closeExcelMenu()"
-                                class="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-slate-600 transition hover:bg-slate-50 hover:text-slate-900">
-                            <svg class="h-3.5 w-3.5 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-                            <span>Import Template Excel</span>
-                        </button>
-
-                        <div class="my-1 border-t border-slate-100"></div>
-
-                        {{-- Export dibuka via modal parameter export --}}
-                        <button type="button" data-open-modal="modalExportRKBMD" onclick="closeExcelMenu()"
-                                class="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 font-semibold text-emerald-700 transition hover:bg-emerald-50/50">
-                            <svg class="h-3.5 w-3.5 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                            <span>Export Rekap Excel</span>
-                        </button>
-                    </div>
-                </div>
-
-                <button type="button" data-open-modal="modalUsulan"
-                        class="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 text-xs font-bold text-white shadow-2xs transition hover:bg-emerald-700">
-                    <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-                    Buat Usulan
+                @endif
+                <button type="button" data-open-modal="modalArsipList"
+                        class="inline-flex items-center justify-center rounded-2xl border border-disbun-card-border bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50">
+                    Lihat Arsip
                 </button>
             </div>
         </div>
+    </x-card>
 
-        @if (session('success'))
-            <div class="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
-                <svg class="mt-0.5 h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                {{ session('success') }}
-            </div>
-        @endif
-
-        @if ($errors->any())
-            <div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700">
-                <p class="font-semibold">Periksa kembali isian Anda:</p>
-                <ul class="mt-1 list-inside list-disc space-y-0.5">
-                    @foreach ($errors->all() as $error)
-                        <li>{{ $error }}</li>
-                    @endforeach
-                </ul>
-            </div>
-        @endif
-
-    {{-- 2. FILTER (2/3) + ARSIP (1/3) --}}
-    <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {{-- CARD FILTER BIDANG --}}
-        <form method="GET" action="{{ route('rkbmd.index') }}" class="rounded-2xl border border-slate-100 bg-white p-4 shadow-2xs lg:col-span-2">
+    {{-- 3. DAFTAR USULAN: CARD BENTO + ACTION BAR --}}
+    <x-card :padding="false">
+        <x-action-bar>
+            <form method="GET" action="{{ route('rkbmd.index') }}"
+                  class="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <div class="mb-2 flex items-center justify-between">
                 <span class="text-[11px] font-bold tracking-wider text-slate-400 uppercase">Filter Unit Kerja / Bidang</span>
                 @if ($isAdmin)
@@ -95,7 +53,7 @@
                         <label class="cursor-pointer">
                             <input type="checkbox" name="bidang[]" value="{{ $opt->id_skpd }}"
                                    class="peer sr-only" @checked(in_array($opt->id_skpd, $activeBidang))>
-                            <span class="inline-block rounded-xl border border-slate-200 bg-slate-50/60 px-2.5 py-1 text-xs text-slate-600 transition hover:bg-slate-100 peer-checked:border-emerald-600 peer-checked:bg-emerald-50 peer-checked:font-bold peer-checked:text-emerald-700">
+                            <span class="inline-block rounded-xl border border-slate-200 bg-slate-50/60 px-2.5 py-1 text-xs text-slate-600 transition hover:bg-slate-100 peer-checked:border-disbun-600 peer-checked:bg-disbun-50 peer-checked:font-bold peer-checked:text-disbun-700">
                                 {{ $opt->nama_skpd }}
                             </span>
                         </label>
@@ -103,7 +61,7 @@
                 </div>
             @else
                 <div class="mb-3">
-                    <span class="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                    <span class="inline-flex items-center gap-1.5 rounded-2xl border border-disbun-100 bg-disbun-50 px-2.5 py-1 text-xs font-semibold text-disbun-700">
                         <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                         {{ $mySkpd?->nama_skpd ?? 'Unit tidak terdeteksi' }}
                     </span>
@@ -116,7 +74,7 @@
             <div class="flex flex-wrap items-center gap-2 border-t border-slate-50 pt-2.5">
                 <div class="w-32">
                     <select id="filter-tahun" name="tahun" onchange="this.form.submit()"
-                            class="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                            class="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:border-disbun-600 focus:ring-1 focus:ring-disbun-400/40">
                         <option value="">Semua Tahun</option>
                         @foreach ($tahunList as $tahun)
                             <option value="{{ $tahun }}" @selected(request('tahun') == $tahun)>{{ $tahun }}</option>
@@ -126,7 +84,7 @@
 
                 <div class="w-40">
                     <select id="filter-jenis" name="jenis" onchange="this.form.submit()"
-                            class="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                            class="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:border-disbun-600 focus:ring-1 focus:ring-disbun-400/40">
                         <option value="">Semua Usulan</option>
                         @foreach ($jenisList as $jenis)
                             <option value="{{ $jenis }}" @selected(request('jenis') === $jenis)>{{ $jenis }}</option>
@@ -136,58 +94,55 @@
 
                 <div class="ml-auto flex items-center gap-1.5">
                     <button type="submit"
-                            class="inline-flex items-center gap-1 rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800">
+                            class="inline-flex items-center gap-1.5 rounded-2xl bg-disbun-700 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-disbun-800">
                         <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
                         Filter
                     </button>
                     <a href="{{ route('rkbmd.index') }}"
-                       class="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-50">
+                       class="inline-flex items-center justify-center rounded-2xl border border-disbun-card-border bg-white px-3.5 py-2 text-xs font-bold text-slate-500 shadow-sm transition hover:bg-slate-50">
                         Reset
                     </a>
                 </div>
             </div>
-        </form>
+            </form>
 
-        {{-- CARD ARSIP DOKUMEN SAH --}}
-        <div class="flex flex-col justify-between rounded-2xl border border-slate-100 bg-white p-4 shadow-2xs">
-            <div class="flex items-start gap-3">
-                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-                    <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-                </div>
-                <div class="min-w-0">
-                    <h3 class="text-xs font-bold text-slate-800">Arsip Dokumen Sah RKBMD</h3>
-                    <p class="mt-0.5 text-[11px] text-slate-400">Dokumen pengesahan bertanda tangan Kepala Dinas</p>
-                    <p class="mt-0.5 text-[11px] text-slate-400">{{ $arsipList->count() }} berkas terarsip</p>
-                </div>
-            </div>
-
-            <div class="mt-3 flex items-center gap-2">
-                @if ($isAdmin)
-                    <button type="button" data-open-modal="modalArsipUpload"
-                            class="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800">
-                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0l-4 4m4-4v12"/></svg>
-                        Upload
+            <x-slot name="actions">
+                {{-- Dropdown Kelola Excel --}}
+                <div class="relative" id="excelMenuWrap">
+                    <button type="button" onclick="toggleExcelMenu()"
+                            class="inline-flex items-center gap-1.5 rounded-2xl border border-disbun-card-border bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50">
+                        <svg class="h-4 w-4 text-disbun-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                        <span>Opsi Excel</span>
+                        <svg class="h-3 w-3 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
                     </button>
-                @endif
-                <button type="button" data-open-modal="modalArsipList"
-                        class="flex-1 inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
-                    Lihat Arsip
+                    <div id="excelMenu"
+                         class="absolute right-0 z-20 mt-1.5 hidden w-56 rounded-2xl border border-slate-100 bg-white p-1.5 text-xs shadow-xl">
+                        <a href="{{ route('rkbmd.template') }}"
+                           class="flex items-center gap-2 rounded-2xl px-2.5 py-2 text-slate-600 transition hover:bg-slate-50 hover:text-slate-900">
+                            <svg class="h-3.5 w-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                            <span>Unduh Template</span>
+                        </a>
+                        <button type="button" data-open-modal="modalImportExcel" onclick="closeExcelMenu()"
+                                class="flex w-full items-center gap-2 rounded-2xl px-2.5 py-2 text-slate-600 transition hover:bg-slate-50 hover:text-slate-900">
+                            <svg class="h-3.5 w-3.5 text-disbun-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                            <span>Import Template Excel</span>
+                        </button>
+                        <div class="my-1 border-t border-slate-100"></div>
+                        {{-- Export dibuka via modal parameter export --}}
+                        <button type="button" data-open-modal="modalExportRKBMD" onclick="closeExcelMenu()"
+                                class="flex w-full items-center gap-2 rounded-2xl px-2.5 py-2 font-semibold text-disbun-700 transition hover:bg-disbun-50">
+                            <svg class="h-3.5 w-3.5 text-disbun-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                            <span>Export Rekap Excel</span>
+                        </button>
+                    </div>
+                </div>
+                <button type="button" data-open-modal="modalUsulan"
+                        class="inline-flex items-center gap-1.5 rounded-2xl bg-disbun-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-disbun-800">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                    Buat Usulan
                 </button>
-            </div>
-        </div>
-    </div>
-
-    {{-- 3. DAFTAR USULAN TABLE (Kompak) --}}
-    <div class="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xs">
-        <div class="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-            <div>
-                <h3 class="text-sm font-bold text-slate-800">Daftar Usulan Kebutuhan</h3>
-                <p class="text-[11px] text-slate-400">
-                    {{ $usulanList->total() }} usulan ditemukan
-                    @if (request('tahun')) - TA {{ request('tahun') }} @endif
-                </p>
-            </div>
-        </div>
+            </x-slot>
+        </x-action-bar>
 
         <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
@@ -211,14 +166,14 @@
                             $bisaAjukan = $usulan->status_usulan === 'Draft'
                                 && $usulan->id_pegawai === auth()->user()?->pegawai?->id_pegawai;
                             $badgeJenis = [
-                                'Pengadaan' => 'bg-emerald-100 text-emerald-700',
+                                'Pengadaan' => 'bg-disbun-100 text-disbun-800',
                                 'Pemeliharaan' => 'bg-amber-100 text-amber-700',
                                 'Penghapusan' => 'bg-rose-100 text-rose-700',
                             ][$usulan->jenis_usulan] ?? 'bg-slate-100 text-slate-600';
                             $badgeStatus = [
                                 'Draft' => 'bg-slate-100 text-slate-600',
                                 'Diajukan' => 'bg-amber-100 text-amber-700',
-                                'Disetujui Pengurus Barang' => 'bg-emerald-100 text-emerald-700',
+                                'Disetujui Pengurus Barang' => 'bg-disbun-100 text-disbun-800',
                                 'Ditolak' => 'bg-rose-100 text-rose-700',
                             ][$usulan->status_usulan] ?? 'bg-slate-100 text-slate-600';
                         @endphp
@@ -262,7 +217,7 @@
                                         <form method="POST" action="{{ route('rkbmd.submit', $usulan->id_usulan) }}">
                                             @csrf
                                             <button type="submit" title="Ajukan ke Pengurus Barang"
-                                                    class="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-2 py-1 text-[11px] font-semibold text-white transition hover:bg-slate-800">
+                                                    class="inline-flex items-center gap-1 rounded-xl bg-disbun-700 px-2.5 py-1.5 text-[11px] font-bold text-white shadow-sm transition hover:bg-disbun-800">
                                                 <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
                                                 Ajukan
                                             </button>
@@ -298,7 +253,7 @@
                                             @csrf
                                             <input type="hidden" name="keputusan" value="setuju">
                                             <button type="submit" title="Setujui"
-                                                    class="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2 py-1 text-[11px] font-bold text-white transition hover:bg-emerald-700">
+                                                    class="inline-flex items-center gap-1 rounded-xl bg-disbun-700 px-2.5 py-1.5 text-[11px] font-bold text-white shadow-sm transition hover:bg-disbun-800">
                                                 <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
                                                 Setujui
                                             </button>
@@ -338,11 +293,11 @@
         </div>
 
         @if ($usulanList->hasPages())
-            <div class="border-t border-slate-100 px-4 py-3">
+            <div class="border-t border-disbun-card-border px-6 py-4">
                 {{ $usulanList->links() }}
             </div>
         @endif
-    </div>
+    </x-card>
     </div>
 
     @push('modals')
@@ -406,14 +361,14 @@
                         <div>
                             <label for="arsip-file" class="mb-1.5 block text-sm font-semibold text-slate-700">File Dokumen (PDF) <span class="text-red-500">*</span></label>
                             <input type="file" id="arsip-file" name="file_dokumen" accept="application/pdf" required
-                                   class="block w-full cursor-pointer rounded-xl border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500 file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-emerald-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-emerald-700 hover:bg-slate-100">
+                                   class="block w-full cursor-pointer rounded-xl border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500 file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-disbun-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-disbun-700 hover:bg-slate-100">
                         </div>
 
                         <div class="flex items-center justify-end gap-2 pt-1">
                             <button type="button" data-close
                                     class="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">Batal</button>
                             <button type="submit"
-                                    class="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800">
+                                    class="inline-flex items-center gap-1.5 rounded-2xl bg-disbun-700 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-disbun-800">
                                 Unggah Dokumen
                                 <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0l-4 4m4-4v12"/></svg>
                             </button>

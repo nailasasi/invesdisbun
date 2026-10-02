@@ -2,10 +2,16 @@
 
 @section('title', 'Detail Aset Barang')
 
+@section('page-title', 'Detail Aset Barang')
+
 @section('content')
+    @php
+        $berkasSppbi = $pegawai->dokumenSppbi?->file_path;
+    @endphp
+
     {{-- Navigasi Kembali --}}
     <div class="mb-4">
-        <a href="{{ route('aset-barang.index') }}" class="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 transition hover:text-emerald-600">
+        <a href="{{ route('aset-barang.index') }}" class="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 transition hover:text-disbun-700">
             <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
             Kembali ke Aset Barang
         </a>
@@ -18,42 +24,55 @@
             <p class="mt-1 text-sm text-slate-500">Daftar aset inventaris yang dipegang dan menjadi tanggung jawab pegawai.</p>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2.5">
-            {{-- Grup SPPBI (Pill Container) --}}
-            <div class="inline-flex items-center rounded-xl border border-slate-200 bg-white p-1 shadow-xs">
-                <a href="{{ route('aset-barang.sppbi.print', $pegawai->id_pegawai) }}" target="_blank" class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100" title="Cetak Format Standar">
-                    <svg class="h-3.5 w-3.5 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
-                    Cetak SPPBI
-                </a>
-
-                <span class="h-4 w-px bg-slate-200"></span>
-
-                <a href="{{ route('aset-barang.sppbi.download.word', $pegawai->id_pegawai) }}" class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-blue-600 transition hover:bg-blue-50" title="Download Word (.docx)">
-                    <svg class="h-3.5 w-3.5 text-blue-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                    Unduh Word
-                </a>
-            </div>
-
-            {{-- Cetak Semua Label --}}
-            <a href="{{ route('aset-barang.label.download', $pegawai->id_pegawai) }}" class="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-1.5 text-xs font-bold text-amber-700 shadow-2xs transition hover:bg-amber-100" title="Unduh semua label aset pegawai dalam format Excel">
-                <svg class="h-3.5 w-3.5 text-amber-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6z"/></svg>
-                Cetak Semua Label
-            </a>
-
-            @if ($isAdminAset)
-                {{-- Tombol Kelola SPPBI --}}
-                <button type="button" id="btn-sppbi" class="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3.5 py-2 text-xs font-bold text-emerald-700 shadow-xs transition hover:bg-emerald-100">
-                    <svg class="h-3.5 w-3.5 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                    Atur SPPBI
-                </button>
-
-                {{-- Tombol Utama Tambah Aset --}}
-                <button type="button" id="btn-tambah" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-emerald-700">
-                    <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-                    Tambah Aset
+        @if ($isAdminAset)
+        <div class="flex flex-wrap items-center justify-end gap-2">
+            {{-- 1. Berkas Tanda Tangan Basah --}}
+            @if (! empty($berkasSppbi))
+                <div class="inline-flex items-center rounded-xl border border-disbun-200 bg-disbun-50 p-0.5 shadow-2xs">
+                    <a href="{{ asset('storage/'.$berkasSppbi) }}" target="_blank" rel="noopener"
+                       class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-disbun-800 transition hover:bg-disbun-100"
+                       title="Buka dokumen hasil scan tanda tangan basah">
+                        <svg class="h-4 w-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                        <span>Lihat Dokumen TTD</span>
+                    </a>
+                    <button type="button" data-ttd-open data-ttd-title="Ganti / Upload Ulang Berkas TTD"
+                            title="Ganti / Upload Ulang Berkas"
+                            class="inline-flex h-7 w-7 items-center justify-center rounded-lg text-disbun-700 transition hover:bg-disbun-100">
+                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                    </button>
+                </div>
+            @else
+                <button type="button" data-ttd-open
+                        class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50"
+                        title="Unggah hasil scan tanda tangan basah SPPBI (PDF/JPG/PNG)">
+                    <svg class="h-4 w-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                    <span>+ Upload Scan TTD</span>
                 </button>
             @endif
+
+            {{-- 2. Unduh Word --}}
+            <a href="{{ route('aset-barang.sppbi.download.word', $pegawai->id_pegawai) }}"
+               class="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-xs font-semibold text-blue-700 shadow-2xs transition hover:bg-blue-100"
+               title="Download Word (.docx)">
+                <svg class="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                <span>Unduh Word</span>
+            </a>
+
+            {{-- 3. Cetak Semua Label --}}
+            <a href="{{ route('aset-barang.label.download', $pegawai->id_pegawai) }}"
+               class="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-700 shadow-2xs transition hover:bg-amber-100"
+               title="Unduh semua label aset pegawai dalam format Excel">
+                <svg class="h-4 w-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6z"/></svg>
+                <span>Cetak Semua Label</span>
+            </a>
+
+            {{-- 4. Tombol Utama --}}
+            <button type="button" id="btn-tambah" class="inline-flex items-center gap-1.5 rounded-xl bg-disbun-700 px-4 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-disbun-800">
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                Tambah Aset
+            </button>
         </div>
+        @endif
     </div>
 
     <x-alert type="success" />
@@ -80,11 +99,6 @@
                     <h3 class="break-words text-xl font-bold text-slate-900">{{ $pegawai->nama_pegawai }}</h3>
                     <p class="mt-0.5 text-xs text-slate-500">
                         {{ $pegawai->jabatan ?? 'Staf' }} &bull; {{ $pegawai->skpd?->nama_skpd ?? 'Dinas Perkebunan' }}
-                    </p>
-                    <p class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
-                        <svg class="h-3.5 w-3.5 text-emerald-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                        <span>Update SPPBI:</span>
-                        <span class="font-semibold text-slate-600">{{ $pegawai->sppbiAktif?->tanggal_surat?->translatedFormat('d M Y') ?? 'Belum diatur' }}</span>
                     </p>
                 </div>
             </div>
@@ -148,7 +162,7 @@
                                 <td class="whitespace-nowrap px-6 py-4 text-sm">
                                     @php
                                         $kondisiColor = match ($aset->kondisi) {
-                                            'Baik' => 'bg-emerald-100 text-emerald-700',
+                                            'Baik' => 'bg-disbun-100 text-disbun-800',
                                             'Rusak Ringan' => 'bg-amber-100 text-amber-700',
                                             'Rusak Berat' => 'bg-red-100 text-red-700',
                                             default => 'bg-slate-100 text-slate-600',
@@ -204,10 +218,22 @@
                                     <label for="field-pegawai" class="block text-sm font-medium text-slate-700">Pemegang <span class="text-red-500">*</span></label>
                                     <select id="field-pegawai" name="id_pegawai" required class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
                                         @foreach ($allPegawai as $p)
-                                            <option value="{{ $p->id_pegawai }}" @selected($p->id_pegawai === $pegawai->id_pegawai)>{{ $p->nama_pegawai }}</option>
+                                            <option value="{{ $p->id_pegawai }}" data-skpd="{{ $p->id_skpd ?? '' }}" @selected($p->id_pegawai === $pegawai->id_pegawai)>{{ $p->nama_pegawai }}</option>
                                         @endforeach
                                     </select>
                                     <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_pegawai"></p>
+                                </div>
+
+                                <div class="space-y-1.5">
+                                    <label for="field-skpd" class="block text-sm font-medium text-slate-700">Unit Penanggung Jawab Aset</label>
+                                    <select id="field-skpd" name="id_skpd" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                                        <option value="">-- Pilih Unit PJ --</option>
+                                        @foreach ($skpdOptions as $skpd)
+                                            <option value="{{ $skpd->id_skpd }}">{{ $skpd->nama_skpd }} ({{ $skpd->jenis_skpd }})</option>
+                                        @endforeach
+                                    </select>
+                                    <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_skpd"></p>
+                                    <p class="text-xs text-slate-400">Default mengikuti SKPD pemegang; boleh diubah bila perlu.</p>
                                 </div>
 
                                 <div class="space-y-1.5">
@@ -273,7 +299,7 @@
 
                         <div class="flex items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
                             <button type="button" data-modal-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
-                            <button type="submit" id="btn-submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700">
+                            <button type="submit" id="btn-submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-disbun-700 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-disbun-800">
                                 Simpan
                             </button>
                         </div>
@@ -301,54 +327,38 @@
                 </div>
         </div>
 
-        {{-- Modal SPPBI --}}
-        <div id="modal-sppbi" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
-            <div id="close-sppbi-backdrop" class="fixed inset-0"></div>
-            <div class="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+        {{-- Modal Upload / Ganti Berkas TTD --}}
+        <div id="modal-ttd" @if ($errors->has('file_ttd')) data-ttd-autopen @endif class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
+            <div class="fixed inset-0" data-ttd-close></div>
+            <div class="relative w-full max-w-md rounded-2xl bg-white shadow-2xl">
                     <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
                         <div>
-                            <h3 class="text-lg font-semibold text-slate-900">Atur SPPBI</h3>
-                            <p class="mt-0.5 text-sm text-slate-500">Nomor surat, tanggal, dan dokumen SPPBI {{ $pegawai->nama_pegawai }}.</p>
+                            <h3 id="ttd-modal-title" class="text-lg font-semibold text-slate-900">{{ ! empty($berkasSppbi) ? 'Ganti / Upload Ulang Berkas TTD' : 'Upload Scan TTD' }}</h3>
+                            <p class="mt-0.5 text-sm text-slate-500">Hasil scan tanda tangan basah SPPBI {{ $pegawai->nama_pegawai }}.</p>
                         </div>
-                        <button type="button" id="btn-close-sppbi" class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Tutup">
+                        <button type="button" data-ttd-close class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Tutup">
                             <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                         </button>
                     </div>
 
-                    <form id="form-sppbi" enctype="multipart/form-data" autocomplete="off">
-                        <div class="max-h-[90vh] space-y-5 overflow-y-auto px-6 py-6">
+                    <form method="POST" action="{{ route('aset-barang.sppbi.upload.ttd', $pegawai->id_pegawai) }}" enctype="multipart/form-data" autocomplete="off">
+                        @csrf
+                        <div class="space-y-4 px-6 py-6">
                             <div class="space-y-1.5">
-                                <label for="field-sppbi-nomor" class="block text-sm font-medium text-slate-700">Nomor Surat <span class="text-red-500">*</span></label>
-                                <input type="text" id="field-sppbi-nomor" name="nomor_surat" required maxlength="100" value="{{ $pegawai->sppbiAktif?->nomor_surat }}" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: 005/SPPBI/2026">
-                            </div>
-
-                            <div class="space-y-1.5">
-                                <label for="field-sppbi-tanggal" class="block text-sm font-medium text-slate-700">Tanggal Surat <span class="text-red-500">*</span></label>
-                                <input type="date" id="field-sppbi-tanggal" name="tanggal_surat" required value="{{ $pegawai->sppbiAktif?->tanggal_surat?->format('Y-m-d') ?? date('Y-m-d') }}" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                            </div>
-
-                            <div class="space-y-1.5">
-                                <label for="field-sppbi-file" class="block text-sm font-medium text-slate-700">Dokumen Bertanda Tangan (PDF/JPG/PNG, opsional)</label>
-                                <input type="file" id="field-sppbi-file" name="file_dokumen" accept=".pdf,.jpg,.jpeg,.png" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                                @if ($pegawai->sppbiAktif?->file_path)
-                                    <div class="mt-2 flex items-center gap-2 text-xs text-emerald-600">
-                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                        <span>Berkas tersimpan:</span>
-                                        <a href="{{ asset('storage/' . $pegawai->sppbiAktif->file_path) }}" target="_blank" class="font-bold underline hover:text-emerald-800">Lihat Berkas Terunggah</a>
-                                    </div>
-                                @endif
-                            </div>
-
-                            <div class="space-y-1.5">
-                                <label for="field-sppbi-catatan" class="block text-sm font-medium text-slate-700">Catatan</label>
-                                <textarea id="field-sppbi-catatan" name="catatan" rows="3" maxlength="500" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="Catatan opsional">{{ $pegawai->sppbiAktif?->catatan }}</textarea>
+                                <label for="field-ttd-file" class="block text-sm font-medium text-slate-700">Berkas Scan (PDF/JPG/PNG) <span class="text-red-500">*</span></label>
+                                <input type="file" id="field-ttd-file" name="file_ttd" required accept=".pdf,.jpg,.jpeg,.png"
+                                       class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                                <p class="text-xs text-slate-400">Maksimal 5 MB. Berkas lama akan diganti dengan berkas yang baru diunggah.</p>
+                                @error('file_ttd')
+                                    <p class="text-xs font-medium text-red-600">{{ $message }}</p>
+                                @enderror
                             </div>
                         </div>
 
                         <div class="flex items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
-                            <button type="button" id="btn-close-sppbi-2" class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
-                            <button type="submit" id="btn-submit-sppbi" class="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700">
-                                Simpan SPPBI
+                            <button type="button" data-ttd-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
+                            <button type="submit" id="btn-submit-ttd" class="inline-flex items-center justify-center gap-2 rounded-xl bg-disbun-700 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-disbun-800">
+                                Simpan Berkas
                             </button>
                         </div>
                     </form>
@@ -363,7 +373,6 @@
 
         const storeUrl = @json(route('aset-barang.store', $pegawai->id_pegawai));
         const updateUrl = @json(route('aset-barang.aset.update', ['aset' => '__ID__']));
-        const sppbiUpdateUrl = @json(route('aset-barang.sppbi.update', $pegawai->id_pegawai));
 
         const modal = document.getElementById('aset-modal');
         const deleteModal = document.getElementById('delete-modal');
@@ -402,6 +411,20 @@
             deleteModal.classList.remove('flex');
         }
 
+        // Default Unit PJ mengikuti SKPD pemegang yang dipilih.
+        const fieldPegawaiShow = document.getElementById('field-pegawai');
+        const fieldSkpdShow = document.getElementById('field-skpd');
+        function syncSkpdFromPegawai() {
+            const opt = fieldPegawaiShow.selectedOptions[0];
+            if (fieldSkpdShow && opt) {
+                fieldSkpdShow.value = (opt.dataset.skpd ?? '');
+            }
+        }
+        if (fieldPegawaiShow) {
+            fieldPegawaiShow.addEventListener('change', syncSkpdFromPegawai);
+            syncSkpdFromPegawai();
+        }
+
         if (form) {
             const btnTambah = document.getElementById('btn-tambah');
             if (btnTambah) {
@@ -409,6 +432,7 @@
                     form.reset();
                     document.getElementById('field-id').value = '';
                     document.getElementById('field-pegawai').value = @json($pegawai->id_pegawai);
+                    syncSkpdFromPegawai();
                     form.action = storeUrl;
                     document.getElementById('modal-title').textContent = 'Tambah Aset';
                     document.getElementById('modal-subtitle').textContent = 'Aset baru akan dipegang oleh ' + @json($pegawai->nama_pegawai) + '.';
@@ -437,6 +461,7 @@
                         document.getElementById('field-nilai').value = data.nilai_perolehan ?? '';
                         document.getElementById('field-kondisi').value = data.kondisi ?? '';
                         document.getElementById('field-status').value = data.status_aset ?? '';
+                        document.getElementById('field-skpd').value = data.id_skpd ?? '';
                         form.action = updateUrl.replace('__ID__', id);
                         document.getElementById('modal-title').textContent = 'Edit Aset';
                         document.getElementById('modal-subtitle').textContent = 'Perbarui data aset.';
@@ -485,56 +510,40 @@
             modal.querySelectorAll('[data-modal-close]').forEach(el => el.addEventListener('click', closeModal));
         }
 
-        const btnSppbi = document.getElementById('btn-sppbi');
-        const modalSppbi = document.getElementById('modal-sppbi');
-        const formSppbi = document.getElementById('form-sppbi');
+        const modalTtd = document.getElementById('modal-ttd');
 
-        if (btnSppbi && modalSppbi) {
-            btnSppbi.addEventListener('click', () => {
-                modalSppbi.classList.remove('hidden');
-                modalSppbi.classList.add('flex');
-            });
-
-            const closeSppbi = () => {
-                modalSppbi.classList.add('hidden');
-                modalSppbi.classList.remove('flex');
+        if (modalTtd) {
+            const openTtd = () => {
+                modalTtd.classList.remove('hidden');
+                modalTtd.classList.add('flex');
+            };
+            const closeTtd = () => {
+                modalTtd.classList.add('hidden');
+                modalTtd.classList.remove('flex');
             };
 
-            document.getElementById('btn-close-sppbi').addEventListener('click', closeSppbi);
-            document.getElementById('close-sppbi-backdrop').addEventListener('click', closeSppbi);
-            document.getElementById('btn-close-sppbi-2').addEventListener('click', closeSppbi);
-
-            formSppbi.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const btnSubmit = document.getElementById('btn-submit-sppbi');
-                btnSubmit.disabled = true;
-                btnSubmit.textContent = 'Menyimpan...';
-
-                const formData = new FormData(formSppbi);
-                try {
-                    const res = await fetch(sppbiUpdateUrl, {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRF-TOKEN': csrfToken,
-                            'Accept': 'application/json'
-                        },
-                        body: formData
-                    });
-
-                    const data = await res.json();
-                    if (res.ok) {
-                        window.location.reload();
-                    } else {
-                        alert(data.message || 'Gagal memperbarui SPPBI');
-                        btnSubmit.disabled = false;
-                        btnSubmit.textContent = 'Simpan SPPBI';
+            document.querySelectorAll('[data-ttd-open]').forEach(el => {
+                el.addEventListener('click', () => {
+                    const title = el.dataset.ttdTitle;
+                    if (title) {
+                        document.getElementById('ttd-modal-title').textContent = title;
                     }
-                } catch (err) {
-                    alert('Terjadi kesalahan jaringan.');
-                    btnSubmit.disabled = false;
-                    btnSubmit.textContent = 'Simpan SPPBI';
-                }
+                    openTtd();
+                });
             });
+
+            modalTtd.querySelectorAll('[data-ttd-close]').forEach(el => el.addEventListener('click', closeTtd));
+
+            const btnSubmitTtd = document.getElementById('btn-submit-ttd');
+            modalTtd.querySelector('form').addEventListener('submit', () => {
+                btnSubmitTtd.disabled = true;
+                btnSubmitTtd.textContent = 'Mengunggah...';
+            });
+
+            // Tampilkan kembali modal bila validasi gagal (flash error dari server).
+            if (modalTtd.hasAttribute('data-ttd-autopen')) {
+                openTtd();
+            }
         }
 
         document.querySelectorAll('[data-delete-target]').forEach(btn => {

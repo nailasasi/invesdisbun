@@ -11,57 +11,103 @@ use App\Models\Pegawai;
 use App\Models\PemegangAset;
 use App\Models\PenempatanAset;
 use App\Models\Ruangan;
+use App\Models\Skpd;
+use App\Models\Lokasi;
 use App\Models\TemplateDokumen;
 use App\Models\UsulanPenghapusan;
+use App\Services\AsetPenempatan;
+use App\Services\AsetScope;
+use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
-use PhpOffice\PhpSpreadsheet\IOFactory;
+use Illuminate\Validation\ValidationException;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 
 class AsetBarangController extends Controller
 {
     const KONDISI = ['Baik', 'Rusak Ringan', 'Rusak Berat'];
+
     const KATEGORI_MESIN = 'Peralatan dan Mesin';
 
-    /**
-     * Role-aware index:
-     *  - Admin Aset  -> tabel flat seluruh aset (kolom Pemegang, aksi, filter).
-     *  - Non-admin   -> daftar pegawai (grouped) lalu lihat aset per orang.
-     */
-    public function index(Request $request)
+    public function __construct(private readonly AsetScope $scope)
     {
-        $isAdminAset = auth()->user()?->role?->nama_role === 'Admin Aset';
-
-        if ($isAdminAset) {
-            return $this->adminIndex($request);
-        }
-
-        $search = $request->query('search');
-
-        $pegawaiList = Pegawai::with('skpd')
-            ->withCount(['pemegangAset as jumlah_aset' => function ($q) {
-                $q->where('status', 'aktif')
-                    ->whereHas('aset', fn ($a) => $a->where('is_kendaraan', false));
-            }])
-            ->when($search, function ($query, $search) {
-                $query->where(function ($q) use ($search) {
-                    $q->where('nama_pegawai', 'like', "%{$search}%")
-                        ->orWhere('nip', 'like', "%{$search}%")
-                        ->orWhere('jabatan', 'like', "%{$search}%");
-                });
-            })
-            ->orderBy('nama_pegawai')
-            ->paginate(10)
-            ->withQueryString();
-
-        return view('aset-barang.index', compact('pegawaiList', 'isAdminAset'));
     }
 
     /**
-     * Tabel flat seluruh aset untuk Admin Aset.
+ * Apakah user yang sedang login punya role "Admin Aset".
+ *
+ * Memeriksa NAMA ROLE aktif milik user yang login, bukan role default atau
+ * nilai yang di-hardcode. Perbandingan di-normalisasi (di-trim + case
+ * insensitive) supaya data role yang spasi/kapitalisasinya tidak rapi tetap
+ * dikenali.
+ *
+ * `AsetScope` tetap jadi sumber kebenaran utama; pemeriksaan kedua hanya
+ * menutup kemungkinan scope dibangun dengan user yang salah sehingga akun
+ * Admin Aset terjatuh ke mode baca. Keduanya diturunkan dari user yang login,
+ * jadi tidak pernah memberi hak lebih dari role yang memang dimiliki.
+ */
+private function isAdminAset(): bool
+    {
+        if ($this->scope->isAdminAset()) {
+            return true;
+        }
+
+        $namaRole = auth()->user()?->role?->nama_role;
+
+        return is_string($namaRole)
+            && strcasecmp(trim($namaRole), AsetScope::ROLE_ADMIN_ASET) === 0;
+    }
+
+    /**
+     * Penjaga tambahan untuk operasi tulis (CUD + mutasi).
+     *
+     * Route sudah dilindungi middleware `role:Admin Aset`, tetapi oprasi
+     * tulis dicek ulang di sini agar tetap aman bila dipanggil dari
+     * controller lain, job, atau route tanpa middleware.
+     */
+    private function authorizeAdminAset(): void
+    {
+        abort_unless(
+            $this->isAdminAset(),
+            403,
+            'Hanya Admin Aset yang dapat menambah, mengubah, dan mutasi aset.'
+        );
+    }
+
+    /**
+     * Pastikan aset ini berada dalam cakupan user saat ini.
+     */
+    private function authorizeAset(Aset $aset, string $aksi = 'mengakses'): void
+    {
+        abort_unless(
+            $this->scope->bolehAksesAset($aset),
+            403,
+            $this->scope->pesanAkses($aksi)
+        );
+    }
+
+    /**
+     * Indeks Aset Barang: satu tabel flat untuk SEMUA role.
+     *
+     * Role bercakupan penuh (Admin Aset, Admin Bidang, Pegawai Dinas)
+     * melihat seluruh aset dinas. User UPT hanya melihat aset yang
+     * lokasinya berada di dalam cakupan UPT-nya. Kedua pembatasan ditegakkan
+     * oleh AsetScope di dalam query — bukan dengan menyembunyikan menu.
+     *
+     * Tombol CUD hanya dirender untuk Admin Aset; role lain read-only.
+     */
+    public function index(Request $request)
+    {
+        return $this->adminIndex($request);
+    }
+
+    /**
+     * Tabel flat seluruh aset dalam cakupan user.
      */
     private function adminIndex(Request $request)
     {
@@ -69,9 +115,12 @@ class AsetBarangController extends Controller
         $penempatan = $request->query('penempatan'); // 'pemegang' | 'tanpa_pemegang' | null (semua)
         $pemegangId = $request->query('pemegang');
 
-        $asetList = Aset::with(['barang', 'pemegangSaatIni.pegawai', 'penempatanAktif.ruangan'])
+        $isAdminAset = $this->isAdminAset();
+
+        $asetList = Aset::with(['barang', 'pemegangSaatIni.pegawai', 'penempatanAktif.ruangan', 'skpd', 'lokasi'])
             ->barang()
             ->where('status_aset', 'aktif')
+            ->tap(fn ($q) => $this->scope->terapkan($q))
             ->when($search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('nomor_kartu_barang', 'like', "%{$search}%")
@@ -93,19 +142,73 @@ class AsetBarangController extends Controller
             ->paginate(10)
             ->withQueryString();
 
-        // Dropdown filter pemegang: pegawai yang saat ini memegang aset (non-kendaraan).
-        $pemegangOptions = Pegawai::whereHas('pemegangAset', function ($q) {
-            $q->where('status', 'aktif')
-                ->whereHas('aset', fn ($a) => $a->where('is_kendaraan', false));
-        })
+        // Batasi pilihan pegawai/ruangan/lokasi ke lokasi fisik dalam cakupan user.
+        // PENTING: user bercakupan penuh tidak boleh mendapat filter apa pun —
+        // tanpa penjagaan ini filter `id_lokasi IN (0)` membuat seluruh dropdown
+        // kosong dan tabel Administrator ikut terpotong.
+        $idLokasiCakupan = $this->scope->idLokasi() ?: [0];
+
+        // Filter langsung pada kolom lokasi milik model (Lokasi, Ruangan).
+        $batasiLokasi = function (Builder $query, string $kolom) use ($idLokasiCakupan) {
+            if ($this->scope->cakupanPenuh()) {
+                return $query;
+            }
+
+            return $query->whereIn($kolom, $idLokasiCakupan);
+        };
+
+        // Untuk Pegawai, lokasi fisik ada di tabel `ruangan`, jadi harus lewat
+        // relasi — bukan `whereIn('ruangan.id_lokasi', ...)`.
+        $batasiPegawai = function (Builder $query) use ($idLokasiCakupan) {
+            if ($this->scope->cakupanPenuh()) {
+                return $query;
+            }
+
+            return $query->whereHas('ruangan', fn ($r) => $r->whereIn('id_lokasi', $idLokasiCakupan));
+        };
+
+        // Filter pemegang: PEGAWAI yang saat ini memegang aset. Ini adalah
+        // fitur baca, jadi tetap tersedia untuk semua role (termasuk user UPT
+        // yang hanya read-only).
+        $pemegangOptions = $batasiPegawai(
+            Pegawai::whereHas('pemegangAset', function ($q) {
+                $q->where('status', 'aktif')
+                    ->whereHas('aset', fn ($a) => $a->where('is_kendaraan', false));
+            })
+        )
             ->orderBy('nama_pegawai')
             ->get(['id_pegawai', 'nama_pegawai']);
 
-        // Dropdown pemegang (Tambah/Edit): semua pegawai.
-        $allPegawai = Pegawai::orderBy('nama_pegawai')->get(['id_pegawai', 'nama_pegawai', 'id_ruangan']);
+        // Dropdown form (Tambah/Edit/Mutasi) hanya dibutuhkan Admin Aset.
+        // Role read-only tidak menjalankan query dropdown ini sama sekali.
+        $allPegawai = $ruanganOptions = $skpdOptions = $lokasiOptions = collect();
 
-        // Dropdown ruangan (Tambah/Edit Aset): hanya ruangan aktif.
-        $ruanganOptions = Ruangan::where('status', 'Aktif')->orderBy('nama_ruangan')->get(['id_ruangan', 'nama_ruangan']);
+        if ($isAdminAset) {
+            // Dropdown pemegang pada form Tambah/Edit.
+            $allPegawai = $batasiPegawai(Pegawai::query())
+                ->orderBy('nama_pegawai')
+                ->get(['id_pegawai', 'nama_pegawai', 'id_ruangan', 'id_skpd']);
+
+            // Unit penanggung jawab aset = skpd (Sekretariat / Bidang / UPT).
+            $skpdOptions = Skpd::whereNotNull('jenis_skpd')
+                ->orderBy('jenis_skpd')
+                ->orderBy('nama_skpd')
+                ->get(['id_skpd', 'nama_skpd', 'jenis_skpd']);
+
+            // Lokasi fisik aset — bebas dari unit penanggung jawab.
+            $lokasiOptions = $batasiLokasi(
+                Lokasi::where('status', 'Aktif')->orderBy('jenis_lokasi')->orderBy('nama_lokasi'),
+                'id_lokasi'
+            )->get(['id_lokasi', 'nama_lokasi', 'jenis_lokasi']);
+
+            // Dropdown ruangan, mengikuti lokasi fisik.
+            $ruanganOptions = $batasiLokasi(
+                Ruangan::where('status', 'Aktif')->orderBy('nama_ruangan'),
+                'id_lokasi'
+            )
+                ->with('lokasi')
+                ->get(['id_ruangan', 'nama_ruangan', 'id_lokasi', 'id_skpd']);
+        }
 
         $kondisiList = self::KONDISI;
 
@@ -114,7 +217,10 @@ class AsetBarangController extends Controller
             'pemegangOptions',
             'allPegawai',
             'ruanganOptions',
-            'kondisiList'
+            'skpdOptions',
+            'lokasiOptions',
+            'kondisiList',
+            'isAdminAset'
         ));
     }
 
@@ -123,6 +229,17 @@ class AsetBarangController extends Controller
      */
     public function show(Pegawai $pegawai)
     {
+        // User UPT tidak boleh membuka pegawai di luar cakupan lokasinya.
+        if (! $this->scope->cakupanPenuh()) {
+            $idLokasi = $this->scope->idLokasi();
+
+            $dalamCakupan = Ruangan::where('id_ruangan', $pegawai->id_ruangan)
+                ->whereIn('id_lokasi', $idLokasi ?: [0])
+                ->exists();
+
+            abort_unless($dalamCakupan, 403, $this->scope->pesanAkses('melihat aset pegawai'));
+        }
+
         $pegawai->load('skpd');
 
         $asetList = PemegangAset::with('aset.barang.kategori')
@@ -132,11 +249,19 @@ class AsetBarangController extends Controller
             ->orderByDesc('id_pemegang')
             ->get();
 
-        $isAdminAset = auth()->user()?->role?->nama_role === 'Admin Aset';
+        $isAdminAset = $this->isAdminAset();
         $kondisiList = self::KONDISI;
-        $allPegawai = Pegawai::orderBy('nama_pegawai')->get(['id_pegawai', 'nama_pegawai']);
+        $allPegawai = Pegawai::orderBy('nama_pegawai')->get(['id_pegawai', 'nama_pegawai', 'id_skpd']);
+        $skpdOptions = Skpd::whereNotNull('jenis_skpd')
+            ->orderBy('jenis_skpd')->orderBy('nama_skpd')
+            ->get(['id_skpd', 'nama_skpd', 'jenis_skpd']);
 
-        return view('aset-barang.show', compact('pegawai', 'asetList', 'kondisiList', 'allPegawai', 'isAdminAset'));
+        // Berkas SPPBI bertanda tangan: satu dokumen aktif per pegawai.
+        $pegawai->load('dokumenSppbi');
+
+        return view('aset-barang.show', compact(
+            'pegawai', 'asetList', 'kondisiList', 'allPegawai', 'isAdminAset', 'skpdOptions'
+        ));
     }
 
     /**
@@ -145,6 +270,8 @@ class AsetBarangController extends Controller
      */
     public function store(Request $request, Pegawai $pegawai)
     {
+        $this->authorizeAdminAset();
+
         $pemegangId = $request->input('id_pegawai') ?: $pegawai->id_pegawai;
 
         $warning = $this->createAsetFor($request, $pemegangId);
@@ -161,6 +288,8 @@ class AsetBarangController extends Controller
      */
     public function storeFlat(Request $request)
     {
+        $this->authorizeAdminAset();
+
         $warning = $this->createAsetFor($request, $request->input('id_pegawai'));
 
         return response()->json([
@@ -175,30 +304,118 @@ class AsetBarangController extends Controller
         $data = $this->validateData($request);
         $data['id_barang'] = $this->resolveBarang($request->input('nama_barang'));
 
+        $skpdPJ = $request->input('id_skpd');
+        $ruanganId = $request->input('id_ruangan');
+
+        // User UPT hanya boleh membuat aset di lokasi fisiknya sendiri.
+        // Alur tanpa pemegang wajib pilih ruangan; alur ber-pemegang boleh
+        // kosong (mengikuti ruang kerja pegawai).
+        if ($ruanganId || ! $pemegangId) {
+            $this->authorizeRuangan($ruanganId, 'menambah aset');
+        }
+        $this->authorizeLokasi($request->input('id_lokasi'), 'menambah aset');
+
+        // Lokasi fisik aset mengikuti lokasi ruang yang dipilih.
+        $lokasiId = $this->validasiLokasiDanRuangan($request, $ruanganId);
+
+        $data['id_skpd'] = $skpdPJ ?: AsetPenempatan::skpdUntukPemegang($pemegangId);
+        $data['id_lokasi'] = $lokasiId;
+
         $aset = Aset::create($data);
 
         // Alur manual: aset melekat langsung ke ruangan, tanpa pemegang.
-        if (!$pegawaiId) {
-            $this->placeAtRoom($aset, $request->input('id_ruangan'));
+        if (! $pemegangId) {
+            $this->placeAtRoom($aset, $ruanganId);
+
             return null;
         }
 
-        // Alur otomatis: aset dipegang pegawai, mengikuti ruangan kerja pegawai.
+        // Alur dengan pemegang: aset dipegang pegawai. Ruangan aset mengikuti
+        // ruang kerja pemegang kecuali form menentukan ruang lain.
         PemegangAset::create([
             'id_aset' => $aset->id_aset,
-            'id_pegawai' => $pegawaiId,
+            'id_pegawai' => $pemegangId,
             'tanggal_mulai' => now()->toDateString(),
             'status' => 'aktif',
         ]);
 
-        $this->placeAtPegawaiRoom($aset, $pegawaiId);
+        $ruanganAset = $ruanganId ?: Pegawai::where('id_pegawai', $pemegangId)->value('id_ruangan');
 
-        $penempatanAktif = PenempatanAset::where('id_aset', $aset->id_aset)->where('status', 'aktif')->exists();
-        if (!$penempatanAktif) {
-            return 'Pegawai belum punya ruangan. Aset akan tampil tanpa ruangan sampai ruangan pegawai diisi.';
+        // Ruangan warisan pemegang juga harus berada dalam cakupan user.
+        if ($ruanganAset) {
+            $this->authorizeRuangan($ruanganAset, 'menambah aset');
+        }
+
+        $this->placeAtRoom($aset, $ruanganAset);
+
+        if (! $ruanganAset) {
+            return 'Pemegang belum punya ruangan. Aset akan tampil tanpa ruangan sampai ruangan pegawai diisi.';
         }
 
         return null;
+    }
+
+    /**
+     * Pastikan user boleh memakai ruangan tertentu (create/mutasi).
+     */
+    private function authorizeRuangan(?int $ruanganId, string $aksi = 'mengakses aset'): void
+    {
+        abort_if(
+            $ruanganId === null,
+            422,
+            'Ruangan tujuan wajib dipilih.'
+        );
+
+        abort_unless(
+            Ruangan::where('id_ruangan', $ruanganId)->where('status', 'Aktif')->exists(),
+            422,
+            'Ruangan tujuan tidak ditemukan atau tidak aktif.'
+        );
+
+        abort_unless(
+            $this->scope->bolehAksesRuangan($ruanganId),
+            403,
+            $this->scope->pesanAkses($aksi)
+        );
+    }
+
+    /**
+     * Pastikan user boleh memakai lokasi tertentu (create/edit aset).
+     */
+    private function authorizeLokasi(?int $lokasiId, string $aksi = 'mengakses aset'): void
+    {
+        if ($lokasiId === null) {
+            return;
+        }
+
+        abort_unless(
+            $this->scope->bolehAksesLokasi($lokasiId),
+            403,
+            $this->scope->pesanAkses($aksi)
+        );
+    }
+
+    /**
+     * Lokasi fisik aset mengikuti lokasi ruang yang dipilih. Bila form
+     * mengirim lokasi yang tidak cocok dengan ruang tersebut, ditolak —
+     * aset tidak boleh tercatat berada di dua tempat.
+     */
+    private function validasiLokasiDanRuangan(Request $request, ?int $ruanganId): ?int
+    {
+        $lokasiId = $request->input('id_lokasi');
+        $lokasiRuangan = AsetPenempatan::lokasiUntukRuangan($ruanganId);
+
+        if ($lokasiRuangan) {
+            if ($lokasiId && (int) $lokasiId !== (int) $lokasiRuangan) {
+                throw ValidationException::withMessages([
+                    'id_lokasi' => 'Lokasi fisik tidak sesuai dengan ruangan yang dipilih. Pilih lokasi yang sama dengan ruang tersebut.',
+                ]);
+            }
+
+            return $lokasiRuangan;
+        }
+
+        return $lokasiId;
     }
 
     /**
@@ -214,6 +431,8 @@ class AsetBarangController extends Controller
      */
     public function showAset(Aset $aset)
     {
+        $this->authorizeAset($aset, 'melihat detail aset');
+
         $pemegang = $aset->pemegangSaatIni;
 
         return response()->json([
@@ -223,6 +442,10 @@ class AsetBarangController extends Controller
             'id_pegawai' => $pemegang?->id_pegawai ?? null,
             'nama_pemegang' => $pemegang?->pegawai?->nama_pegawai ?? '',
             'id_ruangan' => $aset->penempatanAktif?->id_ruangan ?? null,
+            'id_skpd' => $aset->id_skpd,
+            'nama_skpd' => $aset->skpd?->nama_skpd ?? '',
+            'id_lokasi' => $aset->id_lokasi,
+            'nama_lokasi' => $aset->lokasi?->nama_lokasi ?? '',
             'nomor_kartu_barang' => $aset->nomor_kartu_barang,
             'merk' => $aset->merk,
             'tanggal_pengadaan' => $aset->tanggal_pengadaan?->format('Y-m-d'),
@@ -239,10 +462,14 @@ class AsetBarangController extends Controller
      */
     public function detailAset(Aset $aset)
     {
+        $this->authorizeAset($aset, 'melihat detail aset');
+
         $aset->load([
             'barang.kategori',
             'pemegangSaatIni.pegawai.skpd',
             'penempatanAktif.ruangan.skpd',
+            'skpd',
+            'lokasi',
         ]);
 
         $riwayatMutasi = $aset->mutasiDetails()
@@ -258,9 +485,15 @@ class AsetBarangController extends Controller
             ->get();
 
         $kondisiList = self::KONDISI;
-        $isAdminAset = auth()->user()?->role?->nama_role === 'Admin Aset';
-        $allPegawai = Pegawai::orderBy('nama_pegawai')->get();
-        $ruanganList = Ruangan::where('status', 'Aktif')->with('skpd')->orderBy('nama_ruangan')->get();
+        $isAdminAset = $this->isAdminAset();
+        $allPegawai = $this->pegawaiTerlihat()->get();
+        $ruanganList = $this->ruanganTerlihat()->get();
+        $skpdOptions = Skpd::whereNotNull('jenis_skpd')
+            ->orderBy('jenis_skpd')->orderBy('nama_skpd')
+            ->get(['id_skpd', 'nama_skpd', 'jenis_skpd']);
+        $lokasiOptions = Lokasi::where('status', 'Aktif')
+            ->orderBy('jenis_lokasi')->orderBy('nama_lokasi')
+            ->get(['id_lokasi', 'nama_lokasi', 'jenis_lokasi']);
 
         return view('aset-barang.detail', compact(
             'aset',
@@ -268,8 +501,40 @@ class AsetBarangController extends Controller
             'kondisiList',
             'isAdminAset',
             'allPegawai',
-            'ruanganList'
+            'ruanganList',
+            'skpdOptions',
+            'lokasiOptions'
         ));
+    }
+
+    /**
+     * Pegawai yang boleh dipilih pada form mutasi — dibatasi cakupan lokasi.
+     */
+    private function pegawaiTerlihat(): Builder
+    {
+        $query = Pegawai::orderBy('nama_pegawai');
+
+        if (! $this->scope->cakupanPenuh()) {
+            $query->whereHas('ruangan', fn ($q) => $q->whereIn('id_lokasi', $this->scope->idLokasi() ?: [0]));
+        }
+
+        return $query;
+    }
+
+    /**
+     * Ruangan yang boleh dipilih pada form mutasi — dibatasi cakupan lokasi.
+     */
+    private function ruanganTerlihat(): Builder
+    {
+        $query = Ruangan::where('status', 'Aktif')
+            ->with('lokasi')
+            ->orderBy('nama_ruangan');
+
+        if (! $this->scope->cakupanPenuh()) {
+            $query->whereIn('id_lokasi', $this->scope->idLokasi() ?: [0]);
+        }
+
+        return $query;
     }
 
     /**
@@ -277,13 +542,15 @@ class AsetBarangController extends Controller
      */
     public function qrLabel(Aset $aset)
     {
-        $content = $aset->nomor_kartu_barang ?: ('aset-' . $aset->id_aset);
+        $this->authorizeAset($aset, 'mencetak label aset');
+
+        $content = $aset->nomor_kartu_barang ?: ('aset-'.$aset->id_aset);
 
         $qr = \QrCode::format('svg')->size(300)->margin(1)->generate($content);
 
         return response($qr, 200, [
             'Content-Type' => 'image/svg+xml',
-            'Content-Disposition' => 'inline; filename="label-' . $content . '.svg"',
+            'Content-Disposition' => 'inline; filename="label-'.$content.'.svg"',
         ]);
     }
 
@@ -295,6 +562,8 @@ class AsetBarangController extends Controller
      */
     public function downloadSemuaLabel($id_pegawai)
     {
+        $this->authorizeAdminAset();
+
         $pegawai = Pegawai::with([
             'pemegangAset' => function ($q) {
                 $q->where('status', 'aktif')
@@ -313,7 +582,7 @@ class AsetBarangController extends Controller
         }
 
         $template = TemplateDokumen::where('kode_template', 'label')->first();
-        if (!$template || !$template->file_path || !Storage::disk('public')->exists($template->file_path)) {
+        if (! $template || ! $template->file_path || ! Storage::disk('public')->exists($template->file_path)) {
             return back()->with('error', 'File template label belum diunggah.');
         }
 
@@ -330,13 +599,13 @@ class AsetBarangController extends Controller
 
             // Dimensi 1 blok label: Baris 2 sampai 7, Kolom B sampai F
             $srcStartRow = 2;
-            $srcEndRow   = 7;
+            $srcEndRow = 7;
             $labelHeight = 6;
-            $gap         = 1; // 1 baris kosong sebagai pembatas potong gunting
-            $step        = $labelHeight + $gap; // Tiap label baru berjarak 7 baris ke bawah
+            $gap = 1; // 1 baris kosong sebagai pembatas potong gunting
+            $step = $labelHeight + $gap; // Tiap label baru berjarak 7 baris ke bawah
 
             $colStart = Coordinate::columnIndexFromString('B');
-            $colEnd   = Coordinate::columnIndexFromString('F');
+            $colEnd = Coordinate::columnIndexFromString('F');
 
             // Catat seluruh posisi sel gabungan (merged cells) di blok B2:F7
             $baseMerges = [];
@@ -378,7 +647,7 @@ class AsetBarangController extends Controller
                 // yang tidak bisa dipakai langsung, jadi ekstrak biner media ke file sementara.
                 if (str_starts_with($logoPath, 'zip://') && preg_match('/#(xl\/media\/.+)$/', $logoPath, $mediaMatch)) {
                     $xlsxPath = Storage::disk('public')->path($template->file_path);
-                    $zip = new \ZipArchive();
+                    $zip = new \ZipArchive;
 
                     if ($zip->open($xlsxPath) === true) {
                         $binary = $zip->getFromName($mediaMatch[1]);
@@ -386,8 +655,8 @@ class AsetBarangController extends Controller
 
                         if ($binary !== false) {
                             $ext = strtolower(pathinfo($mediaMatch[1], PATHINFO_EXTENSION)) ?: 'png';
-                            $logoTempPath = storage_path('app/private/temp/label_' . uniqid() . '.' . $ext);
-                            if (!is_dir(dirname($logoTempPath))) {
+                            $logoTempPath = storage_path('app/private/temp/label_'.uniqid().'.'.$ext);
+                            if (! is_dir(dirname($logoTempPath))) {
                                 mkdir(dirname($logoTempPath), 0755, true);
                             }
                             file_put_contents($logoTempPath, $binary);
@@ -405,7 +674,7 @@ class AsetBarangController extends Controller
 
                 for ($r = 0; $r < $labelHeight; $r++) {
                     $fromRow = $srcStartRow + $r;
-                    $toRow   = $destStartRow + $r;
+                    $toRow = $destStartRow + $r;
 
                     // Samakan tinggi baris
                     $rowHeight = $sheet->getRowDimension($fromRow)->getRowHeight();
@@ -414,27 +683,27 @@ class AsetBarangController extends Controller
                     }
 
                     for ($c = $colStart; $c <= $colEnd; $c++) {
-                        $colStr   = Coordinate::stringFromColumnIndex($c);
+                        $colStr = Coordinate::stringFromColumnIndex($c);
 
                         // Copy nilai & formula (setCellValue: sel tujuan masih baru)
-                        $sheet->setCellValue($colStr . $toRow, $sheet->getCell($colStr . $fromRow)->getValue());
+                        $sheet->setCellValue($colStr.$toRow, $sheet->getCell($colStr.$fromRow)->getValue());
 
                         // Copy format background hijau, border, font
-                        $sheet->duplicateStyle($sheet->getStyle($colStr . $fromRow), $colStr . $toRow);
+                        $sheet->duplicateStyle($sheet->getStyle($colStr.$fromRow), $colStr.$toRow);
                     }
                 }
 
                 // Terapkan merge cells pada blok baru
                 foreach ($baseMerges as $m) {
                     $sheet->mergeCells(
-                        $m['col1'] . ($destStartRow + $m['row1_offset']) . ':'
-                            . $m['col2'] . ($destStartRow + $m['row2_offset'])
+                        $m['col1'].($destStartRow + $m['row1_offset']).':'
+                            .$m['col2'].($destStartRow + $m['row2_offset'])
                     );
                 }
 
                 // 3. DUPLIKASI LOGO DISBUN KE KOTAK BARU
                 if ($baseDrawing && $logoSourcePath && file_exists($logoSourcePath)) {
-                    $newDrawing = new Drawing();
+                    $newDrawing = new Drawing;
                     $newDrawing->setName($baseDrawing->getName());
                     $newDrawing->setDescription($baseDrawing->getDescription() ?? '');
                     $newDrawing->setPath($logoSourcePath);
@@ -444,7 +713,7 @@ class AsetBarangController extends Controller
                     $newDrawing->setOffsetY($baseDrawing->getOffsetY());
 
                     // Pasang logo ke sel B di awal baris kotak baru (misal B9, B16, dst)
-                    $newDrawing->setCoordinates('B' . $destStartRow);
+                    $newDrawing->setCoordinates('B'.$destStartRow);
                     $newDrawing->setWorksheet($sheet);
                 }
             }
@@ -453,19 +722,19 @@ class AsetBarangController extends Controller
             foreach ($asetList as $index => $aset) {
                 $currentRow = $srcStartRow + ($index * $step);
 
-                $noKartu    = $aset->nomor_kartu_barang ?? '-';
+                $noKartu = $aset->nomor_kartu_barang ?? '-';
                 $namaBarang = $aset->barang->nama_barang ?? '-';
-                $merk       = $aset->merk ?? '-';
-                $tahun      = $aset->tanggal_perolehan ? \Carbon\Carbon::parse($aset->tanggal_perolehan)->format('Y') : date('Y');
-                $lokasi     = $pegawai->nama_pegawai;
-                $ruangan    = $aset->penempatanAktif?->ruangan?->nama_ruangan ?? 'Sekretariat';
+                $merk = $aset->merk ?? '-';
+                $tahun = $aset->tanggal_perolehan ? Carbon::parse($aset->tanggal_perolehan)->format('Y') : date('Y');
+                $lokasi = $pegawai->nama_pegawai;
+                $ruangan = $aset->penempatanAktif?->ruangan?->nama_ruangan ?? 'Sekretariat';
 
                 // Loop sel dalam batas kotak barang ini
                 for ($r = $currentRow; $r < ($currentRow + $labelHeight); $r++) {
                     for ($c = $colStart; $c <= $colEnd; $c++) {
                         $colStr = Coordinate::stringFromColumnIndex($c);
-                        $cell   = $sheet->getCell($colStr . $r);
-                        $val    = (string) $cell->getValue();
+                        $cell = $sheet->getCell($colStr.$r);
+                        $val = (string) $cell->getValue();
 
                         if ($val !== '' && str_contains($val, '{')) {
                             $newVal = str_replace(
@@ -480,7 +749,7 @@ class AsetBarangController extends Controller
             }
 
             // 3. Ekspor 1 sheet tunggal
-            $namaFile = 'Label_Aset_' . Str::slug($pegawai->nama_pegawai, '_') . '.xlsx';
+            $namaFile = 'Label_Aset_'.Str::slug($pegawai->nama_pegawai, '_').'.xlsx';
             $writer = IOFactory::createWriter($spreadsheet, 'Xlsx');
 
             return response()->streamDownload(function () use ($writer, $logoTempPath) {
@@ -490,10 +759,10 @@ class AsetBarangController extends Controller
                 }
             }, $namaFile, [
                 'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                'Content-Disposition' => 'attachment; filename="' . $namaFile . '"',
+                'Content-Disposition' => 'attachment; filename="'.$namaFile.'"',
             ]);
         } catch (\Throwable $e) {
-            return back()->with('error', 'Gagal memproses template label. ' . $e->getMessage());
+            return back()->with('error', 'Gagal memproses template label. '.$e->getMessage());
         }
     }
 
@@ -503,10 +772,12 @@ class AsetBarangController extends Controller
      */
     public function cetakLabelSatuan($id)
     {
+        $this->authorizeAdminAset();
+
         $aset = Aset::with(['barang', 'penempatanAktif.ruangan'])->findOrFail($id);
 
         $template = TemplateDokumen::where('kode_template', 'label')->first();
-        if (!$template || !$template->file_path || !Storage::disk('public')->exists($template->file_path)) {
+        if (! $template || ! $template->file_path || ! Storage::disk('public')->exists($template->file_path)) {
             return back()->with('error', 'File template label belum diunggah.');
         }
 
@@ -520,23 +791,23 @@ class AsetBarangController extends Controller
             $sheet->setTitle('Label Aset');
 
             $srcStartRow = 2;
-            $srcEndRow   = 7;
+            $srcEndRow = 7;
             $labelHeight = 6;
             $colStart = Coordinate::columnIndexFromString('B');
-            $colEnd   = Coordinate::columnIndexFromString('F');
+            $colEnd = Coordinate::columnIndexFromString('F');
 
-            $noKartu    = $aset->nomor_kartu_barang ?? '-';
+            $noKartu = $aset->nomor_kartu_barang ?? '-';
             $namaBarang = $aset->barang?->nama_barang ?? '-';
-            $merk       = $aset->merk ?? '-';
-            $tahun      = $aset->tanggal_perolehan ? \Carbon\Carbon::parse($aset->tanggal_perolehan)->format('Y') : date('Y');
-            $ruangan    = $aset->penempatanAktif?->ruangan?->nama_ruangan ?? 'Sekretariat';
-            $lokasi     = $aset->pemegangSaatIni?->pegawai?->nama_pegawai ?? $ruangan;
+            $merk = $aset->merk ?? '-';
+            $tahun = $aset->tanggal_perolehan ? Carbon::parse($aset->tanggal_perolehan)->format('Y') : date('Y');
+            $ruangan = $aset->penempatanAktif?->ruangan?->nama_ruangan ?? 'Sekretariat';
+            $lokasi = $aset->pemegangSaatIni?->pegawai?->nama_pegawai ?? $ruangan;
 
             for ($r = $srcStartRow; $r < ($srcStartRow + $labelHeight); $r++) {
                 for ($c = $colStart; $c <= $colEnd; $c++) {
                     $colStr = Coordinate::stringFromColumnIndex($c);
-                    $cell   = $sheet->getCell($colStr . $r);
-                    $val    = (string) $cell->getValue();
+                    $cell = $sheet->getCell($colStr.$r);
+                    $val = (string) $cell->getValue();
 
                     if ($val !== '' && str_contains($val, '{')) {
                         $newVal = str_replace(
@@ -549,17 +820,17 @@ class AsetBarangController extends Controller
                 }
             }
 
-            $namaFile = 'Label_' . Str::slug($aset->barang?->nama_barang ?? 'Aset', '_') . '.xlsx';
+            $namaFile = 'Label_'.Str::slug($aset->barang?->nama_barang ?? 'Aset', '_').'.xlsx';
             $writer = IOFactory::createWriter($spreadsheet, 'Xlsx');
 
             return response()->streamDownload(function () use ($writer) {
                 $writer->save('php://output');
             }, $namaFile, [
                 'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                'Content-Disposition' => 'attachment; filename="' . $namaFile . '"',
+                'Content-Disposition' => 'attachment; filename="'.$namaFile.'"',
             ]);
         } catch (\Throwable $e) {
-            return back()->with('error', 'Gagal memproses template label. ' . $e->getMessage());
+            return back()->with('error', 'Gagal memproses template label. '.$e->getMessage());
         }
     }
 
@@ -569,8 +840,20 @@ class AsetBarangController extends Controller
      */
     public function update(Request $request, Aset $aset)
     {
+        $this->authorizeAdminAset();
+        $this->authorizeAset($aset, 'memperbarui aset');
+
         $data = $this->validateUpdateData($request, $aset);
         $data['id_barang'] = $this->resolveBarang($request->input('nama_barang'));
+
+        // Unit penanggung jawab & lokasi fisik boleh disetel dari form edit.
+        if ($request->filled('id_skpd')) {
+            $data['id_skpd'] = $request->input('id_skpd');
+        }
+
+        if ($request->filled('id_lokasi')) {
+            $data['id_lokasi'] = $request->input('id_lokasi');
+        }
 
         $aset->update($data);
 
@@ -587,17 +870,21 @@ class AsetBarangController extends Controller
      */
     public function mutasi(Request $request, Aset $aset)
     {
+        $this->authorizeAdminAset();
+        $this->authorizeAset($aset, 'memutasi aset');
+
         $data = $request->validate([
             'tipe' => ['required', Rule::in(['pegawai', 'ruangan'])],
             'id_pegawai' => ['nullable', 'exists:pegawai,id_pegawai'],
             'id_ruangan' => ['nullable', 'exists:ruangan,id_ruangan'],
+            'id_skpd' => ['nullable', 'exists:skpd,id_skpd'],
             'keterangan' => ['nullable', 'string', 'max:500'],
         ]);
 
         if ($data['tipe'] === 'pegawai') {
             $pemegangBaru = $data['id_pegawai'] ?? null;
-            if (!$pemegangBaru) {
-                throw \Illuminate\Validation\ValidationException::withMessages([
+            if (! $pemegangBaru) {
+                throw ValidationException::withMessages([
                     'id_pegawai' => 'Pilih pemegang baru untuk aset ini.',
                 ]);
             }
@@ -610,7 +897,7 @@ class AsetBarangController extends Controller
 
             $warning = null;
             $penempatanAktif = PenempatanAset::where('id_aset', $aset->id_aset)->where('status', 'aktif')->exists();
-            if (!$penempatanAktif) {
+            if (! $penempatanAktif) {
                 $warning = 'Pegawai belum punya ruangan. Aset akan tampil tanpa ruangan sampai ruangan pegawai diisi.';
             }
 
@@ -621,22 +908,29 @@ class AsetBarangController extends Controller
             ]);
         }
 
-        // tipe = ruangan (Pindah Ruangan)
-        if ($aset->pemegangSaatIni) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'tipe' => 'Aset ber-pemegang selalu mengikuti ruangan kerja pegawainya. Gunakan mode Ganti Pemegang.',
-            ]);
-        }
-
+        // tipe = ruangan (Pindah Ruangan / Lokasi Fisik).
+        //
+        // Berpemegang TIDAK lagi menjadi penghalang: pemindahan fisik adalah
+        // proses mutasi tersendiri, terpisah dari perpindahan kepemilikan.
+        // Lokasi aset mengikuti lokasi ruang tujuan, sedangkan unit
+        // penanggung jawab hanya berubah bila diminta eksplisit.
         $ruanganBaru = $data['id_ruangan'] ?? null;
-        if (!$ruanganBaru) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
+
+        if (! $ruanganBaru) {
+            throw ValidationException::withMessages([
                 'id_ruangan' => 'Pilih ruangan tujuan.',
             ]);
         }
 
         $ruanganLama = $aset->penempatanAktif?->id_ruangan;
+        $lokasiLama = $aset->id_lokasi;
+
         $this->placeAtRoom($aset, $ruanganBaru);
+
+        // Unit penanggung jawab hanya ikut berubah bila diminta.
+        if (! empty($data['id_skpd'])) {
+            $aset->update(['id_skpd' => $data['id_skpd']]);
+        }
 
         if ($ruanganLama == $ruanganBaru) {
             return response()->json([
@@ -662,9 +956,17 @@ class AsetBarangController extends Controller
             'ruangan_baru' => $ruanganBaru,
         ]);
 
+        $lokasiBaru = $aset->fresh()->id_lokasi;
+        $pesan = 'Aset berhasil dipindah ruangan.';
+
+        if ($lokasiBaru !== $lokasiLama) {
+            $lokasi = Lokasi::find($lokasiBaru);
+            $pesan .= ' Lokasi fisik sekarang: '.($lokasi?->nama_lokasi ?? '-').'.';
+        }
+
         return response()->json([
             'success' => true,
-            'message' => 'Aset berhasil dipindah ruangan.',
+            'message' => $pesan,
         ]);
     }
 
@@ -675,6 +977,9 @@ class AsetBarangController extends Controller
      */
     public function destroy(Aset $aset)
     {
+        $this->authorizeAdminAset();
+        $this->authorizeAset($aset, 'mengusulkan penghapusan aset');
+
         if ($aset->status_aset !== 'aktif') {
             return response()->json([
                 'success' => false,
@@ -726,10 +1031,14 @@ class AsetBarangController extends Controller
             'status' => 'aktif',
         ]);
 
-        // Ruangan lama -> baru (otomatis ikut ruangan kerja pemegang baru)
+        // Lokasi aset mengikuti lokasi ruang tujuan. Unit penanggung jawab tidak
+        // ikut berubah — perpindahan kepemilikan bukan perpindahan fisik.
         $ruanganLama = $aset->penempatanAktif?->id_ruangan;
-        $ruanganBaru = $this->placeAtPegawaiRoom($aset, $pemegangBaruId);
-        $ruanganBaru = $ruanganBaru?: $ruanganLama;
+        $ruanganBaru = Pegawai::where('id_pegawai', $pemegangBaruId)->value('id_ruangan');
+
+        if ($ruanganBaru) {
+            $this->placeAtRoom($aset, $ruanganBaru);
+        }
 
         // Catat mutasi sebagai riwayat
         $mutasi = MutasiAset::create([
@@ -755,12 +1064,6 @@ class AsetBarangController extends Controller
     /**
      * Tempatkan aset di ruangan kerja utama pegawai. Kembalikan id_ruangan (nullable).
      */
-    private function placeAtPegawaiRoom(Aset $aset, int $pegawaiId): ?int
-    {
-        $pegawai = Pegawai::find($pegawaiId);
-        return $aset->placeAtRoom($pegawai?->id_ruangan);
-    }
-
     private function validateData(Request $request, ?Aset $aset = null): array
     {
         $asetId = $aset?->id_aset;
@@ -768,6 +1071,8 @@ class AsetBarangController extends Controller
         return $request->validate([
             'id_pegawai' => ['nullable', 'exists:pegawai,id_pegawai'],
             'id_ruangan' => ['nullable', 'exists:ruangan,id_ruangan'],
+            'id_skpd' => ['nullable', 'exists:skpd,id_skpd'],
+            'id_lokasi' => ['nullable', 'exists:lokasi,id_lokasi'],
             'nama_barang' => ['required', 'string', 'max:100'],
             'nomor_kartu_barang' => ['required', 'string', 'max:255', Rule::unique('aset', 'nomor_kartu_barang')->ignore($asetId, 'id_aset')],
             'merk' => ['nullable', 'string', 'max:100'],
@@ -785,6 +1090,8 @@ class AsetBarangController extends Controller
         $asetId = $aset?->id_aset;
 
         $rules = [
+            'id_skpd' => ['nullable', 'exists:skpd,id_skpd'],
+            'id_lokasi' => ['nullable', 'exists:lokasi,id_lokasi'],
             'nama_barang' => ['required', 'string', 'max:100'],
             'nomor_kartu_barang' => ['required', 'string', 'max:255', Rule::unique('aset', 'nomor_kartu_barang')->ignore($asetId, 'id_aset')],
             'merk' => ['nullable', 'string', 'max:100'],

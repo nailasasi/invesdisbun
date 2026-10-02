@@ -9,15 +9,16 @@
 @section('content')
 <div class="space-y-6">
 
-    <x-page-header title="Laporan Bulanan Aset" subtitle="Rekapitulasi aset per pegawai, per ruangan, dan mutasi bulanan">
-        <x-slot name="actions">
-            <form method="GET" action="{{ route('laporan.bulanan') }}" class="flex items-center gap-2">
-                <input type="month" name="bulan" value="{{ $bulan }}"
-                    class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                <x-button type="submit" variant="primary" size="sm">Tampilkan</x-button>
+    <x-card :padding="false">
+        <x-action-bar :border="false">
+            <form method="GET" action="{{ route('laporan.bulanan') }}" class="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+                <label for="bulan" class="text-sm font-semibold text-slate-700">Periode Laporan</label>
+                <input type="month" id="bulan" name="bulan" value="{{ $bulan }}"
+                    class="rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm transition focus:border-disbun-600 focus:outline-none focus:ring-2 focus:ring-disbun-400/40">
+                <x-button type="submit" variant="primary">Tampilkan</x-button>
             </form>
-        </x-slot>
-    </x-page-header>
+        </x-action-bar>
+    </x-card>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <x-card>
@@ -29,7 +30,7 @@
         <x-card>
             <div class="p-4">
                 <p class="text-xs font-medium text-slate-400 uppercase">Aset di Pegawai</p>
-                <p class="text-2xl font-bold text-emerald-600 mt-1">{{ $totalAsetPegawai }}</p>
+                <p class="text-2xl font-bold text-disbun-700 mt-1">{{ $totalAsetPegawai }}</p>
             </div>
         </x-card>
         <x-card>
@@ -86,13 +87,13 @@
                                         @php
                                             $kondisi = $item->aset->kondisi ?? '-';
                                             $color = match($kondisi) {
-                                                'Baik' => 'bg-emerald-50 text-emerald-700',
+                                                'Baik' => 'bg-disbun-50 text-disbun-700 border border-disbun-100',
                                                 'Rusak Ringan' => 'bg-amber-50 text-amber-700',
                                                 'Rusak Berat' => 'bg-red-50 text-red-700',
                                                 default => 'bg-slate-50 text-slate-500',
                                             };
                                         @endphp
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ $color }}">{{ $kondisi }}</span>
+                                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold {{ $color }}">{{ $kondisi }}</span>
                                     </td>
                                     <td class="px-5 py-3 text-slate-500">{{ $item->tanggal_mulai?->format('d/m/Y') ?? '-' }}</td>
                                 </tr>
@@ -144,13 +145,13 @@
                                         @php
                                             $kondisi = $item->aset->kondisi ?? '-';
                                             $color = match($kondisi) {
-                                                'Baik' => 'bg-emerald-50 text-emerald-700',
+                                                'Baik' => 'bg-disbun-50 text-disbun-700 border border-disbun-100',
                                                 'Rusak Ringan' => 'bg-amber-50 text-amber-700',
                                                 'Rusak Berat' => 'bg-red-50 text-red-700',
                                                 default => 'bg-slate-50 text-slate-500',
                                             };
                                         @endphp
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ $color }}">{{ $kondisi }}</span>
+                                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold {{ $color }}">{{ $kondisi }}</span>
                                     </td>
                                     <td class="px-5 py-3 text-slate-500">{{ $item->tanggal_mulai?->format('d/m/Y') ?? '-' }}</td>
                                 </tr>
@@ -204,13 +205,13 @@
                                         @php
                                             $status = $mutasi->status_mutasi ?? '-';
                                             $statusColor = match($status) {
-                                                'Disetujui' => 'bg-emerald-50 text-emerald-700',
+                                                'Disetujui' => 'bg-disbun-50 text-disbun-700 border border-disbun-100',
                                                 'Ditolak' => 'bg-red-50 text-red-700',
                                                 'Menunggu' => 'bg-amber-50 text-amber-700',
                                                 default => 'bg-slate-50 text-slate-500',
                                             };
                                         @endphp
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ $statusColor }}">{{ $status }}</span>
+                                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold {{ $statusColor }}">{{ $status }}</span>
                                     </td>
                                     <td class="px-5 py-3 text-slate-500 max-w-[200px] truncate">{{ $mutasi->keterangan ?? '-' }}</td>
                                 </tr>

@@ -30,7 +30,7 @@
                         File Excel Usulan RKBMD <span class="text-rose-500">*</span>
                     </label>
                     <input type="file" id="excel-file" name="file_excel" accept=".xlsx,.xls" required
-                           class="w-full cursor-pointer rounded-xl border border-dashed border-slate-200 bg-slate-50 text-xs text-slate-600 transition file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-emerald-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-emerald-700 hover:bg-slate-100">
+                           class="w-full cursor-pointer rounded-xl border border-dashed border-slate-200 bg-slate-50 text-xs text-slate-600 transition file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-disbun-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-disbun-800 hover:bg-slate-100">
                     <p class="mt-1 text-[11px] text-slate-400">Maksimal 5 MB, format .xlsx / .xls.</p>
                 </div>
 
@@ -74,7 +74,7 @@
                     Batal
                 </button>
                 <button type="submit"
-                        class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-5 py-2 text-xs font-bold text-white shadow-2xs transition hover:bg-emerald-700">
+                        class="inline-flex items-center gap-1.5 rounded-xl bg-disbun-700 px-5 py-2 text-xs font-bold text-white shadow-2xs transition hover:bg-disbun-800">
                     <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
                     Import Excel
                 </button>

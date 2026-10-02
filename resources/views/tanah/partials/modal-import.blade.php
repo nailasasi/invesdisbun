@@ -32,7 +32,7 @@
                         <span class="text-[11px] text-slate-500">Unduh template standar kolom KIB A Tanah</span>
                     </div>
                     <a href="{{ route('tanah.template') }}"
-                       class="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-emerald-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-emerald-700 shadow-2xs transition hover:bg-emerald-50">
+                       class="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-disbun-100 bg-white px-3 py-1.5 text-[11px] font-semibold text-disbun-800 shadow-2xs transition hover:bg-disbun-50">
                         <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                         <span>Unduh Format</span>
                     </a>
@@ -66,7 +66,7 @@
                     Batal
                 </button>
                 <button type="submit"
-                        class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-2xs transition hover:bg-emerald-700">
+                        class="inline-flex items-center gap-1.5 rounded-xl bg-disbun-700 px-4 py-2 text-xs font-bold text-white shadow-2xs transition hover:bg-disbun-800">
                     <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
                     <span>Mulai Import</span>
                 </button>

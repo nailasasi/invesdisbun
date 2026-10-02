@@ -2,6 +2,8 @@
 
 @section('title','Edit Retribusi Tanah')
 
+@section('page-title', 'Edit Retribusi Tanah')
+
 @section('content')
 
 <div class="mb-6">
@@ -154,7 +156,7 @@ Batal
 
 
 <button type="submit"
-class="bg-emerald-500 text-white rounded-xl px-5 py-2">
+class="bg-disbun-600 text-white rounded-xl px-5 py-2">
 Simpan
 </button>
 

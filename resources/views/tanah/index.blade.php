@@ -2,192 +2,120 @@
 
 @section('title', 'Inventaris Tanah')
 
+@section('page-title', 'Tanah KIB A')
+
 @section('content')
 <div class="p-6">
 
     {{-- =========================================================
-         HEADER
+         CARD BENTO + ACTION BAR
     ========================================================== --}}
-    <div class="flex items-center justify-between mb-6">
+    <x-card :padding="false">
 
-        <div>
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg"
-                         class="w-5 h-5 text-emerald-600"
-                         fill="none"
-                         viewBox="0 0 24 24"
-                         stroke="currentColor">
-                        <path stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/>
-                    </svg>
-                </div>
+        <x-action-bar>
+            <form method="GET" action="{{ route('tanah.index') }}"
+                  class="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center">
 
-                <div>
-                    <h1 class="text-2xl font-bold text-slate-800">
-                        Inventaris Tanah
-                    </h1>
-
-                    <p class="text-sm text-slate-500 mt-0.5">
-                        Data inventaris tanah / KIB A milik instansi
-                    </p>
-                </div>
-            </div>
-        </div>
-
-
-        {{-- TOMBOL IMPORT + TAMBAH --}}
-        @if(in_array(auth()->user()?->role?->nama_role, ['Admin Aset', 'Admin UPT P2DP']))
-            <div class="flex items-center gap-2">
-
-                <button type="button" onclick="openModalImportTanah()"
-                        class="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200
-                               bg-white px-4 py-2.5 text-xs font-semibold
-                               text-slate-700 shadow-2xs transition hover:bg-slate-50">
-
-                    <svg xmlns="http://www.w3.org/2000/svg"
-                         class="w-4 h-4 text-emerald-600"
-                         fill="none"
-                         viewBox="0 0 24 24"
-                         stroke="currentColor">
-                        <path stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8-4-4m0 0L8 8m4-4v12"/>
+                <div class="relative flex-1 sm:max-w-md">
+                    <svg class="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400"
+                         fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z"/>
                     </svg>
 
-                    Import Excel
+                    <input
+                        type="text"
+                        name="search"
+                        value="{{ request('search') }}"
+                        placeholder="Cari KIB, deskripsi objek, alamat, nomor sertifikat..."
+                        class="w-full rounded-2xl border border-slate-200 py-2.5 pl-11 pr-4
+                               text-sm text-slate-700 shadow-sm transition
+                               placeholder:text-slate-400
+                               focus:border-disbun-600 focus:outline-none
+                               focus:ring-2 focus:ring-disbun-400/40"
+                    >
+                </div>
+
+                <button type="submit"
+                        class="inline-flex items-center gap-2 rounded-2xl
+                               bg-disbun-700 px-5 py-2.5
+                               text-sm font-bold text-white shadow-sm
+                               transition hover:bg-disbun-800">
+                    Cari
                 </button>
 
-                <a href="{{ route('tanah.create') }}"
-                   class="inline-flex items-center gap-2 px-4 py-2.5
-                          bg-emerald-500 hover:bg-emerald-600
-                          text-white text-sm font-semibold
-                          rounded-xl shadow-sm transition">
+                @if(request('search'))
+                    <a href="{{ route('tanah.index') }}"
+                       class="inline-flex items-center rounded-2xl border border-disbun-card-border
+                              bg-white px-4 py-2.5
+                              text-sm font-semibold text-slate-600 shadow-sm
+                              transition hover:bg-slate-50">
+                        Reset
+                    </a>
+                @endif
 
-                    <svg xmlns="http://www.w3.org/2000/svg"
-                         class="w-4 h-4"
-                         fill="none"
-                         viewBox="0 0 24 24"
-                         stroke="currentColor">
-                        <path stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M12 4v16m8-8H4"/>
-                    </svg>
+            </form>
 
-                    Tambah Tanah
-                </a>
-            </div>
-        @endif
+            <x-slot name="actions">
+                @if(in_array(auth()->user()?->role?->nama_role, ['Admin Aset', 'Admin UPT P2DP']))
+                    <button type="button" onclick="openModalImportTanah()"
+                            class="inline-flex items-center gap-1.5 rounded-2xl border border-disbun-card-border
+                                   bg-white px-4 py-2.5 text-xs font-bold
+                                   text-slate-700 shadow-sm transition hover:bg-slate-50">
 
-    </div>
+                        <svg xmlns="http://www.w3.org/2000/svg"
+                             class="h-4 w-4 text-disbun-700"
+                             fill="none"
+                             viewBox="0 0 24 24"
+                             stroke="currentColor">
+                            <path stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                  stroke-width="2"
+                                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8-4-4m0 0L8 8m4-4v12"/>
+                        </svg>
 
+                        Import Excel
+                    </button>
 
-    {{-- =========================================================
-         SEARCH CARD
-    ========================================================== --}}
-    <div class="bg-white border border-slate-200 rounded-2xl
-                shadow-sm p-4 mb-5">
+                    <a href="{{ route('tanah.create') }}"
+                       class="inline-flex items-center gap-2 rounded-2xl px-4 py-2.5
+                              bg-disbun-700 hover:bg-disbun-800
+                              text-white text-sm font-bold
+                              shadow-sm transition">
 
-        <form method="GET" action="{{ route('tanah.index') }}"
-              class="flex items-center gap-3">
+                        <svg xmlns="http://www.w3.org/2000/svg"
+                             class="h-4 w-4"
+                             fill="none"
+                             viewBox="0 0 24 24"
+                             stroke="currentColor">
+                            <path stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                  stroke-width="2"
+                                  d="M12 4v16m8-8H4"/>
+                        </svg>
 
-            <div class="relative flex-1">
-
-                <svg xmlns="http://www.w3.org/2000/svg"
-                     class="absolute left-4 top-1/2 -translate-y-1/2
-                            w-5 h-5 text-slate-400"
-                     fill="none"
-                     viewBox="0 0 24 24"
-                     stroke="currentColor">
-                    <path stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2"
-                          d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z"/>
-                </svg>
-
-                <input
-                    type="text"
-                    name="search"
-                    value="{{ request('search') }}"
-                    placeholder="Cari KIB, deskripsi objek, alamat, nomor sertifikat..."
-                    class="w-full pl-11 pr-4 py-2.5
-                           border border-slate-200 rounded-xl
-                           text-sm text-slate-700
-                           placeholder:text-slate-400
-                           focus:outline-none
-                           focus:ring-2 focus:ring-emerald-100
-                           focus:border-emerald-400"
-                >
-            </div>
+                        Tambah Tanah
+                    </a>
+                @endif
+            </x-slot>
+        </x-action-bar>
 
 
-            <button type="submit"
-                    class="px-5 py-2.5 rounded-xl
-                           bg-emerald-500 hover:bg-emerald-600
-                           text-white text-sm font-semibold
-                           transition">
-                Cari
-            </button>
+        {{-- CARD HEADER: total data + kelompok kolom --}}
+        <div class="flex flex-wrap items-center gap-2 border-b border-disbun-card-border px-6 py-4">
 
+            <span class="text-sm font-semibold text-slate-800">
+                {{ $tanahList->total() }} data
+            </span>
 
-            @if(request('search'))
-                <a href="{{ route('tanah.index') }}"
-                   class="px-4 py-2.5 rounded-xl
-                          border border-slate-200
-                          text-slate-600 text-sm font-medium
-                          hover:bg-slate-50 transition">
-                    Reset
-                </a>
-            @endif
-
-        </form>
-
-    </div>
-
-
-    {{-- =========================================================
-         DATA CARD
-    ========================================================== --}}
-    <div class="bg-white border border-slate-200 rounded-2xl
-                shadow-sm overflow-hidden">
-
-
-        {{-- CARD HEADER --}}
-        <div class="px-5 py-4 border-b border-slate-200">
-
-            <div class="flex items-center justify-between">
-
-                <div>
-                    <h2 class="text-base font-bold text-slate-800">
-                        Data KIB A — Tanah
-                    </h2>
-
-                </div>
-
-
-                <div class="text-sm text-slate-500">
-                    <span class="font-semibold text-slate-800">
-                        {{ $tanahList->total() }}
-                    </span>
-                    data
-                </div>
-
-            </div>
-
-
-            {{-- GROUP INFORMATION --}}
-            <div class="flex flex-wrap items-center gap-2 mt-4">
+            <span class="hidden h-4 w-px bg-slate-200 sm:block"></span>
 
                 <span class="inline-flex items-center gap-2
                              px-3 py-1.5 rounded-lg
-                             bg-emerald-50 text-emerald-700
+                             bg-disbun-50 text-disbun-700
+                             border border-disbun-100
                              text-xs font-semibold">
 
-                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span class="w-2 h-2 rounded-full bg-disbun-500"></span>
                     Data KIB A
                 </span>
 
@@ -212,11 +140,9 @@
                 </span>
 
 
-                <span class="ml-auto text-xs text-slate-400">
+                <span class="ml-auto text-xs text-slate-400 lg:hidden">
                     ← Geser ke kanan untuk melihat seluruh data →
                 </span>
-
-            </div>
 
         </div>
 
@@ -226,7 +152,7 @@
         ====================================================== --}}
         <div class="overflow-x-auto">
 
-            <table class="min-w-[1100px] w-full text-xs">
+            <table class="w-full min-w-full text-xs">
 
                 {{-- HEADER --}}
                 <thead>
@@ -274,7 +200,7 @@
                 </th>
 
 
-                <th class="px-3 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Dokumen PBB
                 </th>
 
@@ -421,7 +347,7 @@
 
                             @if ($latestPbb)
                                 <a href="{{ asset('storage/' . $latestPbb->file_pbb) }}" target="_blank"
-                                   class="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 transition hover:bg-emerald-100">
+                                   class="inline-flex items-center gap-1 rounded-lg bg-disbun-50 px-2 py-1 text-[11px] font-semibold text-disbun-800 transition hover:bg-disbun-100">
                                     <svg class="h-3.5 w-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                                     </svg>
@@ -578,7 +504,7 @@
 
         @endif
 
-    </div>
+    </x-card>
 
 </div>
 

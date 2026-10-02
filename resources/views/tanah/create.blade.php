@@ -2,6 +2,8 @@
 
 @section('title', 'Tambah Inventaris Tanah')
 
+@section('page-title', 'Tambah Tanah')
+
 @section('content')
 <div class="p-6">
 

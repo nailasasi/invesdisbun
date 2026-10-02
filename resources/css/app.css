@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&display=swap');
 @import 'tailwindcss';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
@@ -6,7 +6,7 @@
 @source '../../resources/views/**/*.blade.php';
 
 @theme {
-    --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 
     --animate-fade-in: fade-in 0.35s ease-out both;
@@ -14,6 +14,25 @@
 
     --shadow-soft: 0 1px 2px rgb(15 23 42 / 0.05), 0 10px 30px -12px rgb(15 23 42 / 0.12);
     --shadow-glow: 0 0 0 1px rgb(16 185 129 / 0.18), 0 10px 28px -10px rgb(16 185 129 / 0.5);
+    --shadow-bento: 0 10px 30px -10px rgb(15 51 31 / 0.07), 0 4px 12px -2px rgb(15 51 31 / 0.03);
+    --shadow-bento-hover: 0 20px 35px -10px rgb(15 51 31 / 0.12), 0 8px 16px -4px rgb(15 51 31 / 0.05);
+
+    --color-disbun-950: #07160d;
+    --color-disbun-900: #0f331f;
+    --color-disbun-850: #133e25;
+    --color-disbun-800: #154326;
+    --color-disbun-700: #1e5f37;
+    --color-disbun-600: #27824b;
+    --color-disbun-500: #34a853;
+    --color-disbun-400: #52c370;
+    --color-disbun-100: #e1f4e7;
+    --color-disbun-200: #c3e6ce;
+    --color-disbun-50: #f0f9f3;
+    --color-disbun-amber: #f27d0c;
+    --color-disbun-amber-light: #fff7ed;
+    --color-disbun-amber-glow: #ff9900;
+    --color-disbun-warm-canvas: #f5f8f6;
+    --color-disbun-card-border: #e4ece7;
 
     @keyframes fade-in {
         from {

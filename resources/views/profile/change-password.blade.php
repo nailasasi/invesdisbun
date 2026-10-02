@@ -2,9 +2,9 @@
 
 @section('title', 'Ganti Password')
 
-@section('content')
-    <x-page-header title="Ganti Password" subtitle="Perbarui password akun login Anda" />
+@section('page-title', 'Ganti Password')
 
+@section('content')
     <x-alert type="success" />
     <x-alert type="error" />
 

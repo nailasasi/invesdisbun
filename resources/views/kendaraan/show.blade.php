@@ -2,6 +2,8 @@
 
 @section('title', 'Detail Kendaraan')
 
+@section('page-title', 'Detail Kendaraan')
+
 @section('content')
     {{-- Navigasi Kembali Minimalis di Atas Judul --}}
     <div class="mb-3">
@@ -23,7 +25,7 @@
     @php
         $isAdmin = $isAdminAset;
         $kondisiColor = match ($kendaraan->aset?->kondisi) {
-            'Baik' => 'bg-emerald-100 text-emerald-700',
+            'Baik' => 'bg-disbun-100 text-disbun-800',
             'Rusak Ringan' => 'bg-amber-100 text-amber-700',
             'Rusak Berat' => 'bg-red-100 text-red-700',
             default => 'bg-slate-100 text-slate-600',
@@ -31,7 +33,7 @@
         $platAktif = $kendaraan->platAktif;
         $pajakAktif = $kendaraan->pajakAktif;
         $statusBadge = match ($kendaraan->aset?->status_aset) {
-            'aktif' => 'bg-emerald-100 text-emerald-700',
+            'aktif' => 'bg-disbun-100 text-disbun-800',
             'diusulkan_hapus' => 'bg-amber-100 text-amber-700',
             'dihapuskan' => 'bg-red-100 text-red-700',
             default => 'bg-slate-100 text-slate-600',
@@ -48,7 +50,7 @@
             @if ($isAdmin)
                 <div class="flex items-center gap-2">
                     <button type="button" data-edit-kendaraan="{{ $kendaraan->id_kendaraan }}"
-                            class="inline-flex items-center gap-1.5 rounded-2xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-emerald-700">
+                            class="inline-flex items-center gap-1.5 rounded-2xl bg-disbun-700 px-3.5 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-disbun-800">
                         <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                         <span>Edit Kendaraan</span>
                     </button>
@@ -188,7 +190,7 @@
                                         SPPKD
                                     </a>
                                     <a href="{{ route('kendaraan.mutasi.bast.download', [$kendaraan->id_kendaraan, $rd->id_mutasi]) }}"
-                                       class="ml-1 inline-flex items-center rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100">
+                                       class="ml-1 inline-flex items-center rounded-lg bg-disbun-50 px-2.5 py-1.5 text-xs font-medium text-disbun-800 transition hover:bg-disbun-100">
                                         BAST
                                     </a>
                                 </td>
@@ -231,7 +233,7 @@
                                 <td class="px-6 py-4 text-sm text-slate-600">{{ $plat->tanggal_berlaku?->format('d M Y') ?? '-' }}</td>
                                 <td class="px-6 py-4 text-right text-sm">
                                     @if ($plat->status === 'Aktif')
-                                        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-emerald-50 text-emerald-700">Aktif</span>
+                                        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-disbun-50 text-disbun-800">Aktif</span>
                                     @else
                                         <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-slate-100 text-slate-500">Riwayat</span>
                                     @endif
@@ -252,7 +254,7 @@
             <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
                 <h3 class="text-base font-semibold text-slate-900">Pajak Kendaraan</h3>
                 @if ($isAdmin)
-                    <button type="button" data-pajak-modal class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-emerald-700">
+                    <button type="button" data-pajak-modal class="inline-flex items-center gap-2 rounded-xl bg-disbun-700 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-disbun-800">
                         + Tambah Pajak
                     </button>
                 @endif
@@ -279,7 +281,7 @@
                             <tr class="transition hover:bg-slate-50">
                                 <td class="px-6 py-4 text-sm text-slate-700">{{ $pajak->jenis_pajak }}
                                     @if ($pajak->status === 'Aktif')
-                                        <span class="ml-1 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">Aktif</span>
+                                        <span class="ml-1 inline-flex items-center rounded-full bg-disbun-100 px-2 py-0.5 text-[10px] font-medium text-disbun-800">Aktif</span>
                                     @endif
                                 </td>
                                 <td class="px-6 py-4 text-sm">
@@ -344,7 +346,7 @@
                 </div>
                 <div class="flex items-center justify-end gap-2 pt-2">
                     <button type="button" data-modal-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
-                    <button type="submit" class="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700">Simpan</button>
+                    <button type="submit" class="rounded-xl bg-disbun-700 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-disbun-800">Simpan</button>
                 </div>
             </form>
         </div>
@@ -402,7 +404,7 @@
                 </div>
                 <div class="flex items-center justify-end gap-2 pt-2">
                     <button type="button" data-modal-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
-                    <button type="submit" class="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700">Simpan</button>
+                    <button type="submit" class="rounded-xl bg-disbun-700 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-disbun-800">Simpan</button>
                 </div>
             </form>
         </div>

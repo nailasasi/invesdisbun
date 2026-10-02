@@ -2,30 +2,18 @@
 
 @section('title', 'Monitoring Aset')
 
+@section('page-title', 'Monitoring Aset')
+
 @section('content')
 <div class="space-y-6">
-    {{-- Header Title & Action --}}
-    <div class="flex flex-wrap items-center justify-between gap-4">
-        <div>
-            <h2 class="text-xl font-bold text-slate-900">Monitoring Aset</h2>
-            <p class="text-xs text-slate-400">Pusat Pengawasan Nilai Buku & Masa Manfaat Aset</p>
-        </div>
-        <a href="{{ route('monitoring-aset.export', request()->query()) }}"
-           class="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-2xs transition hover:bg-emerald-700">
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-            </svg>
-            <span>Rekap Excel</span>
-        </a>
-    </div>
 
     <x-alert type="success" />
     <x-alert type="error" />
 
     {{-- 3 Metrics Card (Grid 3 Kolom) --}}
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
         {{-- Card 1 --}}
-        <div class="flex items-center justify-between rounded-3xl border border-slate-100 bg-white p-5 shadow-2xs">
+        <x-card class="flex items-center justify-between">
             <div>
                 <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Nilai Buku Aset</p>
                 <h3 class="mt-1 text-xl font-black text-emerald-600">
@@ -38,10 +26,10 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
             </div>
-        </div>
+        </x-card>
 
         {{-- Card 2 --}}
-        <div class="flex items-center justify-between rounded-3xl border border-slate-100 bg-white p-5 shadow-2xs">
+        <x-card class="flex items-center justify-between">
             <div>
                 <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Aset Nilai Buku Habis</p>
                 <h3 class="mt-1 text-xl font-black text-rose-600">
@@ -54,10 +42,10 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
             </div>
-        </div>
+        </x-card>
 
         {{-- Card 3 --}}
-        <div class="flex items-center justify-between rounded-3xl border border-slate-100 bg-white p-5 shadow-2xs">
+        <x-card class="flex items-center justify-between">
             <div>
                 <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Masa Pakai Kritis</p>
                 <h3 class="mt-1 text-xl font-black text-amber-500">
@@ -70,25 +58,26 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                 </svg>
             </div>
-        </div>
+        </x-card>
     </div>
 
     {{-- Main Table Container --}}
-    <div class="rounded-3xl border border-slate-100 bg-white p-5 shadow-2xs">
-        {{-- Filter Bar --}}
-        <form action="{{ route('monitoring-aset.index') }}" method="GET" class="mb-5 flex flex-wrap items-center justify-between gap-3">
+    <x-card :padding="false">
+        {{-- FILTER + AKSI --}}
+        <x-action-bar>
+            <form action="{{ route('monitoring-aset.index') }}" method="GET" class="flex min-w-0 flex-1 flex-col gap-3">
             <div class="flex flex-wrap items-center gap-2">
                 {{-- Search Input --}}
                 <div class="relative w-64">
                     <input type="text" name="search" value="{{ request('search') }}" placeholder="Cari nama / kode aset..."
-                           class="w-full rounded-2xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-xs text-slate-800 placeholder-slate-400 focus:border-emerald-500 focus:outline-hidden focus:ring-1 focus:ring-emerald-500">
+                           class="w-full rounded-2xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-xs text-slate-800 placeholder-slate-400 focus:border-disbun-600 focus:outline-hidden focus:ring-1 focus:ring-disbun-400/40">
                     <svg class="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                     </svg>
                 </div>
 
                 {{-- Filter Tahun --}}
-                <select name="tahun" class="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 focus:border-emerald-500 focus:outline-hidden focus:ring-1 focus:ring-emerald-500">
+                <select name="tahun" class="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 focus:border-disbun-600 focus:outline-hidden focus:ring-1 focus:ring-disbun-400/40">
                     <option value="">Semua Tahun</option>
                     @foreach ($tahunList ?? [] as $th)
                         <option value="{{ $th }}" {{ request('tahun') == $th ? 'selected' : '' }}>{{ $th }}</option>
@@ -96,23 +85,34 @@
                 </select>
 
                 {{-- Filter Status --}}
-                <select name="status" class="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 focus:border-emerald-500 focus:outline-hidden focus:ring-1 focus:ring-emerald-500">
+                <select name="status" class="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 focus:border-disbun-600 focus:outline-hidden focus:ring-1 focus:ring-disbun-400/40">
                     <option value="">Semua Status</option>
                     <option value="habis" {{ request('status') == 'habis' ? 'selected' : '' }}>Masa Pakai Habis</option>
                     <option value="kritis" {{ request('status') == 'kritis' ? 'selected' : '' }}>Kritis (&lt; 30 Hari)</option>
                     <option value="normal" {{ request('status') == 'normal' ? 'selected' : '' }}>Normal</option>
                 </select>
 
-                <button type="submit" class="rounded-2xl bg-slate-900 px-4 py-2 text-xs font-bold text-white transition hover:bg-slate-800">
+                <button type="submit" class="rounded-2xl bg-disbun-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-disbun-800">
                     Filter
                 </button>
                 @if (request()->anyFilled(['search', 'tahun', 'status']))
-                    <a href="{{ route('monitoring-aset.index') }}" class="rounded-2xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50">
+                    <a href="{{ route('monitoring-aset.index') }}" class="rounded-2xl border border-disbun-card-border bg-white px-3.5 py-2 text-xs font-bold text-slate-500 shadow-sm transition hover:bg-slate-50">
                         Reset
                     </a>
                 @endif
             </div>
-        </form>
+            </form>
+
+            <x-slot name="actions">
+                <a href="{{ route('monitoring-aset.export', request()->query()) }}"
+                   class="inline-flex items-center gap-2 rounded-2xl bg-disbun-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-disbun-800">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    <span>Rekap Excel</span>
+                </a>
+            </x-slot>
+        </x-action-bar>
 
         {{-- Tabel Monitoring --}}
         <div class="overflow-x-auto">
@@ -135,7 +135,7 @@
                             $masaBadge = match ($item->masa_status) {
                                 'habis' => 'bg-rose-50 text-rose-700',
                                 'kritis' => 'bg-amber-50 text-amber-700',
-                                'normal' => 'bg-emerald-50 text-emerald-700',
+                                'normal' => 'bg-disbun-50 text-disbun-700',
                                 default => 'bg-slate-100 text-slate-400',
                             };
                             $masaText = match ($item->masa_status) {
@@ -217,7 +217,7 @@
         <div class="mt-4">
             {{ $asetList->links() }}
         </div>
-    </div>
+    </x-card>
 </div>
 
     {{-- MODAL: USULKAN HAPUS --}}

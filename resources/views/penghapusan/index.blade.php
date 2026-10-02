@@ -2,40 +2,37 @@
 
 @section('title', 'Usulan Penghapusan Aset')
 
-@section('content')
-    <x-page-header title="Usulan Penghapusan Aset" subtitle="Daftar barang dalam proses penghapusan administrasi buku inventaris">
-    </x-page-header>
+@section('page-title', 'Penghapusan Aset')
 
+@section('content')
     <x-alert type="success" />
     <x-alert type="error" />
 
-    <div class="rounded-3xl border border-slate-100 bg-white p-6 shadow-2xs">
-        <div class="mb-5 flex flex-wrap items-center justify-between gap-4">
-            <div>
-                <h3 class="text-base font-bold text-slate-900">Daftar Usulan Penghapusan Aset</h3>
-                <p class="text-xs text-slate-400">Aset di sini hanya mengubah status — tidak dihapus dari database, hanya arsip status</p>
-            </div>
-            <div class="flex items-center gap-2">
-                <form method="GET" action="{{ route('penghapusan.index') }}" class="flex items-center gap-2">
-                    <div class="relative w-64">
-                        <input type="text" name="search" value="{{ request('search') }}" placeholder="Cari nama / kode aset..."
-                               class="w-full rounded-xl border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-xs text-slate-800 placeholder-slate-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
-                        <svg class="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                        </svg>
-                    </div>
-                    @if (request()->has('search'))
-                        <a href="{{ route('penghapusan.index') }}" class="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50">Reset</a>
-                    @endif
-                </form>
-                <button type="button" onclick="openModalUsulanManual()" class="inline-flex items-center gap-1.5 rounded-xl bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 transition hover:bg-rose-100">
-                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <x-card :padding="false">
+        <x-action-bar>
+            <form method="GET" action="{{ route('penghapusan.index') }}" class="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+                <div class="relative flex-1 sm:max-w-sm">
+                    <svg class="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/></svg>
+                    <input type="text" name="search" value="{{ request('search') }}" placeholder="Cari nama / kode aset..."
+                           class="w-full rounded-2xl border border-slate-200 bg-white py-2.5 pl-11 pr-4 text-sm text-slate-800 shadow-sm transition placeholder:text-slate-400 focus:border-disbun-600 focus:outline-none focus:ring-2 focus:ring-disbun-400/40">
+                </div>
+                <button type="submit" class="inline-flex items-center gap-2 rounded-2xl bg-disbun-700 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-disbun-800">
+                    Cari
+                </button>
+                @if (request()->has('search'))
+                    <a href="{{ route('penghapusan.index') }}" class="inline-flex items-center rounded-2xl border border-disbun-card-border bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50">Reset</a>
+                @endif
+            </form>
+
+            <x-slot name="actions">
+                <button type="button" onclick="openModalUsulanManual()" class="inline-flex items-center gap-1.5 rounded-2xl bg-disbun-700 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-disbun-800">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                     </svg>
                     <span>Usulkan Aset</span>
                 </button>
-            </div>
-        </div>
+            </x-slot>
+        </x-action-bar>
 
         <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
@@ -79,7 +76,7 @@
                                 <div class="flex items-center justify-center gap-2">
                                     <form action="{{ route('penghapusan.reaktifkan', $item->id_usulan_hapus) }}" method="POST" onsubmit="return confirm('Batalkan usulan dan kembalikan aset ini ke status aktif?')">
                                         @csrf
-                                        <button type="submit" class="rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 transition hover:bg-emerald-100">Re-Aktifkan</button>
+                                        <button type="submit" class="rounded-xl border border-disbun-100 bg-disbun-50 px-2.5 py-1 text-[11px] font-bold text-disbun-800 transition hover:bg-disbun-100">Re-Aktifkan</button>
                                     </form>
                                     <form action="{{ route('penghapusan.eksekusi', $item->id_usulan_hapus) }}" method="POST" onsubmit="return confirm('Apakah SK penghapusan sudah terbit untuk aset ini? Aset akan diarsipkan sebagai dihapuskan.')">
                                         @csrf
@@ -98,10 +95,10 @@
             </table>
         </div>
 
-        <div class="mt-4">
+        <div class="border-t border-disbun-card-border px-6 py-4">
             {{ $usulanList->links() }}
         </div>
-    </div>
+    </x-card>
 
     {{-- Modal: Usulkan Penghapusan Aset --}}
     <div id="usulan-modal" class="fixed inset-0 z-50 hidden items-center justify-center overflow-y-auto bg-slate-900/50 p-4">

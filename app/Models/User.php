@@ -61,4 +61,17 @@ class User extends Authenticatable
         {
             return $this->belongsTo(Role::class, 'id_role', 'id_role');
         }
+
+    /**
+     * Jejak aktivitas yang dilakukan akun ini sebagai aktor (Admin Aset).
+     */
+    public function activityLogs()
+    {
+        return $this->hasMany(ActivityLog::class, 'id_user');
+    }
+
+    public function isAktif(): bool
+    {
+        return $this->status_user === 'aktif';
+    }
 }

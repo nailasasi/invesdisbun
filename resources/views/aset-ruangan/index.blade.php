@@ -2,38 +2,38 @@
 
 @section('title', 'Aset Ruangan')
 
-@section('content')
-    <x-page-header title="Aset Ruangan" subtitle="Kelola ruangan beserta aset yang ditempatkan di dalamnya">
-        @if ($isAdminAset)
-            <x-slot name="actions">
-                <x-button type="button" id="btn-tambah" icon="M12 4v16m8-8H4">
-                    Tambah Ruangan
-                </x-button>
-            </x-slot>
-        @endif
-    </x-page-header>
+@section('page-title', 'Aset Ruangan')
 
+@section('content')
     <x-alert type="success" />
     <x-alert type="error" />
 
     <x-card :padding="false">
         @if ($isAdminAset)
-        <form method="GET" action="{{ route('aset-ruangan.index') }}" class="flex flex-col gap-3 border-b border-slate-100 px-6 py-4 sm:flex-row sm:items-center">
-            <div class="relative flex-1 sm:max-w-sm">
-                <svg class="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/></svg>
-                <input
-                    type="text"
-                    name="search"
-                    value="{{ request('search') }}"
-                    placeholder="Cari nama ruangan..."
-                    autocomplete="off"
-                    class="block w-full rounded-xl border border-slate-300 py-2 pl-11 pr-4 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition"
-                >
-            </div>
-            <button type="submit" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700">
-                Cari
-            </button>
-        </form>
+        <x-action-bar>
+            <form method="GET" action="{{ route('aset-ruangan.index') }}" class="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+                <div class="relative flex-1 sm:max-w-sm">
+                    <svg class="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/></svg>
+                    <input
+                        type="text"
+                        name="search"
+                        value="{{ request('search') }}"
+                        placeholder="Cari nama ruangan..."
+                        autocomplete="off"
+                        class="block w-full rounded-xl border border-slate-300 py-2 pl-11 pr-4 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-disbun-600 focus:ring-2 focus:ring-disbun-400 transition"
+                    >
+                </div>
+                <button type="submit" class="inline-flex items-center gap-2 rounded-2xl bg-disbun-700 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-disbun-800">
+                    Cari
+                </button>
+            </form>
+
+            <x-slot name="actions">
+                <x-button type="button" id="btn-tambah" icon="M12 4v16m8-8H4">
+                    Tambah Ruangan
+                </x-button>
+            </x-slot>
+        </x-action-bar>
         @endif
 
         <div class="overflow-x-auto">
@@ -66,11 +66,11 @@
                                 @if ($ruangan->status === 'Nonaktif')
                                     <span class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">Nonaktif</span>
                                 @else
-                                    <span class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">Aktif</span>
+                                    <span class="inline-flex items-center rounded-full bg-disbun-50 px-2.5 py-0.5 text-xs font-semibold text-disbun-800">Aktif</span>
                                 @endif
                             </td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm">
-                                <span class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                                <span class="inline-flex items-center rounded-full bg-disbun-100 px-2.5 py-0.5 text-xs font-semibold text-disbun-800">
                                     {{ $ruangan->jumlah_aset }}
                                 </span>
                             </td>
@@ -86,7 +86,7 @@
                                         <form method="POST" action="{{ route('aset-ruangan.toggle-status', $ruangan->id_ruangan) }}" onsubmit="return confirm('Ubah status ruangan ini?')">
                                             @csrf
                                             @if ($ruangan->status === 'Nonaktif')
-                                                <button type="submit" title="Aktifkan Ruangan" class="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
+                                                <button type="submit" title="Aktifkan Ruangan" class="flex h-7 w-7 items-center justify-center rounded-xl bg-disbun-50 text-disbun-700 transition hover:bg-disbun-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
                                                     <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                                                 </button>
                                             @else
@@ -140,7 +140,7 @@
 
                 <div class="flex items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
                     <button type="button" data-modal-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
-                    <button type="submit" id="btn-submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700">
+                    <button type="submit" id="btn-submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-disbun-700 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-disbun-800">
                         Simpan
                     </button>
                 </div>

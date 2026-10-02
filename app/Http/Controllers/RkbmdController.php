@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ArsipRkbmd;
-use App\Models\MasterBarang;
+use App\Models\Aset;
 use App\Models\Skpd;
 use App\Models\UsulanRkbmd;
 use Illuminate\Http\Request;
@@ -95,9 +95,6 @@ class RkbmdController extends Controller
 
         $arsipList = ArsipRkbmd::with('skpd')->orderByDesc('id_arsip')->get();
 
-        $masterBarangList = MasterBarang::orderBy('nama_barang')
-            ->get(['id_barang', 'kode_barang', 'nama_barang', 'satuan']);
-
         $mySkpd = $isAdmin ? null : $this->userSkpd();
 
         $activeBidang = array_map('intval', $request->query('bidang', []));
@@ -109,11 +106,51 @@ class RkbmdController extends Controller
             'jenisList',
             'satuanList',
             'arsipList',
-            'masterBarangList',
             'isAdmin',
             'mySkpd',
             'activeBidang',
         ));
+    }
+
+    /**
+     * Pencarian aset (JSON) untuk Select2 pada form usulan RKBMD.
+     *
+     * Sumber data: tabel `aset` (hanya status aktif), kode = nomor_kartu_barang,
+     * nama = nama barang master (fallback merk aset).
+     */
+    public function searchMasterBarang(Request $request)
+    {
+        $keyword = trim((string) $request->query('q', ''));
+
+        $aset = Aset::query()
+            ->with('barang')
+            ->whereIn('status_aset', ['aktif', 'Aktif'])
+            ->when($keyword !== '', function ($query) use ($keyword) {
+                $query->where(function ($q) use ($keyword) {
+                    $q->where('nomor_kartu_barang', 'like', "%{$keyword}%")
+                        ->orWhere('merk', 'like', "%{$keyword}%")
+                        ->orWhereHas('barang', function ($b) use ($keyword) {
+                            $b->where('nama_barang', 'like', "%{$keyword}%")
+                                ->orWhere('kode_barang', 'like', "%{$keyword}%");
+                        });
+                });
+            })
+            ->orderBy('nomor_kartu_barang')
+            ->limit(20)
+            ->get(['id_aset', 'id_barang', 'nomor_kartu_barang', 'merk']);
+
+        return response()->json(
+            $aset->map(function ($a) {
+                $nama = $a->barang?->nama_barang ?: $a->merk ?: '(Tanpa nama barang)';
+
+                return [
+                    'id' => $a->id_aset,
+                    'text' => $nama,
+                    'nama_barang' => $nama,
+                    'kode_barang' => $a->nomor_kartu_barang,
+                ];
+            })->values()
+        );
     }
 
     /**
@@ -219,7 +256,6 @@ class RkbmdController extends Controller
         abort_unless($isAdmin || $isOwner, 403);
         abort_unless($isAdmin || in_array($usulan->status_usulan, ['Draft', 'Diajukan']), 422, 'Usulan final tidak dapat dihapus.');
 
-        $usulan->details()->delete();
         $usulan->delete();
 
         return back()->with('success', 'Usulan RKBMD berhasil dihapus.');

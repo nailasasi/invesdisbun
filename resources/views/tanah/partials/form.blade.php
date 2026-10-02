@@ -127,7 +127,7 @@
             <div>
                 <label for="foto" class="mb-1 block font-semibold text-slate-700">Foto Tanah</label>
                 <input type="file" id="foto" name="foto" accept="image/*"
-                       class="w-full rounded-xl border border-slate-200 px-3 py-2 text-slate-800 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-emerald-600 hover:file:bg-emerald-100 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                       class="w-full rounded-xl border border-slate-200 px-3 py-2 text-slate-800 file:mr-3 file:rounded-lg file:border-0 file:bg-disbun-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-disbun-700 hover:file:bg-disbun-100 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                 <p class="mt-1 text-[11px] text-slate-400">Format gambar (JPG/PNG/WebP) maks. 5 MB</p>
 
                 @php
@@ -205,7 +205,7 @@
         </a>
 
         <button type="submit"
-                class="inline-flex items-center gap-1.5 rounded-2xl bg-emerald-600 px-6 py-2.5 text-xs font-bold text-white shadow-2xs transition hover:bg-emerald-700">
+                class="inline-flex items-center gap-1.5 rounded-2xl bg-disbun-700 px-6 py-2.5 text-xs font-bold text-white shadow-2xs transition hover:bg-disbun-800">
             <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
             <span>{{ $tanah->id_tanah ? 'Simpan Perubahan' : 'Simpan Data Tanah' }}</span>
         </button>

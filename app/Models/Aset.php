@@ -20,7 +20,7 @@ class Aset extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'id_barang', 'nomor_kartu_barang', 'merk', 'tanggal_pengadaan',
+        'id_barang', 'id_skpd', 'id_lokasi', 'nomor_kartu_barang', 'merk', 'tanggal_pengadaan',
         'tanggal_perolehan', 'tanggal_habis_pakai', 'nilai_perolehan',
         'kondisi', 'status_aset', 'is_kendaraan',
     ];
@@ -36,6 +36,23 @@ class Aset extends Model
     public function barang()
     {
         return $this->belongsTo(MasterBarang::class, 'id_barang');
+    }
+
+    /**
+     * Unit organisasi penanggung jawab aset (bukan lokasi fisik).
+     */
+    public function skpd()
+    {
+        return $this->belongsTo(Skpd::class, 'id_skpd');
+    }
+
+    /**
+     * Lokasi fisik aset. Tidak selalu sama dengan SKPD penanggung jawab:
+     * aset milik Bidang dapat berada di UPT dan sebaliknya.
+     */
+    public function lokasi()
+    {
+        return $this->belongsTo(Lokasi::class, 'id_lokasi');
     }
 
     public function pemegang()
@@ -120,6 +137,14 @@ class Aset extends Model
         $ruanganLama = $this->penempatanAktif?->id_ruangan;
 
         $this->placeAtRoom($ruanganId);
+
+        // Lokasi fisik aset mengikuti ruang barunya. Unit penanggung jawab
+        // TIDAK ikut berubah — pemindahan fisik bukan pemindahan kepemilikan.
+        $lokasiBaru = Ruangan::where('id_ruangan', $ruanganId)->value('id_lokasi');
+
+        if ($lokasiBaru) {
+            $this->forceFill(['id_lokasi' => $lokasiBaru])->saveQuietly();
+        }
 
         if ($ruanganLama == $ruanganId) {
             return;

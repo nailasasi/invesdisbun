@@ -2,34 +2,49 @@
 
 @section('title', 'User Management')
 
+@section('page-title', 'User Management')
+
 @section('content')
     @php $defaultRoleId = $roleList->firstWhere('nama_role', 'Pegawai')?->id_role; @endphp
-    <x-page-header title="User Management" subtitle="Kelola data pegawai, akun login, dan hak akses (role)">
-        <x-slot:actions>
-            <x-button type="button" id="btn-tambah" icon="M12 4v16m8-8H4">
-                Tambah User
-            </x-button>
-        </x-slot:actions>
-    </x-page-header>
 
     <x-alert type="success" />
     <x-alert type="error" />
 
     <x-card :padding="false">
-        <form method="GET" action="{{ route('user.index') }}" class="flex flex-col gap-3 border-b border-slate-100 px-6 py-4 sm:flex-row sm:items-center">
-            <div class="relative flex-1">
-                <svg class="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/></svg>
-                <input
-                    type="text"
-                    name="search"
-                    id="search-pegawai"
-                    value="{{ request('search') }}"
-                    placeholder="Cari NIP atau Nama pegawai..."
-                    autocomplete="off"
-                    class="block w-full rounded-xl border border-slate-300 py-2 pl-11 pr-4 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition"
+        <x-action-bar>
+            <form method="GET" action="{{ route('user.index') }}" class="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+                <div class="relative flex-1 sm:max-w-xs">
+                    <svg class="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/></svg>
+                    <input
+                        type="text"
+                        name="search"
+                        id="search-pegawai"
+                        value="{{ request('search') }}"
+                        placeholder="Cari NIP, Nama, atau Username..."
+                        autocomplete="off"
+                        class="block w-full rounded-xl border border-slate-300 py-2 pl-11 pr-4 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-disbun-600 focus:ring-2 focus:ring-disbun-400 transition"
+                    >
+                </div>
+                <select
+                    name="status"
+                    id="filter-status"
+                    class="rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-disbun-600 focus:ring-2 focus:ring-disbun-400 transition"
                 >
-            </div>
-        </form>
+                    <option value="">Semua Status</option>
+                    <option value="aktif" @selected(request('status') === 'aktif')>Aktif</option>
+                    <option value="nonaktif" @selected(request('status') === 'nonaktif')>Nonaktif</option>
+                </select>
+                <button type="submit" class="inline-flex items-center gap-2 rounded-2xl bg-disbun-700 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-disbun-800">
+                    Cari
+                </button>
+            </form>
+
+            <x-slot name="actions">
+                <x-button type="button" id="btn-tambah" icon="M12 4v16m8-8H4">
+                    Tambah User
+                </x-button>
+            </x-slot>
+        </x-action-bar>
 
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-slate-200">
@@ -40,35 +55,44 @@
                         <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Nama</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Jabatan</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">SKPD</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
                         <th scope="col" class="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Aksi</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 bg-white">
                     @forelse ($pegawaiList as $i => $pegawai)
+                        @php
+                            $statusUser = $pegawai->user?->status_user;
+                            $isAktif = $statusUser === 'aktif';
+                        @endphp
                         <tr class="transition hover:bg-slate-50">
                             <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-500">{{ $pegawaiList->firstItem() + $i }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">{{ $pegawai->nip ?? '-' }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $pegawai->nama_pegawai }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $pegawai->jabatan ?? '-' }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $pegawai->skpd?->nama_skpd ?? '-' }}</td>
+                            <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                @if ($statusUser === null)
+                                    <span class="inline-block rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-500">Belum ada akun</span>
+                                @else
+                                    <span class="inline-block rounded-md px-2 py-0.5 text-[10px] font-bold uppercase {{ $isAktif ? 'bg-disbun-100 text-disbun-800' : 'bg-red-100 text-red-700' }}">
+                                        {{ $isAktif ? 'Aktif' : 'Nonaktif' }}
+                                    </span>
+                                @endif
+                            </td>
                             <td class="whitespace-nowrap px-6 py-4 text-right text-sm">
-                                <div class="flex items-center justify-end gap-2">
-                                    <button type="button" data-role-modal="{{ $pegawai->id_pegawai }}" data-role-name="{{ $pegawai->nama_pegawai }}" data-role-current="{{ $pegawai->user?->id_role ?? '' }}" class="inline-flex items-center gap-2 rounded-xl bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400">
-                                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                                        Ubah Role
-                                    </button>
-                                    <button type="button" data-edit-modal="{{ $pegawai->id_pegawai }}" class="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
-                                        Edit
-                                    </button>
-                                    <button type="button" data-delete-target="{{ $pegawai->id_pegawai }}" data-delete-name="{{ $pegawai->nama_pegawai }}" class="inline-flex items-center gap-2 rounded-xl bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
-                                        Hapus
-                                    </button>
-                                </div>
+                                <a
+                                    href="{{ route('user.show', $pegawai->id_pegawai) }}"
+                                    class="inline-flex items-center gap-2 rounded-xl bg-disbun-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-disbun-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-disbun-600"
+                                >
+                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12a7.5 7.5 0 11-15 0 7.5 7.5 0 0115 0z"/></svg>
+                                    Detail
+                                </a>
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="px-6 py-12 text-center text-sm text-slate-400">Belum ada data user.</td>
+                            <td colspan="7" class="px-6 py-12 text-center text-sm text-slate-400">Belum ada data user.</td>
                         </tr>
                     @endforelse
                 </tbody>
@@ -80,14 +104,14 @@
         </div>
     </x-card>
 
-    {{-- Modal Tambah / Edit User --}}
+    {{-- Modal Tambah User --}}
     <div id="user-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
         <div class="fixed inset-0" data-modal-close></div>
         <div class="relative w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
             <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
                 <div>
-                    <h3 id="modal-title" class="text-lg font-semibold text-slate-900">Tambah User</h3>
-                    <p id="modal-subtitle" class="mt-0.5 text-sm text-slate-500">Isi data pegawai, akun login, dan role.</p>
+                    <h3 class="text-lg font-semibold text-slate-900">Tambah User</h3>
+                    <p class="mt-0.5 text-sm text-slate-500">Isi data pegawai, SKPD, dan akun login.</p>
                 </div>
                 <button type="button" data-modal-close class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Tutup">
                     <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -96,7 +120,6 @@
 
             <form id="user-form" method="POST" action="{{ route('user.store') }}" autocomplete="off">
                 @csrf
-                <input type="hidden" id="field-id" name="id" value="">
                 <div class="max-h-[90vh] space-y-5 overflow-y-auto px-6 py-6">
                     <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
                         <div class="space-y-1.5">
@@ -123,10 +146,27 @@
                             <select id="field-skpd" name="id_skpd" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
                                 <option value="" selected>-- Pilih SKPD --</option>
                                 @foreach ($skpdList as $skpd)
-                                    <option value="{{ $skpd->id_skpd }}">{{ $skpd->nama_skpd }}</option>
+                                    @php
+                                        $lokasiSkpd = $skpd->isUpt() ? $skpd->lokasi : $lokasiDinas;
+                                    @endphp
+                                    <option value="{{ $skpd->id_skpd }}" data-lokasi-id="{{ $lokasiSkpd?->id_lokasi ?? '' }}" data-lokasi-nama="{{ $lokasiSkpd?->nama_lokasi ?? '' }}">
+                                        {{ $skpd->nama_skpd }} ({{ $skpd->jenis_skpd }})
+                                    </option>
                                 @endforeach
                             </select>
                             <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_skpd"></p>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label for="field-lokasi" class="block text-sm font-medium text-slate-700">Lokasi</label>
+                            <input
+                                type="text"
+                                id="field-lokasi"
+                                readonly
+                                placeholder="-- Pilih SKPD dulu --"
+                                class="block w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-sm text-slate-600 shadow-sm focus:outline-none transition"
+                            >
+                            <p class="text-xs text-slate-400">Terisi otomatis dari SKPD: Sekretariat &amp; Bidang → Kantor Dinas; UPT → kantor UPT-nya.</p>
                         </div>
 
                         <div class="space-y-1.5">
@@ -134,10 +174,15 @@
                             <select id="field-ruangan" name="id_ruangan" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
                                 <option value="" selected>-- Pilih SKPD dulu --</option>
                                 @foreach ($ruanganList as $ruangan)
-                                    <option value="{{ $ruangan->id_ruangan }}" data-skpd="{{ $ruangan->id_skpd ?? '' }}">{{ $ruangan->nama_ruangan }}</option>
+                                    <option
+                                        value="{{ $ruangan->id_ruangan }}"
+                                        data-lokasi="{{ $ruangan->id_lokasi ?? '' }}"
+                                        @if ($ruangan->id_skpd === null) data-shared="1" @endif
+                                    >{{ $ruangan->nama_ruangan }}</option>
                                 @endforeach
                             </select>
                             <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_ruangan"></p>
+                            <p class="text-xs text-slate-400">Ruang bersama tersedia untuk semua SKPD.</p>
                         </div>
 
                         <input type="hidden" id="field-role-hidden" name="id_role" value="{{ $defaultRoleId ?? '' }}">
@@ -164,62 +209,11 @@
 
                 <div class="flex items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
                     <button type="button" data-modal-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
-                    <button type="submit" id="btn-submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700">
+                    <button type="submit" id="btn-submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-disbun-700 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-disbun-800">
                         Simpan
                     </button>
                 </div>
             </form>
-        </div>
-    </div>
-
-    {{-- Modal Ubah Role --}}
-    <div id="role-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
-        <div class="fixed inset-0" data-role-close></div>
-        <div class="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <div class="flex items-start gap-4">
-                <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-indigo-100">
-                    <svg class="h-6 w-6 text-indigo-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                </div>
-                <div class="min-w-0">
-                    <h3 class="text-lg font-semibold text-slate-900">Ubah Role</h3>
-                    <p class="mt-1 text-sm text-slate-500">Ubah hak akses untuk <span id="role-pegawai-name" class="font-medium text-slate-700"></span></p>
-                </div>
-            </div>
-            <form id="role-form" class="mt-5">
-                <div class="space-y-1.5">
-                    <label for="role-field" class="block text-sm font-medium text-slate-700">Role <span class="text-red-500">*</span></label>
-                    <select id="role-field" name="id_role" required class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                        @foreach ($roleList as $role)
-                            <option value="{{ $role->id_role }}">{{ $role->nama_role }}</option>
-                        @endforeach
-                    </select>
-                    <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_role"></p>
-                </div>
-                <div class="mt-6 flex justify-end gap-2">
-                    <button type="button" data-role-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
-                    <button type="submit" id="btn-role-confirm" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">Simpan</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    {{-- Modal Konfirmasi Hapus --}}
-    <div id="delete-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
-        <div class="fixed inset-0" data-delete-close></div>
-        <div class="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <div class="flex items-start gap-4">
-                <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-100">
-                    <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                </div>
-                <div class="min-w-0">
-                    <h3 class="text-lg font-semibold text-slate-900">Hapus User</h3>
-                    <p class="mt-1 text-sm text-slate-500">Apakah Anda yakin ingin menghapus <span id="delete-name" class="font-medium text-slate-700"></span> beserta akun loginnnya? Tindakan ini tidak dapat dibatalkan.</p>
-                </div>
-            </div>
-            <div class="mt-6 flex justify-end gap-2">
-                <button type="button" data-delete-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
-                <button type="button" id="btn-delete-confirm" class="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700">Hapus</button>
-            </div>
         </div>
     </div>
 
@@ -229,7 +223,6 @@
 
         const searchIndexUrl = @json(route('user.index'));
         const storeUrl = @json(route('user.store'));
-        const roleUrl = @json(route('user.role.update', ['pegawai' => '__ID__']));
 
         const searchInput = document.getElementById('search-pegawai');
         if (searchInput) {
@@ -238,29 +231,22 @@
                 clearTimeout(searchTimer);
                 searchTimer = setTimeout(() => {
                     const keyword = searchInput.value.trim();
+                    const status = document.getElementById('filter-status').value;
                     const url = new URL(searchIndexUrl, window.location.origin);
-                    if (keyword) {
-                        url.searchParams.set('search', keyword);
-                    }
+                    if (keyword) { url.searchParams.set('search', keyword); }
+                    if (status) { url.searchParams.set('status', status); }
                     window.location.href = url.toString();
                 }, 300);
             });
         }
 
         const modal = document.getElementById('user-modal');
-        const roleModal = document.getElementById('role-modal');
-        const roleForm = document.getElementById('role-form');
-        const deleteModal = document.getElementById('delete-modal');
         const form = document.getElementById('user-form');
-        const accountFields = document.getElementById('account-fields');
         const fieldNip = document.getElementById('field-nip');
         const fieldUsername = document.getElementById('field-username');
-
-        function autoFillUsername() {
-            if (fieldNip && fieldUsername && !document.getElementById('field-id').value) {
-                fieldUsername.value = fieldNip.value;
-            }
-        }
+        const fieldSkpd = document.getElementById('field-skpd');
+        const fieldLokasi = document.getElementById('field-lokasi');
+        const fieldRuangan = document.getElementById('field-ruangan');
 
         function showErrors(container, errors) {
             container.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
@@ -282,119 +268,61 @@
             form.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
         }
 
-        // Filter dropdown ruangan sesuai SKPD yang dipilih.
-        const fieldSkpd = document.getElementById('field-skpd');
-        const fieldRuangan = document.getElementById('field-ruangan');
+        function autoFillUsername() {
+            if (fieldNip && fieldUsername && !fieldUsername.dataset.touched) {
+                fieldUsername.value = fieldNip.value;
+            }
+        }
 
-        function applyRuanganFilter(selectedRuangan = '') {
-            const skpd = fieldSkpd.value;
+        // Ruangan mengikuti Lokasi SKPD yang dipilih. Ruang bersama
+        // (tanpa skpd) selalu tetap selectable untuk seluruh SKPD.
+        function applyRuanganFilter() {
+            const lokasiId = fieldSkpd.options[fieldSkpd.selectedIndex]?.dataset.lokasiId || '';
             let hasOption = false;
+
             fieldRuangan.querySelectorAll('option').forEach(opt => {
                 if (!opt.value) { opt.style.display = ''; return; }
-                const match = opt.dataset.skpd === skpd;
+                const match = opt.dataset.shared === '1' || (lokasiId && opt.dataset.lokasi === lokasiId);
                 opt.style.display = match ? '' : 'none';
                 if (match) hasOption = true;
             });
 
-            // Reset pilihan jika ruangan tidak cocok dengan SKPD terpilih.
-            if (selectedRuangan && fieldRuangan.querySelector('option[value="' + selectedRuangan + '"]')?.dataset.skpd === skpd) {
-                fieldRuangan.value = selectedRuangan;
-            } else {
-                fieldRuangan.value = '';
-            }
+            fieldRuangan.value = '';
             fieldRuangan.querySelector('option[value=""]').textContent = hasOption
                 ? '-- Pilih Ruangan --'
-                : (skpd ? '-- Tidak ada ruangan untuk SKPD ini --' : '-- Pilih SKPD dulu --');
+                : (lokasiId ? '-- Tidak ada ruangan untuk lokasi ini --' : '-- Pilih SKPD dulu --');
         }
 
-        fieldSkpd.addEventListener('change', () => applyRuanganFilter());
-
-        if (fieldNip) {
-            fieldNip.addEventListener('input', autoFillUsername);
+        // Lokasi kerja terisi otomatis dari SKPD: UPT -> kantor UPT-nya,
+        // Sekretariat & Bidang -> kantor dinas.
+        function applyLokasiDisplay() {
+            const opt = fieldSkpd.options[fieldSkpd.selectedIndex];
+            if (fieldLokasi) {
+                fieldLokasi.value = opt && opt.value ? (opt.dataset.lokasiNama || '-') : '';
+                fieldLokasi.placeholder = opt && opt.value ? '' : '-- Pilih SKPD dulu --';
+            }
+            applyRuanganFilter();
         }
 
-        function openRoleModal(id, name, currentRole) {
-            if (!roleModal) return;
-            document.getElementById('role-pegawai-name').textContent = name;
-            roleModal.setAttribute('data-current-id', id);
-            const sel = document.getElementById('role-field');
-            sel.querySelectorAll('option').forEach(opt => {
-                opt.selected = String(opt.value) === String(currentRole);
-            });
-            roleModal.classList.remove('hidden');
-            roleModal.classList.add('flex');
-            roleForm.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
-        }
-        function closeRoleModal() {
-            if (!roleModal) return;
-            roleModal.classList.add('hidden');
-            roleModal.classList.remove('flex');
-        }
-
-        function openDeleteModal(id, name) {
-            if (!deleteModal) return;
-            document.getElementById('delete-name').textContent = name;
-            deleteModal.setAttribute('data-current-id', id);
-            deleteModal.classList.remove('hidden');
-            deleteModal.classList.add('flex');
-        }
-        function closeDeleteModal() {
-            if (!deleteModal) return;
-            deleteModal.classList.add('hidden');
-            deleteModal.classList.remove('flex');
-        }
+        fieldSkpd.addEventListener('change', applyLokasiDisplay);
+        fieldUsername.addEventListener('input', () => { fieldUsername.dataset.touched = '1'; });
 
         if (form) {
             const btnTambah = document.getElementById('btn-tambah');
             if (btnTambah) {
                 btnTambah.addEventListener('click', () => {
                     form.reset();
-                    document.getElementById('field-id').value = '';
-                    form.action = storeUrl;
-                    document.getElementById('modal-title').textContent = 'Tambah User';
-                    document.getElementById('modal-subtitle').textContent = 'Isi data pegawai dan akun login. Role diatur via tombol Ubah Role setelah tersimpan.';
-                    document.getElementById('btn-submit').textContent = 'Simpan';
-                    accountFields.classList.remove('hidden');
-                    document.getElementById('password-hint').textContent = '(kosongkan = sesuai NIP default)';
-                    document.getElementById('username-hint').textContent = 'Otomatis terisi dari NIP.';
-                    document.getElementById('field-role-hidden').value = @json($defaultRoleId);
+                    delete fieldUsername.dataset.touched;
                     form.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
-                    applyRuanganFilter();
+                    applyLokasiDisplay();
                     autoFillUsername();
                     openModal();
                 });
             }
 
-            document.querySelectorAll('[data-edit-modal]').forEach(btn => {
-                btn.addEventListener('click', async () => {
-                    const id = btn.dataset.editModal;
-                    form.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
-                    try {
-                        const res = await fetch(storeUrl + '/' + id, { headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } });
-                        if (!res.ok) throw new Error('Gagal mengambil data');
-                        const data = await res.json();
-                        document.getElementById('field-id').value = data.id_pegawai;
-                        document.getElementById('field-nip').value = data.nip ?? '';
-                        document.getElementById('field-nama').value = data.nama_pegawai;
-                        document.getElementById('field-jabatan').value = data.jabatan ?? '';
-                        document.getElementById('field-skpd').value = data.id_skpd ?? '';
-                        applyRuanganFilter(data.id_ruangan ?? '');
-                        document.getElementById('field-username').value = data.username ?? '';
-                        document.getElementById('field-password').value = '';
-                        document.getElementById('password-hint').textContent = '(kosongkan = tidak diubah)';
-                        document.getElementById('username-hint').textContent = 'Username dapat diubah.';
-                        document.getElementById('field-role-hidden').value = '';
-                        form.action = storeUrl + '/' + id;
-                        document.getElementById('modal-title').textContent = 'Edit User';
-                        document.getElementById('modal-subtitle').textContent = 'Perbarui data pegawai, username, dan password.';
-                        document.getElementById('btn-submit').textContent = 'Perbarui';
-                        accountFields.classList.remove('hidden');
-                        openModal();
-                    } catch (e) {
-                        alert(e.message);
-                    }
-                });
-            });
+            if (fieldNip) {
+                fieldNip.addEventListener('input', autoFillUsername);
+            }
 
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
@@ -407,7 +335,7 @@
                     body.delete('username');
                 }
                 try {
-                    const res = await fetch(form.action, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken }, body });
+                    const res = await fetch(form.action || storeUrl, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken }, body });
                     if (res.status === 422) {
                         const data = await res.json();
                         showErrors(form, data.errors);
@@ -416,7 +344,7 @@
                         return;
                     }
                     if (res.ok) {
-                        window.location.reload();
+                        window.location.href = @json(route('user.index'));
                     } else {
                         alert('Terjadi kesalahan. Coba lagi.');
                         submit.textContent = original;
@@ -430,74 +358,6 @@
             });
 
             modal.querySelectorAll('[data-modal-close]').forEach(el => el.addEventListener('click', closeModal));
-        }
-
-        document.querySelectorAll('[data-role-modal]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                openRoleModal(btn.dataset.roleModal, btn.dataset.roleName, btn.dataset.roleCurrent);
-            });
-        });
-        if (roleForm) {
-            roleModal.querySelectorAll('[data-role-close]').forEach(el => el.addEventListener('click', closeRoleModal));
-            roleForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const submit = document.getElementById('btn-role-confirm');
-                const id = roleModal.getAttribute('data-current-id');
-                const original = submit.textContent;
-                submit.textContent = 'Menyimpan...';
-                submit.disabled = true;
-                const body = new FormData(roleForm);
-                try {
-                    const res = await fetch(roleUrl.replace('__ID__', id), { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken }, body });
-                    if (res.status === 422) {
-                        const data = await res.json();
-                        showErrors(roleForm, data.errors);
-                        submit.textContent = original;
-                        submit.disabled = false;
-                        return;
-                    }
-                    if (res.ok) {
-                        window.location.reload();
-                    } else {
-                        alert('Terjadi kesalahan. Coba lagi.');
-                        submit.textContent = original;
-                        submit.disabled = false;
-                    }
-                } catch (err) {
-                    alert('Koneksi bermasalah. Coba lagi.');
-                    submit.textContent = original;
-                    submit.disabled = false;
-                }
-            });
-        }
-
-        document.querySelectorAll('[data-delete-target]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                openDeleteModal(btn.dataset.deleteTarget, btn.dataset.deleteName);
-            });
-        });
-        if (deleteModal) {
-            deleteModal.querySelectorAll('[data-delete-close]').forEach(el => el.addEventListener('click', closeDeleteModal));
-            const btnConfirm = document.getElementById('btn-delete-confirm');
-            btnConfirm.addEventListener('click', async () => {
-                const id = deleteModal.getAttribute('data-current-id');
-                btnConfirm.textContent = 'Menghapus...';
-                btnConfirm.disabled = true;
-                try {
-                    const res = await fetch(storeUrl + '/' + id, { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken } });
-                    if (res.ok) {
-                        window.location.reload();
-                    } else {
-                        alert('Gagal menghapus data.');
-                        btnConfirm.textContent = 'Hapus';
-                        btnConfirm.disabled = false;
-                    }
-                } catch (err) {
-                    alert('Koneksi bermasalah.');
-                    btnConfirm.textContent = 'Hapus';
-                    btnConfirm.disabled = false;
-                }
-            });
         }
     </script>
     @endpush

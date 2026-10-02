@@ -42,13 +42,8 @@ class Pegawai extends Model
         return $this->hasMany(PemegangAset::class, 'id_pegawai');
     }
 
-        public function dokumenSppbi()
+    public function dokumenSppbi()
     {
-        return $this->hasMany(DokumenSppbi::class, 'id_pegawai');
-    }
-
-    public function sppbiAktif()
-    {
-        return $this->hasOne(DokumenSppbi::class, 'id_pegawai')->where('status', 'aktif')->latest('id_sppbi');
+        return $this->hasOne(DokumenSppbi::class, 'id_pegawai', 'id_pegawai');
     }
 }

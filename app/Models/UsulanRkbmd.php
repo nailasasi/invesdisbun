@@ -50,9 +50,4 @@ class UsulanRkbmd extends Model
     {
         return $this->belongsTo(User::class, 'approved_by', 'id_user');
     }
-
-    public function details()
-    {
-        return $this->hasMany(DetailUsulanRkbmd::class, 'id_usulan');
-    }
 }

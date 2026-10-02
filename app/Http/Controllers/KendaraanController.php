@@ -12,6 +12,7 @@ use App\Models\PajakKendaraan;
 use App\Models\Pegawai;
 use App\Models\RiwayatPlat;
 use App\Models\UsulanPenghapusan;
+use App\Services\AsetScope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -23,6 +24,10 @@ use PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing;
 
 class KendaraanController extends Controller
 {
+    public function __construct(private readonly AsetScope $scope)
+    {
+    }
+
     const KONDISI = ['Baik', 'Rusak Ringan', 'Rusak Berat'];
 
     const JENIS_KENDARAAN = ['Roda Dua (Sepeda Motor)', 'Roda Empat (Mobil)', 'Truk', 'Pick Up', 'Bus', 'Lainnya'];
@@ -41,8 +46,11 @@ class KendaraanController extends Controller
 
         $kendaraanList = Kendaraan::with([
             'aset.barang', 'aset.pemegangSaatIni.pegawai', 'aset.penempatanAktif.ruangan',
+            'aset.skpd', 'aset.lokasi',
             'platAktif', 'pajakAktif',
         ])
+            // Kendaraan adalah aset, jadi ikut cakupan lokasi fisik.
+            ->whereHas('aset', fn ($a) => $a->tap(fn ($q) => $this->scope->terapkan($q)))
             ->when($search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('pemegang', 'like', "%{$search}%")
@@ -73,10 +81,20 @@ class KendaraanController extends Controller
      */
     public function show(Kendaraan $kendaraan)
     {
+        $aset = $kendaraan->aset;
+
+        abort_if(
+            ! $aset || ! $this->scope->bolehAksesAset($aset),
+            403,
+            $this->scope->pesanAkses('melihat detail kendaraan')
+        );
+
         $kendaraan->load([
             'aset.barang.kategori',
             'aset.pemegangSaatIni.pegawai',
             'aset.penempatanAktif.ruangan',
+            'aset.skpd',
+            'aset.lokasi',
             'riwayatPlat' => fn ($q) => $q->orderByRaw("CASE WHEN status = 'Aktif' THEN 0 ELSE 1 END")
                 ->orderByDesc('created_at')
                 ->limit(3),

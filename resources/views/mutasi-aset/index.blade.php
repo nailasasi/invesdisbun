@@ -2,41 +2,42 @@
 
 @section('title', 'Riwayat Mutasi Aset')
 
-@section('content')
-    <x-page-header title="Riwayat Mutasi Aset" subtitle="Arsip pergantian pemegang / mutasi seluruh aset dinas">
-    </x-page-header>
+@section('page-title', 'Mutasi Aset')
 
+@section('content')
     <x-card :padding="false">
         {{-- TABS KATEGORI ASET --}}
-        <div class="flex items-center gap-1 border-b border-slate-100 px-6 pt-4 pb-3">
+        <div class="flex items-center gap-1 border-b border-disbun-card-border px-6 pt-4 pb-3">
             <a href="{{ route('mutasi-aset.index', array_filter(['kategori' => 'barang', 'search' => request('search')])) }}"
-               class="rounded-xl px-4 py-2 text-sm font-semibold transition {{ $kategori === 'barang' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100' }}">
+               class="rounded-2xl px-4 py-2 text-sm font-bold transition {{ $kategori === 'barang' ? 'bg-disbun-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100' }}">
                 Aset Barang
             </a>
             <a href="{{ route('mutasi-aset.index', array_filter(['kategori' => 'kendaraan', 'search' => request('search')])) }}"
-               class="rounded-xl px-4 py-2 text-sm font-semibold transition {{ $kategori === 'kendaraan' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100' }}">
+               class="rounded-2xl px-4 py-2 text-sm font-bold transition {{ $kategori === 'kendaraan' ? 'bg-disbun-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100' }}">
                 Kendaraan
             </a>
             <span class="ml-auto hidden text-xs text-slate-400 sm:block">{{ $kategori === 'kendaraan' ? 'Riwayat mutasi kendaraan dinas' : 'Riwayat mutasi seluruh aset barang' }}</span>
         </div>
 
-        <form method="GET" action="{{ route('mutasi-aset.index') }}" class="flex flex-col gap-3 border-b border-slate-100 px-6 py-4 sm:flex-row sm:items-center">
-            <input type="hidden" name="kategori" value="{{ $kategori }}">
-            <div class="relative flex-1">
-                <svg class="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/></svg>
-                <input
-                    type="text"
-                    name="search"
-                    value="{{ request('search') }}"
-                    placeholder="{{ $kategori === 'kendaraan' ? 'Cari nama kendaraan, pemegang baru, atau keterangan...' : 'Cari nama barang, pemegang baru, atau keterangan...' }}"
-                    autocomplete="off"
-                    class="block w-full rounded-xl border border-slate-300 py-2 pl-11 pr-4 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition"
-                >
-            </div>
-            <button type="submit" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700">
-                Cari
-            </button>
-        </form>
+        <x-action-bar>
+            <form method="GET" action="{{ route('mutasi-aset.index') }}" class="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+                <input type="hidden" name="kategori" value="{{ $kategori }}">
+                <div class="relative flex-1 sm:max-w-sm">
+                    <svg class="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/></svg>
+                    <input
+                        type="text"
+                        name="search"
+                        value="{{ request('search') }}"
+                        placeholder="{{ $kategori === 'kendaraan' ? 'Cari nama kendaraan, pemegang baru, atau keterangan...' : 'Cari nama barang, pemegang baru, atau keterangan...' }}"
+                        autocomplete="off"
+                        class="block w-full rounded-xl border border-slate-300 py-2 pl-11 pr-4 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-disbun-600 focus:ring-2 focus:ring-disbun-400 transition"
+                    >
+                </div>
+                <button type="submit" class="inline-flex items-center gap-2 rounded-2xl bg-disbun-700 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-disbun-800">
+                    Cari
+                </button>
+            </form>
+        </x-action-bar>
 
         @if ($kategori === 'kendaraan')
             {{-- TABEL MUTASI KENDARAAN --}}
@@ -73,7 +74,7 @@
                                 <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $mutasi->tanggal_mutasi?->format('d M Y') ?? '-' }}</td>
                                 <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">
                                     @if ($knd)
-                                        <a href="{{ route('kendaraan.show', $knd->id_kendaraan) }}" class="text-slate-900 transition hover:text-emerald-600 hover:underline">{{ $detail->aset->barang?->nama_barang ?? 'Kendaraan' }}</a>
+                                        <a href="{{ route('kendaraan.show', $knd->id_kendaraan) }}" class="text-slate-900 transition hover:text-disbun-700 hover:underline">{{ $detail->aset->barang?->nama_barang ?? 'Kendaraan' }}</a>
                                         @if ($platAktif?->nomor_plat)
                                             <span class="block text-xs font-normal text-slate-400">{{ $platAktif->nomor_plat }}</span>
                                         @endif
@@ -97,7 +98,7 @@
                                                 SPPKD
                                             </a>
                                             <a href="{{ route('kendaraan.bast.download', $mutasi->id_mutasi) }}"
-                                               class="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                                               class="inline-flex items-center gap-1 rounded-xl border border-disbun-100 bg-disbun-50 px-2 py-1 text-xs font-semibold text-disbun-800 transition hover:bg-disbun-100"
                                                title="Unduh BAST Kendaraan">
                                                 BAST
                                             </a>
@@ -140,7 +141,7 @@
                                 <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $mutasi->tanggal_mutasi?->format('d M Y') ?? '-' }}</td>
                                 <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">
                                     @if ($detail?->aset)
-                                        <a href="{{ route('aset-barang.aset.detail', $detail->aset->id_aset) }}" class="text-slate-900 transition hover:text-emerald-600 hover:underline">{{ $detail->aset->barang?->nama_barang ?? $detail->aset->nomor_kartu_barang }}</a>
+                                        <a href="{{ route('aset-barang.aset.detail', $detail->aset->id_aset) }}" class="text-slate-900 transition hover:text-disbun-700 hover:underline">{{ $detail->aset->barang?->nama_barang ?? $detail->aset->nomor_kartu_barang }}</a>
                                     @else
                                         <span>-</span>
                                     @endif

@@ -17,11 +17,16 @@ class Ruangan extends Model
 
     protected $primaryKey = 'id_ruangan';
 
-    protected $fillable = ['nama_ruangan', 'lantai', 'id_skpd', 'status'];
+    protected $fillable = ['nama_ruangan', 'lantai', 'id_skpd', 'id_lokasi', 'status'];
 
     public function skpd()
     {
         return $this->belongsTo(Skpd::class, 'id_skpd');
+    }
+
+    public function lokasi()
+    {
+        return $this->belongsTo(Lokasi::class, 'id_lokasi');
     }
 
     public function penempatanAset()

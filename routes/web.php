@@ -59,27 +59,26 @@ Route::middleware('auth')->group(function () {
             ->name('aset.show');
         Route::get('{pegawai}', [AsetBarangController::class, 'show'])
             ->name('show');
-        Route::get('{pegawai}/label/download', [AsetBarangController::class, 'downloadSemuaLabel'])
-            ->name('label.download');
         Route::get('aset/{aset}/label', [AsetBarangController::class, 'cetakLabelSatuan'])
             ->name('cetak.label.single');
 
-        // Dokumen SPPBI (Bisa diakses untuk cetak/unduh)
-        Route::get('{pegawai}/sppbi/cetak', [DokumenSppbiController::class, 'print'])
-            ->name('sppbi.print');
-        Route::get('{pegawai}/sppbi/download-word', [DokumenSppbiController::class, 'downloadWord'])
-            ->name('sppbi.download.word');
-
-        // Khusus Admin Aset
-        Route::middleware('role:Admin Aset')->group(function () {
-            Route::post('{pegawai}/sppbi/update', [DokumenSppbiController::class, 'updateOrCreate'])
-                ->name('sppbi.update');
-            Route::post('store', [AsetBarangController::class, 'storeFlat'])
-                ->name('store.flat');
+        // SEMUA role generic boleh MELIHAT aset. Pembatasan cakupan lokasi
+        // ditegakkan di backend oleh App\Services\AsetScope — bukan dengan
+        // menyembunyikan menu.
+        Route::middleware('role:Admin Aset,Admin Bidang,Admin UPT,Pegawai')->group(function () {
+            Route::get('{pegawai}/label/download', [AsetBarangController::class, 'downloadSemuaLabel'])
+                ->name('label.download');
             Route::get('aset/{aset}/detail', [AsetBarangController::class, 'detailAset'])
                 ->name('aset.detail');
             Route::get('aset/{aset}/qr', [AsetBarangController::class, 'qrLabel'])
                 ->name('aset.qr');
+        });
+
+        // CUD + mutasi HANYA Admin Aset. Admin Bidang, Admin UPT, dan
+        // Pegawai sifatnya read-only.
+        Route::middleware('role:Admin Aset')->group(function () {
+            Route::post('store', [AsetBarangController::class, 'storeFlat'])
+                ->name('store.flat');
             Route::post('{pegawai}/aset', [AsetBarangController::class, 'store'])
                 ->name('store');
             Route::post('aset/{aset}', [AsetBarangController::class, 'update'])
@@ -88,6 +87,10 @@ Route::middleware('auth')->group(function () {
                 ->name('aset.mutasi');
             Route::delete('aset/{aset}', [AsetBarangController::class, 'destroy'])
                 ->name('aset.destroy');
+            Route::get('{pegawai}/sppbi/download-word', [DokumenSppbiController::class, 'downloadWord'])
+                ->name('sppbi.download.word');
+            Route::post('{pegawai}/upload-ttd', [DokumenSppbiController::class, 'uploadTtd'])
+                ->name('sppbi.upload.ttd');
         });
     });
 
@@ -97,14 +100,18 @@ Route::middleware('auth')->group(function () {
     Route::prefix('aset-ruangan')->name('aset-ruangan.')->group(function () {
         Route::get('', [AsetRuanganController::class, 'index'])
             ->name('index');
-        Route::get('{ruangan}/label/download', [AsetRuanganController::class, 'downloadLabelRuangan'])
-            ->name('label.download');
-        Route::get('{ruangan}/kir/download', [AsetRuanganController::class, 'downloadKIR'])
-            ->name('kir.download');
         Route::get('{ruangan}', [AsetRuanganController::class, 'show'])
             ->name('show');
 
-        Route::middleware('role:Admin Aset')->group(function () {
+        Route::middleware('role:Admin Aset,Admin Bidang,Admin UPT,Pegawai')->group(function () {
+            Route::get('{ruangan}/label/download', [AsetRuanganController::class, 'downloadLabelRuangan'])
+                ->name('label.download');
+            Route::get('{ruangan}/kir/download', [AsetRuanganController::class, 'downloadKIR'])
+                ->name('kir.download');
+        });
+
+        // Hanya Admin Aset & Admin UPT yang boleh mengelola master ruangan.
+        Route::middleware('role:Admin Aset,Admin UPT')->group(function () {
             Route::post('', [AsetRuanganController::class, 'store'])
                 ->name('store');
             Route::post('{ruangan}', [AsetRuanganController::class, 'update'])
@@ -119,7 +126,7 @@ Route::middleware('auth')->group(function () {
     // ==========================================
     // TEMPLATE DOKUMEN (Admin Aset & Admin UPT)
     // ==========================================
-    Route::middleware('role:Admin Aset,Admin UPT P2DP,Admin UPT PSBP')->group(function () {
+    Route::middleware('role:Admin Aset,Admin UPT')->group(function () {
         Route::get('template-dokumen', [TemplateDokumenController::class, 'index'])
             ->name('template-dokumen.index');
         Route::post('template-dokumen/{template}', [TemplateDokumenController::class, 'update'])
@@ -131,9 +138,9 @@ Route::middleware('auth')->group(function () {
     });
 
     // ==========================================
-    // TANAH (Admin Aset & UPT P2BTP)
+    // TANAH (Admin Aset & Admin UPT)
     // ==========================================
-    Route::middleware('role:Admin Aset,UPT P2BTP')->group(function () {
+    Route::middleware('role:Admin Aset,Admin UPT')->group(function () {
         Route::get('tanah', [TanahController::class, 'index'])
             ->name('tanah.index');
         Route::get('tanah/create', [TanahController::class, 'create'])
@@ -152,8 +159,8 @@ Route::middleware('auth')->group(function () {
             ->name('tanah.update');
     });
 
-    // Retribusi Tanah (hanya Admin Aset & UPT P2BTP)
-    Route::middleware('role:Admin Aset,UPT P2BTP')->group(function () {
+    // Retribusi Tanah (hanya Admin Aset & Admin UPT)
+    Route::middleware('role:Admin Aset,Admin UPT')->group(function () {
         Route::prefix('tanah/{tanah}/retribusi')->name('tanah.retribusi.')->group(function () {
             Route::get('/create', [RetribusiTanahController::class, 'create'])
                 ->name('create');
@@ -207,6 +214,8 @@ Route::middleware('auth')->group(function () {
             ->name('update');
         Route::post('{pegawai}/role', [UserController::class, 'updateRole'])
             ->name('role.update');
+        Route::post('{pegawai}/status', [UserController::class, 'updateStatus'])
+            ->name('status.update');
         Route::delete('{pegawai}', [UserController::class, 'destroy'])
             ->name('destroy');
     });
@@ -215,6 +224,7 @@ Route::middleware('auth')->group(function () {
     // LAPORAN BULANAN
     // ==========================================
     Route::get('laporan/bulanan', [LaporanBulananController::class, 'index'])
+        ->middleware('role:Admin Aset,Admin Bidang,Admin UPT,Pegawai')
         ->name('laporan.bulanan');
 
     // ==========================================
@@ -316,6 +326,8 @@ Route::middleware('auth')->group(function () {
             ->name('index');
         Route::get('template-usulan', [RkbmdController::class, 'downloadTemplate'])
             ->name('template');
+        Route::get('master-barang/search', [RkbmdController::class, 'searchMasterBarang'])
+            ->name('master.search');
         Route::get('ekspor', [RkbmdController::class, 'export'])
             ->name('export');
         Route::post('import', [RkbmdController::class, 'import'])

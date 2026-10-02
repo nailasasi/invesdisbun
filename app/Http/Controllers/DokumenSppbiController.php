@@ -5,20 +5,65 @@ namespace App\Http\Controllers;
 use App\Models\DokumenSppbi;
 use App\Models\Pegawai;
 use App\Models\PemegangAset;
+use App\Models\TemplateDokumen;
+use App\Support\Word\WordTemplateFiller;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use PhpOffice\PhpWord\PhpWord;
-use PhpOffice\PhpWord\IOFactory;
-use PhpOffice\PhpWord\SimpleType\Jc;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class DokumenSppbiController extends Controller
 {
     /**
-     * Tampilan cetak format resmi browser / PDF (semua barang aktif).
+     * Upload berkas hasil scan tanda tangan basah SPPBI (khusus Admin Aset).
+     * Satu dokumen aktif per pegawai; berkas lama dihapus lalu record diperbarui.
      */
-    public function print(Pegawai $pegawai)
+    public function uploadTtd(Request $request, Pegawai $pegawai)
     {
-        Carbon::setLocale('id');
+        $this->authorizeAdminAset();
+
+        $request->validate([
+            'file_ttd' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+        ]);
+
+        $dokumen = $pegawai->dokumenSppbi;
+
+        if ($dokumen?->file_path) {
+            Storage::disk('public')->delete($dokumen->file_path);
+        }
+
+        $pathBaru = $request->file('file_ttd')->store('dokumen_sppbi', 'public');
+
+        if ($pathBaru === false) {
+            return back()->with('error', 'Berkas gagal disimpan di server. Silakan coba lagi.');
+        }
+
+        DokumenSppbi::updateOrCreate(
+            ['id_pegawai' => $pegawai->id_pegawai],
+            [
+                'nomor_surat' => $this->nomorSuratOtomatis($pegawai),
+                'tanggal_surat' => Carbon::now()->toDateString(),
+                'file_path' => $pathBaru,
+                'status' => 'aktif',
+                'id_user_penginput' => auth()->id(),
+            ]
+        );
+
+        return back()->with('success', 'Berkas tanda tangan SPPBI berhasil diunggah.');
+    }
+
+    /**
+     * Unduh SPPBI (.docx) dari template master (khusus Admin Aset).
+     */
+    public function downloadWord(Pegawai $pegawai)
+    {
+        $this->authorizeAdminAset();
+
+        $template = TemplateDokumen::where('kode_template', 'sppbi')->first();
+        if (! $template || ! $template->file_path || ! Storage::disk('public')->exists($template->file_path)) {
+            return back()->with('error', 'Template dokumen SPPBI belum diunggah di Pengaturan Dokumen.');
+        }
+
         $pegawai->load(['skpd', 'ruangan']);
 
         $asetList = PemegangAset::with(['aset.barang'])
@@ -27,164 +72,82 @@ class DokumenSppbiController extends Controller
             ->whereHas('aset', fn ($q) => $q->where('is_kendaraan', false))
             ->get();
 
-        $sppbi = $pegawai->sppbiAktif;
+        $tanggal = Carbon::now()->locale('id');
+        $nomorSurat = $this->nomorSuratOtomatis($pegawai);
+        $pengurus = auth()->user()?->pegawai;
 
-        return view('aset-barang.sppbi-print', compact('pegawai', 'asetList', 'sppbi'));
-    }
+        $rows = $asetList->map(fn (PemegangAset $item) => [
+            'nama' => $item->aset?->barang?->nama_barang ?? '-',
+            'merk' => $item->aset?->merk ?? '-',
+            'tahun' => $item->aset?->tanggal_perolehan
+                ? Carbon::parse($item->aset->tanggal_perolehan)->format('Y')
+                : '-',
+            'kode' => $item->aset?->nomor_kartu_barang ?? '-',
+        ])->all();
 
-    /**
-     * Perbarui nomor SPPBI & upload dokumen bertanda tangan (khusus Admin Aset).
-     */
-    public function updateOrCreate(Request $request, Pegawai $pegawai)
-    {
-        $request->validate([
-            'nomor_surat' => ['required', 'string', 'max:100'],
-            'tanggal_surat' => ['required', 'date'],
-            'file_dokumen' => ['nullable', 'file', 'mimes:pdf,jpg,png', 'max:5120'],
-            'catatan' => ['nullable', 'string', 'max:500'],
-        ]);
-
-        // Arsipkan SPPBI aktif sebelumnya jika ada perubahan dokumen
-        DokumenSppbi::where('id_pegawai', $pegawai->id_pegawai)
-            ->where('status', 'aktif')
-            ->update(['status' => 'arsip']);
-
-        $filePath = null;
-        if ($request->hasFile('file_dokumen')) {
-            $filePath = $request->file('file_dokumen')->store('dokumen-sppbi', 'public');
+        if ($rows === []) {
+            $rows = [['nama' => '-', 'merk' => '-', 'tahun' => '-', 'kode' => '-']];
         }
 
-        DokumenSppbi::create([
-            'id_pegawai' => $pegawai->id_pegawai,
-            'nomor_surat' => $request->input('nomor_surat'),
-            'tanggal_surat' => $request->input('tanggal_surat'),
-            'file_path' => $filePath,
-            'status' => 'aktif',
-            'catatan' => $request->input('catatan'),
-            'id_user_penginput' => auth()->id(),
-        ]);
+        $filePath = WordTemplateFiller::make(storage_path('app/public/'.$template->file_path))->render(
+            values: [
+                'hari' => $tanggal->translatedFormat('l'),
+                'tanggal_terbilang' => WordTemplateFiller::terbilang((int) $tanggal->format('d')),
+                'bulan' => $tanggal->translatedFormat('F'),
+                'tahun_terbilang' => WordTemplateFiller::terbilang((int) $tanggal->format('Y')),
+                'tanggal_surat' => $tanggal->translatedFormat('d F Y'),
+                'nomor_surat' => $nomorSurat,
+                'nama_pihak_pertama' => $pengurus?->nama_pegawai ?? '-',
+                'nip_pihak_pertama' => $pengurus?->nip ?? '-',
+                'jabatan_pihak_pertama' => $pengurus?->jabatan ?? 'Pengurus Barang',
+                'alamat_pihak_pertama' => $pengurus?->ruangan?->nama_ruangan ?? '-',
+                'nama_pihak_kedua' => $pegawai->nama_pegawai,
+                'nip_pihak_kedua' => $pegawai->nip ?? '-',
+                'jabatan_pihak_kedua' => $pegawai->jabatan ?? '-',
+                'alamat_pihak_kedua' => $pegawai->ruangan?->nama_ruangan ?? '-',
+                'unit' => $pegawai->ruangan?->nama_ruangan ?? '-',
+                'skpd' => $pegawai->skpd?->nama_skpd ?? '-',
+            ],
+            rows: $rows,
+            options: [
+                'row_macro' => 'barang',
+                'row_tokens' => [
+                    'nama_barang' => 'nama',
+                    'merk_barang' => 'merk',
+                    'tahun_pengadaan' => 'tahun',
+                    'kode_barang' => 'kode',
+                ],
+                'patterns' => [
+                    '~Nomor:\s*[0-9][0-9A-Za-z./\-]*~' => 'Nomor: '.$nomorSurat,
+                ],
+            ],
+        );
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Dokumen SPPBI berhasil diperbarui.',
-        ]);
-    }
-
-    /**
-     * Unduh berkas Word (.docx) SPPBI yang digenerate langsung dari data
-     * (tanpa dependensi template yang diunggah admin).
-     */
-    public function downloadWord(Pegawai $pegawai)
-    {
-        $pegawai->load(['ruangan']);
-
-        $asetList = PemegangAset::with(['aset.barang'])
-            ->where('id_pegawai', $pegawai->id_pegawai)
-            ->where('status', 'aktif')
-            ->whereHas('aset', fn ($q) => $q->where('is_kendaraan', false))
-            ->get();
-
-        $now = Carbon::now()->locale('id');
-        $sppbi = $pegawai->sppbiAktif;
-
-        $phpWord = new PhpWord();
-        $phpWord->setDefaultFontName('Times New Roman');
-        $phpWord->setDefaultFontSize(12);
-
-        $section = $phpWord->addSection([
-            'marginTop' => 720,
-            'marginBottom' => 720,
-            'marginLeft' => 1000,
-            'marginRight' => 1000,
-        ]);
-
-        $center = ['alignment' => Jc::CENTER];
-
-        // Kop surat
-        $section->addText('PEMERINTAH PROVINSI JAWA TIMUR', ['bold' => true], $center);
-        $section->addText('DINAS PERKEBUNAN', ['bold' => true], $center);
-        $section->addText('SURAT PENUNJUKAN PEMEGANG BARANG INVENTARIS (SPPBI)', ['bold' => true, 'size' => 11], $center);
-        $section->addText('Nomor: ' . ($sppbi?->nomor_surat ?? '......./SPPBI/' . $now->year), ['size' => 11], $center);
-
-        $section->addTextBreak(1);
-        $section->addText('Yang bertanda tangan di bawah ini menerangkan bahwa barang inventaris dinas berikut:');
-
-        // Tabel barang
-        $tableStyle = [
-            'borderSize' => 4,
-            'borderColor' => '000000',
-            'cellMargin' => 60,
-        ];
-        $header = ['bold' => true, 'size' => 11];
-        $table = $section->addTable($tableStyle);
-        $table->addRow();
-        $table->addCell(600)->addText('No', $header, ['alignment' => Jc::CENTER]);
-        $table->addCell(3000)->addText('Nama Barang', $header);
-        $table->addCell(2400)->addText('No. Register / Kartu', $header);
-        $table->addCell(2400)->addText('Merk / Tipe', $header);
-        $table->addCell(2000)->addText('Kondisi', $header);
-
-        if ($asetList->isEmpty()) {
-            $table->addRow();
-            $table->addCell(600)->addText('1', null, ['alignment' => Jc::CENTER]);
-            $table->addCell(9800, null, ['gridSpan' => 4])->addText('-');
-        } else {
-            foreach ($asetList as $i => $item) {
-                $aset = $item->aset;
-                $table->addRow();
-                $table->addCell(600)->addText($i + 1, null, ['alignment' => Jc::CENTER]);
-                $table->addCell(3000)->addText($aset->barang?->nama_barang ?? '-');
-                $table->addCell(2400)->addText($aset->nomor_kartu_barang ?? '-');
-                $table->addCell(2400)->addText($aset->merk ?? '-');
-                $table->addCell(2000)->addText($aset->kondisi ?? '-');
-            }
-        }
-
-        $section->addTextBreak(1);
-        $section->addText('Diserahkan sebagai penanggung jawab pemegang barang dinas kepada:');
-        $section->addText('Nama Pegawai        : ' . $pegawai->nama_pegawai);
-        $section->addText('NIP                        : ' . ($pegawai->nip ?? '-'));
-        $section->addText('Jabatan                 : ' . ($pegawai->jabatan ?? '-'));
-        $section->addText('Unit Kerja / Ruangan : ' . ($pegawai->ruangan?->nama_ruangan ?? '-'));
-
-        $section->addTextBreak(2);
-
-        // Blok tanda tangan (dua kolom)
-        $left = [
-            'Penerima / Pemegang,',
-            '',
-            '',
-            $pegawai->nama_pegawai,
-            'NIP. ' . ($pegawai->nip ?? '........................'),
-        ];
-        $right = [
-            'Surabaya, ' . ($sppbi?->tanggal_surat?->translatedFormat('d F Y') ?? $now->translatedFormat('d F Y')),
-            'Pengurus Barang / Admin Aset,',
-            '',
-            '',
-            'Achmar Adrian Ramadhan, A.Md.',
-            'NIP. 19991223 202504 1 006',
-        ];
-
-        $sigTable = $section->addTable(['cellMargin' => 60]);
-        $sigTable->addRow();
-        $col1 = $sigTable->addCell(5200);
-        $col2 = $sigTable->addCell(5200);
-        foreach ($left as $line) {
-            $col1->addText($line, $line === $pegawai->nama_pegawai ? ['bold' => true, 'size' => 11] : ['size' => 11], ['alignment' => Jc::CENTER]);
-        }
-        foreach ($right as $line) {
-            $col2->addText($line, $line === 'Achmar Adrian Ramadhan, A.Md.' ? ['bold' => true, 'size' => 11] : ['size' => 11], ['alignment' => Jc::CENTER]);
-        }
-
-        // Simpan ke file temporer (.docx) lalu unduh
-        $filePath = sys_get_temp_dir() . '/SPPBI_' . uniqid() . '.docx';
-        IOFactory::createWriter($phpWord, 'Word2007')->save($filePath);
-
-        $fileName = 'SPPBI_' . str_replace(' ', '_', $pegawai->nama_pegawai) . '.docx';
+        $fileName = 'SPPBI_'.Str::slug($pegawai->nama_pegawai, '_').'.docx';
 
         return response()->download($filePath, $fileName, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         ])->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Nomor surat SPPBI otomatis, mis. 001/SPPBI/DISBUN/2026.
+     */
+    private function nomorSuratOtomatis(Pegawai $pegawai): string
+    {
+        return sprintf('%03d/SPPBI/DISBUN/%s', $pegawai->id_pegawai, Carbon::now()->format('Y'));
+    }
+
+    private function isAdminAset(): bool
+    {
+        $role = auth()->user()?->role?->nama_role;
+
+        return is_string($role)
+            && in_array(Str::lower(str_replace('_', ' ', trim($role))), ['admin aset', 'admin'], true);
+    }
+
+    private function authorizeAdminAset(): void
+    {
+        abort_unless($this->isAdminAset(), 403, 'Hanya Admin Aset yang dapat mengelola dokumen SPPBI.');
     }
 }

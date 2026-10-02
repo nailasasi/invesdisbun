@@ -3,10 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Aset;
+use App\Models\Lokasi;
 use App\Models\PenempatanAset;
 use App\Models\Ruangan;
 use App\Models\Skpd;
 use App\Models\TemplateDokumen;
+use App\Services\AsetScope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -17,22 +20,37 @@ use PhpOffice\PhpWord\TemplateProcessor;
 
 class AsetRuanganController extends Controller
 {
-    /**
-     * Apakah role saat ini adalah salah satu unit bidang/UPT (bukan Admin Aset).
-     * Unit hanya boleh melihat data pada SKPD-nya sendiri.
-     */
-    private function isUnitUser(): bool
+    public function __construct(private readonly AsetScope $scope)
     {
-        $role = auth()->user()?->role?->nama_role ?? '';
-        return str_starts_with($role, 'Bidang') || str_starts_with($role, 'UPT');
     }
 
     /**
-     * SKPD milik user (untuk filter unit). Null untuk Admin Aset.
+     * Role Admin Aset (case/format tolerant: Admin Aset, admin_aset, admin).
      */
-    private function userSkpdId(): ?int
+    private function isAdminAset(): bool
     {
-        return $this->isUnitUser() ? auth()->user()->pegawai?->id_skpd : null;
+        return $this->scope->isAdminAset();
+    }
+
+    private function authorizeAdminAset(string $pesan = 'Hanya Admin Aset yang diizinkan.'): void
+    {
+        abort_unless($this->isAdminAset(), 403, $pesan);
+    }
+
+    /**
+     * Batasi query ruangan pada lokasi fisik dalam cakupan user.
+     *
+     * Cakupan berdasarkan LOKASI FISIK, bukan SKPD/ruangan milik unit —
+     * seorang user UPT boleh melihat ruang di lokasi UPT-nya, dan user
+     * dinas melihat semuanya.
+     */
+    private function scopeLokasi(Builder $query): Builder
+    {
+        if ($this->scope->cakupanPenuh()) {
+            return $query;
+        }
+
+        return $query->whereIn('id_lokasi', $this->scope->idLokasi() ?: [0]);
     }
 
     /**
@@ -40,30 +58,36 @@ class AsetRuanganController extends Controller
      */
     public function index(Request $request)
     {
-        $userSkpd = $this->userSkpdId();
-
-        $ruanganList = Ruangan::with('skpd')
-            ->withCount([
-                'penempatanAset as jumlah_aset' => fn ($q) => $q->where('status', 'aktif')
-                    ->whereHas('aset', fn ($a) => $a->where('is_kendaraan', false)),
-            ])
-            ->when($userSkpd, fn ($q) => $q->where(fn ($q2) => $q2->where('id_skpd', $userSkpd)->orWhereNull('id_skpd')))
+        $ruanganList = $this->scopeLokasi(
+            Ruangan::with(['skpd', 'lokasi'])
+                ->withCount([
+                    'penempatanAset as jumlah_aset' => fn ($q) => $q->where('status', 'aktif')
+                        ->whereHas('aset', fn ($a) => $a->where('is_kendaraan', false)),
+                ])
+        )
             ->when($request->filled('search'), fn ($q) => $q->where('nama_ruangan', 'like', '%' . trim($request->search) . '%'))
+            ->when($request->filled('lokasi'), fn ($q) => $q->where('id_lokasi', $request->integer('lokasi')))
             ->orderBy('id_ruangan')
             ->paginate(10)
             ->withQueryString();
 
-        // Dropdown SKPD untuk modal tambah/edit ruangan.
-        $skpdOptions = Skpd::orderBy('nama_skpd')
-            ->get(['id_skpd', 'nama_skpd']);
+        // Dropdown lokasi fisik untuk filter & modal tambah/edit ruangan.
+        $lokasiOptions = Lokasi::where('status', 'Aktif')->orderBy('jenis_lokasi')->orderBy('nama_lokasi')
+            ->get(['id_lokasi', 'nama_lokasi', 'jenis_lokasi']);
 
-        $isAdminAset = auth()->user()?->role?->nama_role === 'Admin Aset';
+        // SKPD pemilik ruangan = unit organisasi nyata (Sekretariat/Bidang/UPT).
+        // Ruang bersama tidak punya SKPD (opsional di form).
+        $skpdOptions = Skpd::whereNotNull('jenis_skpd')
+            ->orderBy('jenis_skpd')->orderBy('nama_skpd')
+            ->get(['id_skpd', 'nama_skpd', 'jenis_skpd']);
+
+        $isAdminAset = $this->isAdminAset();
 
         return view('aset-ruangan.index', compact(
             'ruanganList',
+            'lokasiOptions',
             'skpdOptions',
             'isAdminAset',
-            'userSkpd',
         ));
     }
 
@@ -72,14 +96,18 @@ class AsetRuanganController extends Controller
      */
     public function show(Ruangan $ruangan)
     {
-        $userSkpd = $this->userSkpdId();
-        if ($userSkpd && $ruangan->id_skpd !== null && $ruangan->id_skpd !== $userSkpd) {
-            abort(403, 'Anda tidak memiliki hak akses ke ruangan ini.');
+        // Guard di backend: user UPT tidak boleh membuka ruang di luar lokasi UPT-nya.
+        if (! $this->scope->cakupanPenuh()) {
+            abort_unless(
+                in_array($ruangan->id_lokasi, $this->scope->idLokasi() ?: [], true),
+                403,
+                $this->scope->pesanAkses('melihat isi ruangan')
+            );
         }
 
-        $ruangan->load('skpd');
+        $ruangan->load(['skpd', 'lokasi']);
 
-        $asetList = PenempatanAset::with(['aset.barang.kategori', 'aset.pemegangSaatIni.pegawai'])
+        $asetList = PenempatanAset::with(['aset.barang.kategori', 'aset.pemegangSaatIni.pegawai', 'aset.skpd', 'aset.lokasi'])
             ->where('id_ruangan', $ruangan->id_ruangan)
             ->where('status', 'aktif')
             ->whereHas('aset', fn ($a) => $a->where('is_kendaraan', false))
@@ -87,7 +115,7 @@ class AsetRuanganController extends Controller
             ->map(fn ($p) => $p->aset)
             ->filter();
 
-        $isAdminAset = auth()->user()?->role?->nama_role === 'Admin Aset';
+        $isAdminAset = $this->isAdminAset();
 
         return view('aset-ruangan.show', compact(
             'ruangan',
@@ -101,6 +129,7 @@ class AsetRuanganController extends Controller
         $data = $request->validate([
             'nama_ruangan' => ['required', 'string', 'max:100'],
             'lantai' => ['nullable', 'string', 'max:20'],
+            'id_lokasi' => ['nullable', 'exists:lokasi,id_lokasi'],
             'id_skpd' => ['nullable', 'exists:skpd,id_skpd'],
         ]);
 
@@ -115,6 +144,7 @@ class AsetRuanganController extends Controller
         $data = $request->validate([
             'nama_ruangan' => ['required', 'string', 'max:100'],
             'lantai' => ['nullable', 'string', 'max:20'],
+            'id_lokasi' => ['nullable', 'exists:lokasi,id_lokasi'],
             'id_skpd' => ['nullable', 'exists:skpd,id_skpd'],
         ]);
 
@@ -158,6 +188,8 @@ class AsetRuanganController extends Controller
      */
     public function downloadLabelRuangan($id_ruangan)
     {
+        $this->authorizeAdminAset('Akses ditolak: Hanya Admin Aset yang berhak mencetak label aset ruangan.');
+
         $ruangan = Ruangan::with([
             'penempatanAset' => function ($q) {
                 $q->where('status', 'aktif')
@@ -366,6 +398,8 @@ class AsetRuanganController extends Controller
      */
     public function downloadKIR($id_ruangan)
     {
+        $this->authorizeAdminAset('Akses ditolak: Hanya Admin Aset yang berhak mencetak Kartu Inventaris Ruangan (KIR).');
+
         $ruangan = Ruangan::findOrFail($id_ruangan);
 
         // 1. Ambil seluruh aset aktif di ruangan tersebut

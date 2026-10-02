@@ -10,6 +10,7 @@ class DokumenSppbi extends Model
     use HasFactory;
 
     protected $table = 'dokumen_sppbi';
+
     protected $primaryKey = 'id_sppbi';
 
     protected $fillable = [
@@ -28,7 +29,7 @@ class DokumenSppbi extends Model
 
     public function pegawai()
     {
-        return $this->belongsTo(Pegawai::class, 'id_pegawai');
+        return $this->belongsTo(Pegawai::class, 'id_pegawai', 'id_pegawai');
     }
 
     public function penginput()
