@@ -142,8 +142,10 @@ class DokumenSppbiController extends Controller
     {
         $role = auth()->user()?->role?->nama_role;
 
+        // Hanya role final "Admin Aset". Role legacy "admin" TIDAK lagi
+        // diterima (tidak ada di tabel role; keputusan Fase 1B).
         return is_string($role)
-            && in_array(Str::lower(str_replace('_', ' ', trim($role))), ['admin aset', 'admin'], true);
+            && in_array(Str::lower(str_replace('_', ' ', trim($role))), ['admin aset'], true);
     }
 
     private function authorizeAdminAset(): void

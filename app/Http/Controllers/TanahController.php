@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DokumenPbbHistory;
 use App\Models\Tanah;
 use App\Models\TanahHistory;
+use App\Services\TanahScope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -16,6 +17,28 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class TanahController extends Controller
 {
+    /**
+     * Gerbang modul Tanah: Admin Aset atau Admin UPT P2BTP saja.
+     *
+     * Ditaruh di constructor agar SELURUH method (termasuk yang belum
+     * ada sekarang) otomatis tergates — deny by default.
+     */
+    public function __construct(private readonly TanahScope $tanahScope)
+    {
+        // Guard auth()->check(): route tanah sudah dibungkus middleware
+        // `auth` + `role:Admin Aset,Admin UPT`, jadi gate ini jaring
+        // lapis kedua HANYA untuk user terautentikasi (mis. Admin UPT
+        // non-P2BTP yang lolos middleware role). Tanpanya, CLI
+        // (route:list menginstansiasi controller) ikut abort 403.
+        if (auth()->check()) {
+            abort_unless(
+                $this->tanahScope->bolehAkses(),
+                403,
+                'Anda tidak memiliki hak akses untuk modul data tanah.'
+            );
+        }
+    }
+
     /**
      * Menampilkan daftar seluruh data tanah.
      */
@@ -134,8 +157,6 @@ class TanahController extends Controller
      */
     public function edit(Tanah $tanah)
     {
-        abort_unless($this->isAdminTanah(), 403);
-
         return view('tanah.edit', compact('tanah'));
     }
 
@@ -144,8 +165,6 @@ class TanahController extends Controller
      */
     public function update(Request $request, Tanah $tanah)
     {
-        abort_unless($this->isAdminTanah(), 403);
-
         $validated = $request->validate([
             'kib' => ['nullable', 'string', 'max:100'],
             'tanggal_buku' => ['nullable', 'date'],
@@ -199,28 +218,6 @@ class TanahController extends Controller
         return redirect()
             ->route('tanah.index')
             ->with('success', 'Data tanah berhasil diperbarui.');
-    }
-
-    /**
-     * Otorisasi akses data tanah (lihat/edit) untuk Admin Aset & Admin P2BTP.
-     */
-    private function isAdminTanah(): bool
-    {
-        $role = strtolower((string) (
-            auth()->user()?->role?->nama_role
-            ?? auth()->user()?->level
-            ?? ''
-        ));
-
-        return in_array($role, [
-            'admin',
-            'admin_aset',
-            'admin aset',
-            'admin_p2btp',
-            'admin p2btp',
-            'upt p2btp',
-            'p2btp',
-        ]);
     }
 
     private const KOLOM_TEMPLATE = [

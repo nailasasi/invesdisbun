@@ -5,11 +5,27 @@ namespace App\Http\Controllers;
 use App\Models\Tanah;
 use App\Models\DokumenPbbTanah;
 use App\Models\DokumenPbbHistory;
+use App\Services\TanahScope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 class DokumenPbbTanahController extends Controller
 {
+    /**
+     * Gerbang modul Tanah: Admin Aset atau Admin UPT P2BTP saja
+     * (deny by default untuk seluruh method).
+     */
+    public function __construct(private readonly TanahScope $tanahScope)
+    {
+        // Guard auth()->check() — lihat TanahController (CLI/route:list).
+        if (auth()->check()) {
+            abort_unless(
+                $this->tanahScope->bolehAkses(),
+                403,
+                'Anda tidak memiliki hak akses untuk modul data tanah.'
+            );
+        }
+    }
 
     public function create(Tanah $tanah)
     {

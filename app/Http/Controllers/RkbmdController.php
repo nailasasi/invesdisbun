@@ -6,6 +6,7 @@ use App\Models\ArsipRkbmd;
 use App\Models\Aset;
 use App\Models\Skpd;
 use App\Models\UsulanRkbmd;
+use App\Services\AsetScope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -21,6 +22,10 @@ class RkbmdController extends Controller
     const SATUAN = ['Unit', 'Paket', 'Set', 'Buah'];
 
     const STATUS = ['Draft', 'Diajukan', 'Disetujui Pengurus Barang', 'Ditolak'];
+
+    public function __construct(private readonly AsetScope $scope)
+    {
+    }
 
     /**
      * Admin Aset berperan sebagai "Pengurus Barang" yang menyetujui/menolak usulan.
@@ -38,6 +43,26 @@ class RkbmdController extends Controller
         $pegawai = auth()->user()?->pegawai;
 
         return $pegawai?->skpd;
+    }
+
+    /**
+     * Cross-check SKPD: user non-admin hanya boleh menyentuh usulan milik
+     * SKPD-nya sendiri (mencegah manipulasi lintas unit via URL/id meski
+     * pengecekan owner `id_pegawai` sudah ada).
+     */
+    private function authorizeSkpdUsulan(UsulanRkbmd $usulan): void
+    {
+        if ($this->isAdmin()) {
+            return;
+        }
+
+        $mySkpd = $this->userSkpd();
+
+        abort_unless(
+            $mySkpd !== null && (int) $usulan->id_skpd === (int) $mySkpd->id_skpd,
+            403,
+            'Anda tidak memiliki hak akses untuk usulan milik unit lain.'
+        );
     }
 
     /**
@@ -93,9 +118,18 @@ class RkbmdController extends Controller
         $jenisList = self::JENIS;
         $satuanList = self::SATUAN;
 
-        $arsipList = ArsipRkbmd::with('skpd')->orderByDesc('id_arsip')->get();
-
         $mySkpd = $isAdmin ? null : $this->userSkpd();
+
+        // Arsip dokumen juga di-scope per unit untuk non-admin; tanpa SKPD
+        // sah -> nol baris (fail closed), konsisten dengan applyFilters().
+        $arsipList = ArsipRkbmd::with('skpd')
+            ->when(! $isAdmin, function ($q) use ($mySkpd) {
+                $mySkpd
+                    ? $q->where('id_skpd', $mySkpd->id_skpd)
+                    : $q->whereRaw('1 = 0');
+            })
+            ->orderByDesc('id_arsip')
+            ->get();
 
         $activeBidang = array_map('intval', $request->query('bidang', []));
 
@@ -125,6 +159,9 @@ class RkbmdController extends Controller
         $aset = Aset::query()
             ->with('barang')
             ->whereIn('status_aset', ['aktif', 'Aktif'])
+            // Cakupan user: pencarian aset tidak boleh membocorkan aset
+            // di luar scope (mis. aset UPT lain milik Admin Bidang).
+            ->tap(fn ($q) => $this->scope->terapkan($q))
             ->when($keyword !== '', function ($query) use ($keyword) {
                 $query->where(function ($q) use ($keyword) {
                     $q->where('nomor_kartu_barang', 'like', "%{$keyword}%")
@@ -206,6 +243,7 @@ class RkbmdController extends Controller
      */
     public function submit(UsulanRkbmd $usulan)
     {
+        $this->authorizeSkpdUsulan($usulan);
         abort_unless($usulan->id_pegawai === auth()->user()?->pegawai?->id_pegawai, 403);
         abort_unless($usulan->status_usulan === 'Draft', 422, 'Hanya usulan berstatus Draft yang dapat diajukan.');
 
@@ -252,6 +290,10 @@ class RkbmdController extends Controller
     {
         $isAdmin = $this->isAdmin();
         $isOwner = $usulan->id_pegawai === auth()->user()?->pegawai?->id_pegawai;
+
+        if (! $isAdmin) {
+            $this->authorizeSkpdUsulan($usulan);
+        }
 
         abort_unless($isAdmin || $isOwner, 403);
         abort_unless($isAdmin || in_array($usulan->status_usulan, ['Draft', 'Diajukan']), 422, 'Usulan final tidak dapat dihapus.');
@@ -552,6 +594,7 @@ class RkbmdController extends Controller
             return;
         }
 
+        $this->authorizeSkpdUsulan($usulan);
         abort_unless($isOwner, 403);
         abort_unless(in_array($usulan->status_usulan, ['Draft', 'Diajukan']), 422, 'Usulan sudah dikunci (final).');
     }

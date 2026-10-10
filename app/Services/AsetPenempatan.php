@@ -10,20 +10,41 @@ use App\Models\Ruangan;
 /**
  * Aturan penempatan aset.
  *
- * Prinsip penting:
- *  - LOKASI FISIK aset mengikuti RUANGAN tempat aset berada, dan HANYA
- *    berubah melalui proses penempatan/mutasi aset.
- *  - UNIT PENANGGUNG JAWAB aset (skpd) ditunjuk eksplisit (form aset) —
- *    TIDAK ikut berubah hanya karena ruang atau pemegangnya berpindah.
- *  - Perubahan role / skpd / ruangan pegawai TIDAK PERNAH memindahkan
- *    aset. Perpindahan fisik selalu lewat mutasi.
+ * `id_skpd` dan `id_lokasi` aset TIDAK PERNAH menjadi input admin. Keduanya
+ * selalu diturunkan dari master struktur organisasi yang dikelola di User
+ * Management (tabel `pegawai`) dan Ruangan (tabel `ruangan`):
  *
- * Jadi aset milik Bidang yang ditaruh di ruang UPT tetap milik Bidang,
- * dan user UPT tetap bisa mengelolanya karena akses berbasis lokasi
- * fisik (lihat AsetScope).
+ *   - ada PEMEGANG  -> effective room = `pegawai.id_ruangan`
+ *                      aset.id_skpd   = `pegawai.id_skpd`
+ *   - tanpa PEMEGANG -> effective room = ruangan yang dipilih admin
+ *                      aset.id_skpd   = `ruangan.id_skpd` (NULL bila ruang bersama)
+ *   - tanpa keduanya -> effective room = NULL
+ *                      aset.id_skpd   = NULL
+ *
+ * `aset.id_lokasi` SELALU = `ruangan.id_lokasi` dari effective room. Bila
+ * effective room NULL atau ruangnya belum dipetakan ke lokasi, hasilnya NULL
+ * — nilai lama tidak pernah dipertahankan.
+ *
+ * Perubahan role/SKPD pegawai tidak memindahkan aset; perubahan RUANGAN KERJA
+ * pegawai memindahkan aset yang dipegangnya dan dicatat sebagai mutasi
+ * 'Pindah Ruangan' (lihat `UserController::update`).
  */
 class AsetPenempatan
 {
+    /**
+     * Ruangan kerja seorang pegawai (sumber: User Management).
+     */
+    public static function ruanganKerjaPemegang(?int $pegawaiId): ?int
+    {
+        if (! $pegawaiId) {
+            return null;
+        }
+
+        $id = Pegawai::where('id_pegawai', $pegawaiId)->value('id_ruangan');
+
+        return $id ? (int) $id : null;
+    }
+
     /**
      * Lokasi fisik untuk ruang tertentu.
      */
@@ -33,65 +54,55 @@ class AsetPenempatan
             return null;
         }
 
-        return Ruangan::where('id_ruangan', $ruanganId)->value('id_lokasi');
+        $id = Ruangan::where('id_ruangan', $ruanganId)->value('id_lokasi');
+
+        return $id ? (int) $id : null;
     }
 
     /**
-     * Unit penanggung jawab default aset yang dipegang pegawai tertentu,
-     * diturunkan dari skpd pegawai tersebut.
+     * SKPD aset berdasarkan effective source (bukan input admin):
+     *   - ada pemegang  -> `pegawai.id_skpd`
+     *   - tanpa pemegang-> `ruangan.id_skpd` (NULL untuk ruang bersama)
+     *   - tanpa keduanya-> NULL
      */
-    public static function skpdUntukPemegang(?int $pegawaiId): ?int
+    public static function skpdUntuk(?int $pegawaiId, ?int $ruanganId): ?int
     {
-        if (! $pegawaiId) {
-            return null;
+        if ($pegawaiId) {
+            $skpd = Pegawai::where('id_pegawai', $pegawaiId)->value('id_skpd');
+
+            return $skpd ? (int) $skpd : null;
         }
 
-        return Pegawai::where('id_pegawai', $pegawaiId)->value('id_skpd');
+        if ($ruanganId) {
+            $skpd = Ruangan::where('id_ruangan', $ruanganId)->value('id_skpd');
+
+            return $skpd ? (int) $skpd : null;
+        }
+
+        return null;
     }
 
     /**
-     * Terapkan unit penanggung jawab + lokasi saat aset dibuat atau
-     * ditempatkan ulang.
+     * Sinkronkan `aset.id_lokasi` dengan lokasi effective room.
      *
-     * @param  int|null  $skpdPJ  skpd penanggung jawab yang dipilih eksplisit di form
-     */
-    public static function terapkan(Aset $aset, ?int $pegawaiId, ?int $ruanganId, ?int $skpdPJ = null): void
-    {
-        $update = [];
-
-        $skpd = $skpdPJ ?: self::skpdUntukPemegang($pegawaiId);
-
-        if ($skpd) {
-            $update['id_skpd'] = $skpd;
-        }
-
-        $lokasi = self::lokasiUntukRuangan($ruanganId);
-
-        if ($lokasi) {
-            $update['id_lokasi'] = $lokasi;
-        }
-
-        if ($update) {
-            $aset->update($update);
-        }
-    }
-
-    /**
-     * Sinkronkan `aset.id_lokasi` dengan lokasi ruangan tujuan.
+     * WAJIB dipanggil setiap kali effective room aset berubah (create/
+     * edit/mutasi/pindah ruang), karena `id_lokasi` dipakai AsetScope untuk
+     * menegakkan hak akses.
      *
-     * WAJIB dipanggil setiap kali penempatan aset berubah (create/
-     * mutasi/pindah ruang), karena `id_lokasi` dipakai AsetScope untuk
-     * menegakkan hak akses. Lokasi fisik HANYA berubah lewat penempatan
-     * aset — bukan karena role/unit/ruangan pegawai berubah, dan bukan
-     * karena pemegangnya berganti.
+     * Bila effective room NULL (atau ruangnya belum dipetakan ke lokasi),
+     * lokasi aset menjadi NULL — nilai lama TIDAK dipertahankan.
      *
      * @return int jumlah aset yang ikut tersinkron
      */
     public static function sinkronLokasiAset(Aset $aset, ?int $ruanganId): int
     {
         $lokasi = self::lokasiUntukRuangan($ruanganId);
+        $sekarang = $aset->id_lokasi;
 
-        if (! $lokasi || (int) $aset->id_lokasi === (int) $lokasi) {
+        $sama = $lokasi === null && $sekarang === null
+            || ($lokasi !== null && $sekarang !== null && (int) $sekarang === (int) $lokasi);
+
+        if ($sama) {
             return 0;
         }
 
@@ -101,12 +112,43 @@ class AsetPenempatan
     }
 
     /**
-     * Peringatan eksplisit: perubahan data pegawai TIDAK boleh memindahkan
-     * aset. Dipanggil dari User Management sebagai penjaga agar tidak ada
-     * jalur tersembunyi yang menggeser lokasi fisik aset.
+     * Sinkronkan `aset.id_skpd` dari effective source (Pemegang → Pegawai,
+     * tanpa Pemegang → Ruangan, tanpa keduanya → NULL).
      *
-     * Aset yang benar-benar harus berpindah dilakukan lewat proses
-     * mutasi/penempatan, bukan lewat perubahan pegawai.
+     * @return int jumlah aset yang ikut tersinkron
+     */
+    public static function sinkronSkpdAset(Aset $aset, ?int $pegawaiId, ?int $ruanganId): int
+    {
+        $skpd = self::skpdUntuk($pegawaiId, $ruanganId);
+
+        if ((int) $aset->id_skpd === (int) $skpd) {
+            return 0;
+        }
+
+        $aset->forceFill(['id_skpd' => $skpd])->save();
+
+        return 1;
+    }
+
+    /**
+     * Sinkronkan KEDUA kolom turunan sekaligus (SKPD + Lokasi Fisik).
+     *
+     * Pemanggil hanya cukup memberikan pemegang & effective room; nilai
+     * `id_skpd` dan `id_lokasi` dari request tidak pernah dipakai.
+     */
+    public static function sinkronAset(Aset $aset, ?int $pegawaiId, ?int $ruanganId): void
+    {
+        self::sinkronSkpdAset($aset, $pegawaiId, $ruanganId);
+        self::sinkronLokasiAset($aset, $ruanganId);
+    }
+
+    /**
+     * Jumlah aset yang saat ini dipegang pegawai tertentu (aktif).
+     *
+     * Dipakai User Management sebagai penjaga: aset milik pegawai hanya
+     * berpindah ruangan ketika RUANGAN KERJA pegawai itu berubah (dicatat
+     * sebagai mutasi 'Pindah Ruangan'), dan berganti pemegang hanya lewat
+     * Mutasi → Ganti Pemegang.
      */
     public static function asetMilik(int $pegawaiId): int
     {

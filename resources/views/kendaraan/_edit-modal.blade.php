@@ -40,7 +40,13 @@
                         </select>
                         <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="jenis_kendaraan"></p>
                     </div>
-                    <div class="space-y-1">
+                    <div id="block-pemegang-add" class="space-y-1">
+                        <label for="field-pemegang-input" class="block text-xs font-medium text-slate-700">Pemegang Saat Ini (Pemegang Awal)</label>
+                        <input type="text" id="field-pemegang-input" name="pemegang_awal" maxlength="150" class="block w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: Budi Santoso">
+                        <p class="text-[11px] text-slate-400">Pemegang pertama kendaraan baru. Bila nama cocok dengan master pegawai, penempatan disesuaikan otomatis.</p>
+                        <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="pemegang_awal"></p>
+                    </div>
+                    <div id="block-pemegang-edit" class="space-y-1 hidden">
                         <label class="block text-xs font-medium text-slate-700">Pemegang Saat Ini</label>
                         <div class="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5">
                             <span id="field-pemegang-value" class="text-xs font-medium text-slate-800">{{ $kendaraan->pemegang ?? 'Belum ada pemegang' }}</span>
@@ -61,16 +67,6 @@
             <div class="mt-3 rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
                 <h4 class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Surat & Dokumen</h4>
                 <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div class="space-y-1">
-                        <label for="field-plat" class="block text-xs font-medium text-slate-700">Nomor Plat Aktif</label>
-                        <input type="text" id="field-plat" name="plat_nomor" maxlength="20" class="block w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: B 1234 ABC">
-                        <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="plat_nomor"></p>
-                    </div>
-                    <div class="space-y-1">
-                        <label for="field-tgl-plat" class="block text-xs font-medium text-slate-700">Masa Aktif Nomor Polisi</label>
-                        <input type="date" id="field-tgl-plat" name="plat_tanggal" class="block w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                        <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="plat_tanggal"></p>
-                    </div>
                     <div class="space-y-1">
                         <label for="field-rangka" class="block text-xs font-medium text-slate-700">Nomor Rangka</label>
                         <input type="text" id="field-rangka" name="nomor_rangka" maxlength="100" class="block w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: MH1PB...">
@@ -102,10 +98,15 @@
                 </div>
             </div>
 
-            {{-- Data Aset & Pajak --}}
+            {{-- Data Aset --}}
             <div class="mt-3 rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
-                <h4 class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Data Aset & Pajak</h4>
+                <h4 class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Data Aset</h4>
                 <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div class="space-y-1">
+                        <label for="field-plat" class="block text-xs font-medium text-slate-700">Nomor Polisi</label>
+                        <input type="text" id="field-plat" name="nomor_polisi" maxlength="20" class="block w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: B 1234 ABC">
+                        <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="nomor_polisi"></p>
+                    </div>
                     <div class="space-y-1">
                         <label for="field-merk" class="block text-xs font-medium text-slate-700">Merk</label>
                         <input type="text" id="field-merk" name="merk" maxlength="100" class="block w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: Toyota">
@@ -144,25 +145,6 @@
                     <div class="space-y-1">
                         <label for="field-tgl-habis" class="block text-xs font-medium text-slate-700">Tanggal Habis Pakai</label>
                         <input type="date" id="field-tgl-habis" name="tanggal_habis_pakai" class="block w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                    </div>
-                    <div class="space-y-1">
-                        <label for="field-pajak-tgl" class="block text-xs font-medium text-slate-700">Pajak Jatuh Tempo (PAJAK BULAN)</label>
-                        <input type="date" id="field-pajak-tgl" name="pajak_tanggal_berakhir" class="block w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                        <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="pajak_tanggal_berakhir"></p>
-                    </div>
-                    <div class="space-y-1">
-                        <label for="field-pajak-5thn" class="flex items-center gap-2 pt-2 text-xs font-medium text-slate-700">
-                            <input type="checkbox" id="field-pajak-5thn" name="pajak_max_tahunan" value="1" class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
-                            Pajak 5 Tahunan
-                        </label>
-                    </div>
-                    <div class="space-y-1">
-                        <label for="field-pajak-nominal" class="block text-xs font-medium text-slate-700">Nominal Pajak</label>
-                        <input type="number" id="field-pajak-nominal" name="pajak_nominal" step="0.01" min="0" class="block w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: 450000">
-                    </div>
-                    <div class="space-y-1">
-                        <label for="field-pajak-total" class="block text-xs font-medium text-slate-700">Total Pajak</label>
-                        <input type="number" id="field-pajak-total" name="pajak_total" step="0.01" min="0" class="block w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
                     </div>
                 </div>
             </div>

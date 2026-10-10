@@ -97,9 +97,6 @@
                     @if ($platAktif?->tanggal_berlaku)
                         <span class="block text-xs font-normal text-slate-400">Masa aktif: {{ $platAktif->tanggal_berlaku->format('d M Y') }}</span>
                     @endif
-                    @if ($platAktif?->ganti_plat)
-                        <span class="ml-1 inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-medium text-indigo-700">Ganti Plat</span>
-                    @endif
                 </dd>
             </div>
             <div class="space-y-1">
@@ -152,9 +149,9 @@
                 <h3 class="text-base font-semibold text-slate-900">Riwayat Mutasi Kendaraan</h3>
                 <p class="text-xs text-slate-400">Pergantian pemegang kendaraan beserta dokumen SPPKD &amp; BAST</p>
             </div>
-        </div>
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-slate-200">
+</div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-slate-200">
                 <thead class="bg-slate-50">
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Tanggal</th>
@@ -195,34 +192,28 @@
                                     </a>
                                 </td>
                             @endif
-                        </tr>
+</tr>
                     @empty
                         <tr>
                             <td colspan="{{ $isAdmin ? 5 : 4 }}" class="px-6 py-10 text-center text-sm text-slate-400">Belum ada riwayat mutasi kendaraan.</td>
                         </tr>
                     @endforelse
-                </tbody>
+                    </tbody>
             </table>
         </div>
     </x-card>
 
-    <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+    <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         {{-- Riwayat Plat --}}
-        <x-card :padding="false">
+        <x-card :padding="false" class="min-w-0 lg:col-span-1">
             <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
                 <h3 class="text-base font-semibold text-slate-900">Riwayat Plat Nomor</h3>
-                @if ($isAdmin)
-                    <button type="button" data-plat-modal class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-indigo-700">
-                        + Tambah Plat
-                    </button>
-                @endif
             </div>
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-slate-200">
                     <thead class="bg-slate-50">
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Nomor Plat</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Masa Aktif</th>
                             <th class="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
                         </tr>
                     </thead>
@@ -230,7 +221,6 @@
                         @forelse ($kendaraan->riwayatPlat as $index => $plat)
                             <tr class="transition hover:bg-slate-50">
                                 <td class="px-6 py-4 text-sm font-medium text-slate-700">{{ $plat->nomor_plat }}</td>
-                                <td class="px-6 py-4 text-sm text-slate-600">{{ $plat->tanggal_berlaku?->format('d M Y') ?? '-' }}</td>
                                 <td class="px-6 py-4 text-right text-sm">
                                     @if ($plat->status === 'Aktif')
                                         <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-disbun-50 text-disbun-800">Aktif</span>
@@ -241,7 +231,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="3" class="px-6 py-10 text-center text-sm text-slate-400">Belum ada riwayat plat.</td>
+                                <td colspan="2" class="px-6 py-10 text-center text-sm text-slate-400">Belum ada riwayat plat.</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -250,25 +240,45 @@
         </x-card>
 
         {{-- Pajak Kendaraan --}}
-        <x-card :padding="false">
+        <x-card :padding="false" class="min-w-0 lg:col-span-2">
             <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
                 <h3 class="text-base font-semibold text-slate-900">Pajak Kendaraan</h3>
                 @if ($isAdmin)
                     <button type="button" data-pajak-modal class="inline-flex items-center gap-2 rounded-xl bg-disbun-700 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-disbun-800">
-                        + Tambah Pajak
+                        Kelola Pajak Kendaraan
                     </button>
                 @endif
             </div>
+            <div class="flex flex-wrap items-center gap-3 border-b border-slate-100 px-6 py-3">
+                <label class="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                    <span>Filter Tahun</span>
+                    <select id="pajak-filter-tahun" class="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-normal text-slate-700 shadow-sm focus:outline-none focus:border-emerald-500">
+                        <option value="">Semua Tahun</option>
+                        @foreach ($kendaraan->pajak->pluck('tahun')->filter()->map(fn ($t) => (int) $t)->unique()->sortDesc() as $tahun)
+                            <option value="{{ $tahun }}">{{ $tahun }}</option>
+                        @endforeach
+                    </select>
+                </label>
+                <label class="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                    <span>Filter Jenis Pajak</span>
+                    <select id="pajak-filter-jenis" class="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-normal text-slate-700 shadow-sm focus:outline-none focus:border-emerald-500">
+                        <option value="">Semua Jenis</option>
+                        <option value="tahunan">Tahunan</option>
+                        <option value="5-tahunan">5 Tahunan</option>
+                    </select>
+                </label>
+            </div>
             <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-slate-200">
+                <table id="pajak-kendaraan" class="min-w-full divide-y divide-slate-200">
                     <thead class="bg-slate-50">
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Jenis</th>
                             <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Jatuh Tempo</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">5 Tahunan</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Jenis Pajak</th>
                             @if ($isAdmin)
                                 <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Nominal</th>
                                 <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Total</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Bukti</th>
                                 <th class="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Aksi</th>
                             @endif
                         </tr>
@@ -278,7 +288,7 @@
                             @php
                                 $expired = $pajak->tanggal_berakhir && $pajak->tanggal_berakhir->isPast();
                             @endphp
-                            <tr class="transition hover:bg-slate-50">
+                            <tr data-tahun="{{ $pajak->tahun }}" data-jenis="{{ $pajak->pajak_5_tahunan ? '5-tahunan' : 'tahunan' }}" class="transition hover:bg-slate-50">
                                 <td class="px-6 py-4 text-sm text-slate-700">{{ $pajak->jenis_pajak }}
                                     @if ($pajak->status === 'Aktif')
                                         <span class="ml-1 inline-flex items-center rounded-full bg-disbun-100 px-2 py-0.5 text-[10px] font-medium text-disbun-800">Aktif</span>
@@ -291,85 +301,73 @@
                                         <span class="text-slate-600">{{ $pajak->tanggal_berakhir?->format('d M Y') ?? '-' }}</span>
                                     @endif
                                 </td>
-                                <td class="px-6 py-4 text-sm text-slate-600">{{ $pajak->pajak_5_tahunan ? 'Ya' : 'Tidak' }}</td>
+                                <td class="px-6 py-4 text-sm">
+                                    @if ($pajak->pajak_5_tahunan)
+                                        <span class="inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-medium text-indigo-700">5 Tahunan</span>
+                                    @else
+                                        <span class="inline-flex items-center rounded-full bg-disbun-50 px-2.5 py-0.5 text-xs font-medium text-disbun-700">Tahunan</span>
+                                    @endif
+                                </td>
                                 @if ($isAdmin)
                                     <td class="px-6 py-4 text-sm text-slate-600">{{ $pajak->nominal ? 'Rp ' . number_format((float) $pajak->nominal, 0, ',', '.') : '-' }}</td>
                                     <td class="px-6 py-4 text-sm text-slate-600">{{ $pajak->total_pajak ? 'Rp ' . number_format((float) $pajak->total_pajak, 0, ',', '.') : '-' }}</td>
+                                    <td class="px-6 py-4 text-sm">
+                                        @if ($pajak->bukti_pajak_path)
+                                            <button type="button" data-lihat-bukti="{{ $pajak->id_pajak }}" data-bukti-nama="{{ $pajak->bukti_pajak_nama }}" class="inline-flex items-center rounded-lg bg-disbun-50 px-2.5 py-1.5 text-xs font-medium text-disbun-700 transition hover:bg-disbun-100">Lihat Bukti</button>
+                                        @else
+                                            <span class="text-xs text-slate-400">Belum ada</span>
+                                        @endif
+                                    </td>
                                     <td class="px-6 py-4 text-right text-sm">
-                                        <button type="button" data-delete-pajak="{{ $pajak->id_pajak }}" data-pajak-name="{{ $pajak->jenis_pajak }}" class="inline-flex items-center rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100">Hapus</button>
+                                        <div class="inline-flex items-center gap-1.5">
+                                            <button type="button"
+                                                data-edit-pajak="{{ $pajak->id_pajak }}"
+                                                data-jenis="{{ $pajak->jenis_pajak }}"
+data-tahun="{{ $pajak->tahun }}"
+                                                data-is5tahunan="{{ $pajak->pajak_5_tahunan ? '1' : '0' }}"
+                                                data-bayar="{{ $pajak->tanggal_bayar?->format('Y-m-d') }}"
+                                                data-berakhir="{{ $pajak->tanggal_berakhir?->format('Y-m-d') }}"
+                                                data-nominal="{{ $pajak->nominal }}"
+                                                data-total="{{ $pajak->total_pajak }}"
+                                                data-bukti="{{ $pajak->bukti_pajak_path ? '1' : '0' }}"
+                                                data-bukti-nama="{{ $pajak->bukti_pajak_nama }}"
+                                                class="inline-flex items-center rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-200">Edit</button>
+                                            <button type="button" data-delete-pajak="{{ $pajak->id_pajak }}" data-pajak-name="{{ $pajak->jenis_pajak }}" class="inline-flex items-center rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100">Hapus</button>
+                                        </div>
                                     </td>
                                 @endif
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="{{ $isAdmin ? 6 : 3 }}" class="px-6 py-10 text-center text-sm text-slate-400">Belum ada data pajak.</td>
+                                <td colspan="{{ $isAdmin ? 7 : 3 }}" class="px-6 py-10 text-center text-sm text-slate-400">Belum ada data pajak.</td>
                             </tr>
                         @endforelse
+                        <tr id="pajak-filter-empty" class="hidden">
+                            <td colspan="{{ $isAdmin ? 7 : 3 }}" class="px-6 py-10 text-center text-sm text-slate-400">Tidak ada data pajak yang cocok dengan filter.</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
         </x-card>
     </div>
 
-    {{-- MODAL PLAT --}}
     @if ($isAdmin)
-    <div id="plat-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
-        <div class="fixed inset-0" data-modal-close></div>
-        <div class="relative w-full max-w-md rounded-2xl bg-white shadow-2xl">
-            <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
-                <h3 class="text-lg font-semibold text-slate-900">Tambah Riwayat Plat</h3>
-                <button type="button" data-modal-close class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"><svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
-            </div>
-            <form id="plat-form" method="POST" class="space-y-4 px-6 py-6">
-                @csrf
-                <div class="space-y-1.5">
-                    <label for="plat-nomor" class="block text-sm font-medium text-slate-700">Nomor Plat <span class="text-red-500">*</span></label>
-                    <input type="text" id="plat-nomor" name="nomor_plat" maxlength="20" required class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: B 1234 ABC">
-                    <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="nomor_plat"></p>
-                </div>
-                <div class="space-y-1.5">
-                    <label for="plat-tanggal" class="block text-sm font-medium text-slate-700">Masa Aktif Nomor Polisi</label>
-                    <input type="date" id="plat-tanggal" name="tanggal_berlaku" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                </div>
-                <div class="space-y-1.5">
-                    <label for="plat-ganti" class="flex items-center gap-2 text-sm font-medium text-slate-700">
-                        <input type="checkbox" id="plat-ganti" name="ganti_plat" value="1" class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
-                        Ganti Plat
-                    </label>
-                </div>
-                <div class="space-y-1.5">
-                    <label for="plat-status" class="block text-sm font-medium text-slate-700">Status <span class="text-red-500">*</span></label>
-                    <select id="plat-status" name="status" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                        <option value="Aktif">Aktif</option>
-                        <option value="Tidak Aktif">Tidak Aktif</option>
-                    </select>
-                </div>
-                <div class="flex items-center justify-end gap-2 pt-2">
-                    <button type="button" data-modal-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
-                    <button type="submit" class="rounded-xl bg-disbun-700 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-disbun-800">Simpan</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
     {{-- MODAL PAJAK --}}
     <div id="pajak-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
         <div class="fixed inset-0" data-modal-close></div>
         <div class="relative w-full max-w-md rounded-2xl bg-white shadow-2xl">
             <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
-                <h3 class="text-lg font-semibold text-slate-900">Tambah Pajak</h3>
+                <h3 id="pajak-modal-title" class="text-lg font-semibold text-slate-900">Kelola Pajak Kendaraan</h3>
                 <button type="button" data-modal-close class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"><svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
             </div>
             <form id="pajak-form" method="POST" class="space-y-4 px-6 py-6">
                 @csrf
+                <input type="hidden" name="_method" id="pajak-method" value="">
                 <div class="grid grid-cols-2 gap-4">
                     <div class="space-y-1.5">
                         <label for="pajak-jenis" class="block text-sm font-medium text-slate-700">Jenis <span class="text-red-500">*</span></label>
-                        <select id="pajak-jenis" name="jenis_pajak" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                            @foreach ($jenisPajakList as $jp)
-                                <option value="{{ $jp }}">{{ $jp }}</option>
-                            @endforeach
-                        </select>
+                        <input type="text" id="pajak-jenis" name="jenis_pajak" required value="PKB" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                        <p class="text-xs text-slate-500">Contoh: PKB, SWDKLLJ, Pajak Bumi.</p>
                     </div>
                     <div class="space-y-1.5">
                         <label for="pajak-tahun" class="block text-sm font-medium text-slate-700">Tahun</label>
@@ -382,31 +380,86 @@
                         <input type="date" id="pajak-bayar" name="tanggal_bayar" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
                     </div>
                     <div class="space-y-1.5">
-                        <label for="pajak-berakhir" class="block text-sm font-medium text-slate-700">Jatuh Tempo (PAJAK BULAN)</label>
-                        <input type="date" id="pajak-berakhir" name="tanggal_berakhir" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                        <label for="pajak-berakhir" class="block text-sm font-medium text-slate-700">Tanggal Jatuh Tempo <span class="text-red-500">*</span></label>
+                        <input type="date" id="pajak-berakhir" name="tanggal_berakhir" required class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                        <p class="text-xs text-slate-500">Masukkan tanggal jatuh tempo sesuai bukti pajak.</p>
+                        <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="tanggal_berakhir"></p>
                     </div>
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div class="space-y-1.5">
                         <label for="pajak-nominal" class="block text-sm font-medium text-slate-700">Nominal Pajak (Rp)</label>
-                        <input type="number" id="pajak-nominal" name="nominal" min="0" step="0.01" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: 1500000">
+                        <input type="number" id="pajak-nominal" name="nominal" min="0" step="0.01" required class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: 1500000">
+                        <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="nominal"></p>
                     </div>
                     <div class="space-y-1.5">
                         <label for="pajak-total" class="block text-sm font-medium text-slate-700">Total Pajak (Rp)</label>
-                        <input type="number" id="pajak-total" name="total_pajak" min="0" step="0.01" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: 2100000">
+                        <input type="number" id="pajak-total" name="total_pajak" min="0" step="0.01" required class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: 2100000">
+                        <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="total_pajak"></p>
+                    </div>
+                </div>
+                <div id="pajak-5thn-block" class="space-y-4">
+                    <div class="space-y-1.5">
+                        <label class="flex items-center gap-2 text-sm font-medium text-slate-700">
+                            <input type="checkbox" id="pajak-5tahunan-ganti" name="pajak_5_tahunan" value="1" class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                            Pajak 5 Tahunan / Ganti Plat
+                        </label>
+                    </div>
+                    <div id="plat-baru-wrap" class="space-y-1.5 hidden">
+                        <label for="plat-baru" class="block text-sm font-medium text-slate-700">Nomor Plat Baru <span class="text-red-500">*</span></label>
+                        <input type="text" id="plat-baru" name="nomor_plat_baru" maxlength="20" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: B 1234 ABC">
+                        <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="nomor_plat_baru"></p>
                     </div>
                 </div>
                 <div class="space-y-1.5">
-                    <label for="pajak-5thn" class="flex items-center gap-2 text-sm font-medium text-slate-700">
-                        <input type="checkbox" id="pajak-5thn" name="pajak_5_tahunan" value="1" class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
-                        Pajak 5 Tahunan
-                    </label>
+                    <label for="pajak-bukti" class="block text-sm font-medium text-slate-700">Bukti Pembayaran Pajak <span id="pajak-bukti-wajib" class="text-red-500">*</span></label>
+                    <input type="file" id="pajak-bukti" name="bukti_pajak" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" required class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm file:mr-3 file:rounded-lg file:border-0 file:bg-disbun-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-disbun-700 hover:file:bg-disbun-100 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                    <p id="pajak-bukti-hint" class="text-xs text-slate-500">Wajib diunggah. Format JPG, PNG, PDF, DOC/DOCX, atau XLS/XLSX. Maksimal 5 MB.</p>
+                    <p id="pajak-bukti-existing" class="hidden text-xs font-medium text-slate-600"></p>
+                    <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="bukti_pajak"></p>
                 </div>
                 <div class="flex items-center justify-end gap-2 pt-2">
                     <button type="button" data-modal-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
                     <button type="submit" class="rounded-xl bg-disbun-700 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-disbun-800">Simpan</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    {{-- MODAL PRATINJAU BUKTI PAJAK --}}
+    <div id="bukti-modal" class="fixed inset-0 z-50 hidden items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
+        <div class="fixed inset-0" data-modal-close></div>
+        <div class="relative flex max-h-[90vh] w-full max-w-3xl flex-col rounded-2xl bg-white shadow-2xl">
+            <div class="flex items-start justify-between border-b border-slate-100 px-5 py-4">
+                <div class="min-w-0">
+                    <h3 class="text-lg font-semibold text-slate-900">Pratinjau Bukti Pajak</h3>
+                    <p id="bukti-nama" class="mt-0.5 truncate text-xs text-slate-500"></p>
+                </div>
+                <button type="button" data-modal-close class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"><svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+            </div>
+
+            <div class="min-h-0 flex-1 overflow-y-auto bg-slate-50 px-5 py-4">
+                <div id="bukti-image-wrap" class="hidden">
+                    <img id="bukti-image" src="" alt="Pratinjau bukti pajak" class="mx-auto max-h-[70vh] w-auto max-w-full rounded-xl border border-slate-200 bg-white object-contain">
+                </div>
+                <div id="bukti-pdf-wrap" class="hidden">
+                    <iframe id="bukti-pdf" src="" title="Pratinjau PDF bukti pajak" class="h-[70vh] w-full rounded-xl border border-slate-200 bg-white"></iframe>
+                    <p class="mt-2 text-center text-xs text-slate-500">Jika pratinjau tidak tampil, gunakan tombol Download di bawah.</p>
+                </div>
+                <div id="bukti-fallback-wrap" class="hidden py-10 text-center">
+                    <svg class="mx-auto h-12 w-12 text-slate-300" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
+                    <p id="bukti-fallback-nama" class="mt-3 text-sm font-medium text-slate-700"></p>
+                    <p class="mt-1 text-xs text-slate-500">Pratinjau tidak didukung untuk jenis berkas ini. Silakan unduh untuk membuka.</p>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 border-t border-slate-100 px-5 py-4">
+                <button type="button" data-modal-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Tutup</button>
+                <a id="bukti-download" href="#" class="inline-flex items-center gap-2 rounded-xl bg-disbun-700 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-disbun-800">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 4v12m0 0l-4-4m4 4l4-4"/></svg>
+                    Download
+                </a>
+            </div>
         </div>
     </div>
     @endif
@@ -418,9 +471,11 @@
         const createDataUrl = @json(route('kendaraan.create'));
         const editUrl = @json(route('kendaraan.edit', ['kendaraan' => '__ID__']));
         const updateUrl = @json(route('kendaraan.update', ['kendaraan' => '__ID__']));
-        const platStoreUrl = @json(route('kendaraan.plat.store', ['kendaraan' => '__ID__']));
         const pajakStoreUrl = @json(route('kendaraan.pajak.store', ['kendaraan' => '__ID__']));
+        const pajakUpdateBase = @json(route('kendaraan.pajak.update', ['kendaraan' => '__ID__', 'pajak' => '__PAJAK__']));
         const pajakDeleteBase = @json(route('kendaraan.pajak.destroy', ['kendaraan' => '__ID__', 'pajak' => '__PAJAK__']));
+        const pajakBuktiBase = @json(route('kendaraan.pajak.bukti', ['kendaraan' => '__ID__', 'pajak' => '__PAJAK__']));
+        const pajakPreviewBase = @json(route('kendaraan.pajak.preview', ['kendaraan' => '__ID__', 'pajak' => '__PAJAK__']));
 
         let loadedDropdowns = false;
 
@@ -428,6 +483,30 @@
         function closeModal(el) { el.classList.add('hidden'); el.classList.remove('flex'); document.body.classList.remove('overflow-hidden'); }
         function wireClose(modal) {
             modal.querySelectorAll('[data-modal-close]').forEach(x => x.addEventListener('click', () => closeModal(modal)));
+        }
+
+        // Filter tabel Pajak Kendaraan (hanya tampilan; tidak mengubah data).
+        const pajakFilterTahun = document.getElementById('pajak-filter-tahun');
+        const pajakFilterJenis = document.getElementById('pajak-filter-jenis');
+        const pajakRows = Array.from(document.querySelectorAll('#pajak-kendaraan tbody tr[data-tahun]'));
+        const pajakFilterEmpty = document.getElementById('pajak-filter-empty');
+
+        if (pajakFilterTahun && pajakFilterJenis) {
+            const applyPajakFilter = () => {
+                let visible = 0;
+                pajakRows.forEach(row => {
+                    const okTahun = !pajakFilterTahun.value || String(row.dataset.tahun) === pajakFilterTahun.value;
+                    const okJenis = !pajakFilterJenis.value || row.dataset.jenis === pajakFilterJenis.value;
+                    const show = okTahun && okJenis;
+                    row.classList.toggle('hidden', !show);
+                    if (show) visible++;
+                });
+                if (pajakFilterEmpty) {
+                    pajakFilterEmpty.classList.toggle('hidden', !(pajakRows.length > 0 && visible === 0));
+                }
+            };
+            pajakFilterTahun.addEventListener('change', applyPajakFilter);
+            pajakFilterJenis.addEventListener('change', applyPajakFilter);
         }
 
         async function ensureDropdowns() {
@@ -472,19 +551,20 @@
                 document.getElementById('field-mesin').value = d.nomor_mesin ?? '';
                 document.getElementById('field-merk').value = d.merk ?? '';
                 document.getElementById('field-tipe').value = d.tipe ?? '';
-                document.getElementById('field-plat').value = d.plat_nomor ?? '';
-                document.getElementById('field-tgl-plat').value = d.plat_tanggal ?? '';
                 document.getElementById('field-nilai').value = d.nilai_perolehan ?? '';
                 document.getElementById('field-kondisi').value = d.kondisi ?? '';
                 document.getElementById('field-status').value = d.status_aset ?? '';
                 document.getElementById('field-tgl-pengadaan').value = d.tanggal_pengadaan ?? '';
                 document.getElementById('field-tgl-perolehan').value = d.tanggal_perolehan ?? '';
                 document.getElementById('field-tgl-habis').value = d.tanggal_habis_pakai ?? '';
-                document.getElementById('field-pajak-tgl').value = d.pajak_tanggal_berakhir ?? '';
-                document.getElementById('field-pajak-5thn').checked = !!d.pajak_max_tahunan;
-                document.getElementById('field-pajak-nominal').value = d.pajak_nominal ?? '';
-                document.getElementById('field-pajak-total').value = d.pajak_total ?? '';
+                document.getElementById('field-plat').value = d.nomor_plat ?? '';
                 document.getElementById('modal-title').textContent = 'Edit Kendaraan';
+                const pAdd = document.getElementById('block-pemegang-add');
+                const pEdit = document.getElementById('block-pemegang-edit');
+                const pemegangInputEl = document.getElementById('field-pemegang-input');
+                if (pemegangInputEl) pemegangInputEl.value = '';
+                if (pAdd) pAdd.classList.add('hidden');
+                if (pEdit) pEdit.classList.remove('hidden');
                 const kForm = document.getElementById('kendaraan-form');
                 kForm.action = updateUrl.replace('__ID__', kendaraanId);
                 const kModal = document.getElementById('kendaraan-modal');
@@ -513,25 +593,95 @@
             } catch (err) { alert('Koneksi bermasalah.'); submit.textContent = original; submit.disabled = false; }
         });
 
-        // Plat
-        const platModal = document.getElementById('plat-modal');
-        wireClose(platModal);
-        document.querySelectorAll('[data-plat-modal]').forEach(b => b.addEventListener('click', () => openModal(platModal)));
-        document.getElementById('plat-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const fd = new FormData(e.target);
-            const res = await fetch(platStoreUrl.replace('__ID__', kendaraanId), { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken }, body: fd });
-            if (res.ok || res.status === 422) { window.location.reload(); }
-        });
-
         // Pajak
         const pajakModal = document.getElementById('pajak-modal');
         wireClose(pajakModal);
-        document.querySelectorAll('[data-pajak-modal]').forEach(b => b.addEventListener('click', () => openModal(pajakModal)));
-        document.getElementById('pajak-form').addEventListener('submit', async (e) => {
+        const pajakForm = document.getElementById('pajak-form');
+        const pajakModalTitle = document.getElementById('pajak-modal-title');
+        const pajakMethod = document.getElementById('pajak-method');
+        const cb5Tahunan = document.getElementById('pajak-5tahunan-ganti');
+        const platBaruWrap = document.getElementById('plat-baru-wrap');
+        const platBaruInput = document.getElementById('plat-baru');
+        const block5Tahunan = document.getElementById('pajak-5thn-block');
+        const buktiInput = document.getElementById('pajak-bukti');
+        const buktiWajib = document.getElementById('pajak-bukti-wajib');
+        const buktiHint = document.getElementById('pajak-bukti-hint');
+        const buktiExisting = document.getElementById('pajak-bukti-existing');
+
+        function togglePlatBaru() {
+            const on = cb5Tahunan.checked;
+            platBaruWrap.classList.toggle('hidden', !on);
+            platBaruInput.required = on;
+            if (!on) platBaruInput.value = '';
+        }
+        cb5Tahunan.addEventListener('change', togglePlatBaru);
+
+        function resetPajakForm() {
+            pajakForm.reset();
+            pajakMethod.value = '';
+            pajakForm.action = pajakStoreUrl.replace('__ID__', kendaraanId);
+            pajakModalTitle.textContent = 'Kelola Pajak Kendaraan';
+            document.getElementById('pajak-jenis').value = 'PKB';
+            document.getElementById('pajak-tahun').disabled = false;
+            document.getElementById('pajak-berakhir').disabled = false;
+            block5Tahunan.classList.remove('hidden');
+            cb5Tahunan.disabled = false;
+            buktiInput.required = true;
+            buktiWajib.classList.remove('hidden');
+            buktiHint.textContent = 'Wajib diunggah. Format JPG, PNG, PDF, DOC/DOCX, atau XLS/XLSX. Maksimal 5 MB.';
+            buktiExisting.classList.add('hidden');
+            buktiExisting.textContent = '';
+            togglePlatBaru();
+        }
+
+        document.querySelectorAll('[data-pajak-modal]').forEach(b => b.addEventListener('click', () => {
+            resetPajakForm();
+            openModal(pajakModal);
+        }));
+
+        document.querySelectorAll('[data-edit-pajak]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const d = btn.dataset;
+                resetPajakForm();
+                pajakModalTitle.textContent = 'Edit Pajak Kendaraan';
+                pajakForm.action = pajakUpdateBase.replace('__ID__', kendaraanId).replace('__PAJAK__', d.editPajak);
+                pajakMethod.value = 'PUT';
+
+                document.getElementById('pajak-jenis').value = d.jenis ?? '';
+                // Tahun awal dihitung dari tanggal jatuh tempo (TIDAK dari nilai
+                // tersimpan): Tahunan = tahun(tanggal_berakhir) - 1, 5 Tahunan
+                // = tahun(tanggal_berakhir) - 5. Fallback ke nilai tersimpan
+                // hanya bila tanggal jatuh tempo kosong.
+                const berakhirY = d.berakhir ? parseInt(d.berakhir.slice(0, 4), 10) : NaN;
+                const tahunAwal = Number.isInteger(berakhirY) ? berakhirY - (d.is5tahunan === '1' ? 5 : 1) : (d.tahun ?? '');
+                document.getElementById('pajak-tahun').value = tahunAwal ?? '';
+                document.getElementById('pajak-berakhir').value = d.berakhir ?? '';
+                document.getElementById('pajak-bayar').value = d.bayar ?? '';
+                document.getElementById('pajak-nominal').value = d.nominal ?? '';
+                document.getElementById('pajak-total').value = d.total ?? '';
+
+                // Seluruh field pajak dapat dikoreksi di sini (jenis, tahun,
+                // tanggal bayar/jatuh tempo, nominal, total, bukti). Blok
+                // 5 Tahunan/Ganti Plat sengaja tidak ditampilkan saat edit:
+                // perubahan ke/dari 5 tahunan diatur lewat Tambah atau Hapus.
+                block5Tahunan.classList.add('hidden');
+
+                buktiInput.required = false;
+                buktiWajib.classList.add('hidden');
+                buktiHint.textContent = 'Biarkan kosong bila tidak mengganti berkas. Format JPG, PNG, PDF, DOC/DOCX, atau XLS/XLSX. Maksimal 5 MB.';
+                if (d.bukti === '1' && d.buktiNama) {
+                    buktiExisting.textContent = 'Bukti saat ini: ' + d.buktiNama;
+                    buktiExisting.classList.remove('hidden');
+                }
+
+                openModal(pajakModal);
+            });
+        });
+
+        pajakForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const fd = new FormData(e.target);
-            const res = await fetch(pajakStoreUrl.replace('__ID__', kendaraanId), { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken }, body: fd });
+            const res = await fetch(pajakForm.action, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken }, body: fd });
             if (res.ok || res.status === 422) { window.location.reload(); }
         });
         document.querySelectorAll('[data-delete-pajak]').forEach(b => {
@@ -542,6 +692,59 @@
                 if (res.ok) window.location.reload();
             });
         });
+
+        // Pratinjau bukti pajak (modal, bukan unduh langsung).
+        const buktiModal = document.getElementById('bukti-modal');
+        if (buktiModal) {
+            wireClose(buktiModal);
+            const buktiImageWrap = document.getElementById('bukti-image-wrap');
+            const buktiImage = document.getElementById('bukti-image');
+            const buktiPdfWrap = document.getElementById('bukti-pdf-wrap');
+            const buktiPdf = document.getElementById('bukti-pdf');
+            const buktiFallbackWrap = document.getElementById('bukti-fallback-wrap');
+            const buktiFallbackNama = document.getElementById('bukti-fallback-nama');
+            const buktiNamaEl = document.getElementById('bukti-nama');
+            const buktiDownload = document.getElementById('bukti-download');
+
+            function resetBuktiPreview() {
+                buktiImage.removeAttribute('src');
+                buktiPdf.removeAttribute('src');
+                buktiImageWrap.classList.add('hidden');
+                buktiPdfWrap.classList.add('hidden');
+                buktiFallbackWrap.classList.add('hidden');
+            }
+
+            document.querySelectorAll('[data-lihat-bukti]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const id = btn.dataset.lihatBukti;
+                    const nama = btn.dataset.buktiNama || 'Bukti pajak';
+                    const ext = (nama.split('.').pop() || '').toLowerCase();
+                    const previewUrl = pajakPreviewBase.replace('__ID__', kendaraanId).replace('__PAJAK__', id);
+                    const downloadUrl = pajakBuktiBase.replace('__ID__', kendaraanId).replace('__PAJAK__', id);
+
+                    resetBuktiPreview();
+                    buktiNamaEl.textContent = nama;
+                    buktiDownload.setAttribute('href', downloadUrl);
+
+                    if (['jpg', 'jpeg', 'png'].includes(ext)) {
+                        buktiImage.src = previewUrl;
+                        buktiImageWrap.classList.remove('hidden');
+                    } else if (ext === 'pdf') {
+                        buktiPdf.src = previewUrl;
+                        buktiPdfWrap.classList.remove('hidden');
+                    } else {
+                        buktiFallbackNama.textContent = nama;
+                        buktiFallbackWrap.classList.remove('hidden');
+                    }
+
+                    openModal(buktiModal);
+                });
+            });
+
+            buktiModal.querySelectorAll('[data-modal-close]').forEach(el => {
+                el.addEventListener('click', resetBuktiPreview);
+            });
+        }
         @endif
     </script>
     @endpush

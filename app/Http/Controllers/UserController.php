@@ -3,22 +3,35 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
-use App\Models\Aset;
 use App\Models\DokumenSppbi;
-use App\Models\MutasiAset;
 use App\Models\Lokasi;
 use App\Models\Pegawai;
 use App\Models\PemegangAset;
 use App\Models\Role;
-use App\Models\Ruangan;
-use App\Models\Skpd;
 use App\Models\UsulanRkbmd;
+use App\Models\User;
 use App\Services\ActivityLogger;
+use App\Services\UserManagementScope;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * USER MANAGEMENT (akun login).
+ *
+ * Berurusan dengan AKUN milik pegawai yang SUDAH ADA: username, role,
+ * status. Bukan master data orang — lihat PegawaiController.
+ *
+ * Konsep Fase 1A:
+ *   Pegawai -> 0 atau 1 User -> Role -> Hak Akses
+ *
+ *   - Buat Akun   = mengikat akun ke pegawai yang belum punya akun.
+ *   - Ubah Role   = mengubah akun yang SAMA (tidak pernah membuat akun baru).
+ *   - Admin UPT   = hanya mengelola akun pada UPT miliknya.
+ */
 class UserController extends Controller
 {
     /**
@@ -41,48 +54,74 @@ class UserController extends Controller
         'password_diubah' => 'Password',
     ];
 
-    public function __construct(private readonly ActivityLogger $logger)
-    {
+    public function __construct(
+        private readonly ActivityLogger $logger,
+        private readonly UserManagementScope $scope,
+    ) {
     }
 
     /**
-     * Daftar pegawai beserta akun login & role (halaman User Management).
+     * Daftar AKUN login (bukan master pegawai).
      */
     public function index(Request $request)
     {
-        $search = $request->query('search');
+        abort_unless($this->scope->bolehKelolaModul(), 403, 'Anda tidak memiliki hak akses untuk menu ini.');
+
+        $search = trim((string) $request->query('search'));
+        $search = $search === '' ? null : $search;
+
+        $idRole = $request->query('role');
+        $idRole = $idRole !== null && $idRole !== '' && ctype_digit((string) $idRole) ? (int) $idRole : null;
+
         $status = $request->query('status');
+        $status = in_array($status, ['aktif', 'nonaktif'], true) ? $status : null;
 
-        if (! in_array($status, ['aktif', 'nonaktif'], true)) {
-            $status = null;
-        }
+        $idSkpd = $request->query('skpd');
+        $idSkpd = $idSkpd !== null && $idSkpd !== '' && ctype_digit((string) $idSkpd) ? (int) $idSkpd : null;
 
-        $pegawaiList = Pegawai::with('skpd', 'ruangan', 'user.role')
+        $jenisSkpd = $request->query('jenis_skpd');
+        $jenisSkpd = in_array($jenisSkpd, ['Sekretariat', 'Bidang', 'UPT'], true) ? $jenisSkpd : null;
+
+        $userList = User::query()
+            ->with(['pegawai.skpd', 'role'])
+            ->whereHas('pegawai', fn ($q) => $this->scope->batasiQuery($q))
             ->when($search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
-                    $q->where('nama_pegawai', 'like', "%{$search}%")
-                        ->orWhere('nip', 'like', "%{$search}%")
-                        ->orWhereHas('user', fn ($uq) => $uq->where('username', 'like', "%{$search}%"));
+                    $q->where('username', 'like', "%{$search}%")
+                        ->orWhereHas('pegawai', function ($qp) use ($search) {
+                            $qp->where('nip', 'like', "%{$search}%")
+                                ->orWhere('nama_pegawai', 'like', "%{$search}%");
+                        });
                 });
             })
-            ->when($status, fn ($query, $status) => $query->whereHas('user', fn ($uq) => $uq->where('status_user', $status)))
-            ->latest()
+            ->when($idRole, fn ($query, $idRole) => $query->where('id_role', $idRole))
+            ->when($status, fn ($query, $status) => $query->where('status_user', $status))
+            ->when($idSkpd, fn ($query, $idSkpd) => $query->whereHas('pegawai', fn ($q) => $q->where('id_skpd', $idSkpd)))
+            ->when($jenisSkpd, fn ($query, $jenisSkpd) => $query->whereHas('pegawai.skpd', fn ($q) => $q->where('jenis_skpd', $jenisSkpd)))
+            ->orderBy('id_user')
             ->paginate(10)
             ->withQueryString();
 
-        $roleList = Role::orderBy('id_role')->get(['id_role', 'nama_role']);
-        $skpdList = $this->skpdList();
-        $ruanganList = $this->ruanganList();
-        $lokasiDinas = Lokasi::dinas();
+        // Pegawai yang BELUM punya akun — dipakai modal "Buat Akun".
+        $pegawaiTanpaAkun = $this->scope->batasiQuery(Pegawai::query())
+            ->whereDoesntHave('user')
+            ->with('skpd')
+            ->orderBy('nama_pegawai')
+            ->get(['id_pegawai', 'nip', 'nama_pegawai', 'jabatan', 'id_skpd']);
 
-        return view('user.index', compact('pegawaiList', 'skpdList', 'roleList', 'ruanganList', 'lokasiDinas'));
+        $roleList = $this->scope->roleListBoleh();
+        $skpdList = $this->scope->skpdBolehDipilih();
+
+        return view('user.index', compact('userList', 'pegawaiTanpaAkun', 'roleList', 'skpdList'));
     }
 
     /**
-     * Halaman detail user: tab Profil & tab Riwayat.
+     * Halaman detail akun: DATA PEGAWAI (read-only) + AKUN PENGGUNA.
      */
     public function show(Pegawai $pegawai)
     {
+        abort_unless($this->scope->bolehLihatPegawai($pegawai), 403, 'Anda tidak memiliki hak akses untuk pegawai ini.');
+
         $pegawai->load('skpd', 'ruangan', 'user.role');
 
         $riwayatLogs = ActivityLog::query()
@@ -92,40 +131,92 @@ class UserController extends Controller
             ->orderByDesc('id_activity_log')
             ->get();
 
-        $roleList = Role::orderBy('id_role')->get(['id_role', 'nama_role']);
-        $skpdList = $this->skpdList();
-        $ruanganList = $this->ruanganList();
-        $lokasiDinas = Lokasi::dinas();
+        $roleList = $this->scope->roleListBoleh();
         $fieldLabels = self::FIELD_LABELS;
         $jumlahAsetAktif = PemegangAset::where('id_pegawai', $pegawai->id_pegawai)
             ->where('status', 'aktif')
             ->count();
 
-        return view('user.show', compact('pegawai', 'riwayatLogs', 'roleList', 'skpdList', 'ruanganList', 'lokasiDinas', 'fieldLabels', 'jumlahAsetAktif'));
+        return view('user.show', compact('pegawai', 'riwayatLogs', 'roleList', 'fieldLabels', 'jumlahAsetAktif'));
     }
 
     /**
-     * Tambah pegawai + akun login.
-     * Username dipakai NIP bila tidak diisi; password awal = NIP.
+     * BUAT AKUN untuk pegawai yang SUDAH ADA (belum punya akun).
+     *
+     * Tidak membuat pegawai baru, tidak mengubah data pegawai.
+     * Username & password default = NIP.
+     *
+     * Pencegahan duplikat dilakukan di application layer (cek + lock baris
+     * pegawai dalam transaksi) karena users.id_pegawai belum UNIQUE.
      */
-    public function store(Request $request)
+    public function storeAccount(Request $request, Pegawai $pegawai)
     {
-        $data = $this->validateData($request);
+        abort_unless($this->scope->bolehLihatPegawai($pegawai), 403, 'Anda tidak memiliki hak akses untuk pegawai ini.');
 
-        $pegawai = Pegawai::create([
-            'nip' => $data['nip'],
-            'nama_pegawai' => $data['nama_pegawai'],
-            'jabatan' => $data['jabatan'] ?? null,
-            'id_skpd' => $data['id_skpd'] ?? null,
-            'id_ruangan' => $data['id_ruangan'] ?? null,
+        $data = $request->validate([
+            'id_role' => ['required', 'exists:role,id_role'],
+            'username' => ['nullable', 'string', 'max:255', 'unique:users,username'],
+            'password' => ['nullable', 'string', 'min:8'],
         ]);
 
-        $pegawai->user()->create([
-            'username' => ($data['username'] ?? null) ?: $data['nip'],
-            'password' => ($data['password'] ?? null) ?: $data['nip'],
-            'id_role' => $data['id_role'],
-            'status_user' => 'aktif',
-        ]);
+        $role = Role::find($data['id_role']);
+
+        if (! $role) {
+            throw ValidationException::withMessages([
+                'id_role' => 'Role tidak ditemukan.',
+            ]);
+        }
+
+        $this->scope->validasiRoleUntukPegawai($role->nama_role, $pegawai);
+
+        if ($pegawai->user()->exists()) {
+            throw ValidationException::withMessages([
+                'pegawai' => 'Pegawai ini sudah memiliki akun pengguna.',
+            ]);
+        }
+
+        if (! $pegawai->nip) {
+            throw ValidationException::withMessages([
+                'nip' => 'Pegawai ini belum memiliki NIP. Lengkapi data NIP terlebih dahulu di Data Pegawai.',
+            ]);
+        }
+
+        try {
+            $user = DB::transaction(function () use ($pegawai, $data, $role) {
+                // Kunci baris pegawai agar dua request serentak tidak bisa
+                // sama-sama lolos pemeriksaan "belum punya akun".
+                $peg = Pegawai::whereKey($pegawai->id_pegawai)->lockForUpdate()->first();
+
+                if (! $peg) {
+                    throw ValidationException::withMessages([
+                        'pegawai' => 'Pegawai tidak ditemukan.',
+                    ]);
+                }
+
+                if ($peg->user()->exists()) {
+                    throw ValidationException::withMessages([
+                        'pegawai' => 'Pegawai ini sudah memiliki akun pengguna.',
+                    ]);
+                }
+
+                return $peg->user()->create([
+                    'id_pegawai' => $peg->id_pegawai,
+                    'username' => ($data['username'] ?? '') !== '' ? $data['username'] : $peg->nip,
+                    'password' => ($data['password'] ?? '') !== '' ? $data['password'] : $peg->nip,
+                    'id_role' => $role->id_role,
+                    'status_user' => 'aktif',
+                ]);
+            });
+        } catch (QueryException $e) {
+            // Cadangan bila terjadi race di luar kendali lock (mis. duplikat username).
+            if ((string) $e->getCode() === '23000' || str_contains((string) $e->getMessage(), 'users_username_unique')) {
+                throw ValidationException::withMessages([
+                    'username' => 'Username tersebut sudah dipakai pengguna lain.',
+                ]);
+            }
+
+            throw $e;
+        }
 
         $pegawai->refresh()->load('skpd', 'ruangan', 'user.role');
 
@@ -134,88 +225,49 @@ class UserController extends Controller
             $pegawai,
             [],
             $this->snapshot($pegawai),
-            sprintf('Menambahkan user %s (%s) dengan role %s.', $pegawai->nama_pegawai, $pegawai->nip, $pegawai->user?->role?->nama_role)
+            sprintf(
+                'Membuat akun pengguna untuk %s (%s) dengan role %s.',
+                $pegawai->nama_pegawai,
+                $pegawai->nip,
+                $role->nama_role
+            )
         );
 
-        return $this->berhasil('User berhasil ditambahkan.', route('user.index'));
+        return $this->berhasil('Akun pengguna berhasil dibuat.', route('user.show', $pegawai->id_pegawai));
     }
 
     /**
-     * Perbarui pegawai + akun (username bisa diubah, password opsional).
+     * Perbarui field AKUN saja (username & password opsional).
      *
-     * Catatan: perpindahan skpd TIDAK memindahkan aset. Penempatan
-     * aset tetap mengikuti ruangan kerja, sesuai alur yang sudah ada.
+     * Data pegawai (NIP, nama, jabatan, SKPD, ruangan) diubah lewat
+     * Data Pegawai — bukan dari halaman akun.
      */
     public function update(Request $request, Pegawai $pegawai)
     {
-        $data = $this->validateUpdateData($request, $pegawai);
+        abort_unless($this->scope->bolehLihatPegawai($pegawai), 403, 'Anda tidak memiliki hak akses untuk pegawai ini.');
 
-        $ruanganBaru = $data['id_ruangan'] ?? null;
-        $passwordDiubah = ! empty($data['password']);
+        $user = $pegawai->user;
 
-        // Aset yang sedang dipegang pegawai mengikuti ruangan kerja pegawai.
-        $asetPemegangIds = PemegangAset::where('id_pegawai', $pegawai->id_pegawai)
-            ->where('status', 'aktif')
-            ->pluck('id_aset');
-
-        if ($ruanganBaru === null && $asetPemegangIds->isNotEmpty()) {
-            throw ValidationException::withMessages([
-                'id_ruangan' => "Tidak dapat mengosongkan ruangan: masih ada {$asetPemegangIds->count()} aset yang dipegang pegawai ini. Pindahkan pemegangnya terlebih dahulu.",
-            ]);
+        if (! $user) {
+            return $this->gagal('Pegawai ini belum memiliki akun login.');
         }
+
+        $data = $request->validate([
+            'username' => ['required', 'string', 'max:255', Rule::unique('users', 'username')->ignore($user->id_user, 'id_user')],
+            'password' => ['nullable', 'sometimes', 'string', 'min:8'],
+        ]);
+
+        $passwordDiubah = ! empty($data['password']);
 
         $sebelum = $this->snapshot($pegawai);
 
-        $pegawai->update([
-            'nip' => $data['nip'],
-            'nama_pegawai' => $data['nama_pegawai'],
-            'jabatan' => $data['jabatan'] ?? null,
-            'id_skpd' => $data['id_skpd'] ?? null,
-            'id_ruangan' => $ruanganBaru,
-        ]);
+        $userData = ['username' => $data['username']];
 
-        // Semua aset yang sedang dipegang pegawai selalu disinkronkan ke ruangan kerja
-        // pegawai (aturan: ruangan aset ber-pemegang mengikuti ruangan pegawainya).
-        // Bila posisi berubah, catat mutasi 'Pindah Ruangan'.
-        if ($ruanganBaru !== null && $asetPemegangIds->isNotEmpty()) {
-            $perluPindah = [];
-            foreach ($asetPemegangIds as $idAset) {
-                $aset = Aset::find($idAset);
-                if ($aset && $aset->penempatanAktif?->id_ruangan != $ruanganBaru) {
-                    $perluPindah[] = $aset;
-                }
-            }
-
-            if (! empty($perluPindah)) {
-                $mutasi = MutasiAset::create([
-                    'tanggal_mutasi' => now()->toDateString(),
-                    'jenis_mutasi' => 'Pindah Ruangan',
-                    'keterangan' => 'Ruangan kerja pegawai diubah',
-                    'id_user_penginput' => auth()->id(),
-                    'status_mutasi' => 'selesai',
-                ]);
-
-                foreach ($perluPindah as $aset) {
-                    $aset->moveToRoom($ruanganBaru, $pegawai->id_pegawai, null, $mutasi->id_mutasi);
-                }
-            }
+        if ($passwordDiubah) {
+            $userData['password'] = $data['password'];
         }
 
-        if ($pegawai->user) {
-            $userData = [
-                'username' => ($data['username'] ?? null) ?: ($pegawai->user->username ?? ''),
-            ];
-
-            if (! empty($data['id_role'])) {
-                $userData['id_role'] = $data['id_role'];
-            }
-
-            if ($passwordDiubah) {
-                $userData['password'] = $data['password'];
-            }
-
-            $pegawai->user->update($userData);
-        }
+        $user->update($userData);
 
         $pegawai->refresh()->load('skpd', 'ruangan', 'user.role');
         $sesudah = $this->snapshot($pegawai);
@@ -232,20 +284,23 @@ class UserController extends Controller
                 $pegawai,
                 $diff['old'],
                 $diff['new'],
-                $this->describe($diff['changed'], 'Memperbarui data user '.$pegawai->nama_pegawai)
+                $this->describe($diff['changed'], 'Memperbarui akun '.$pegawai->nama_pegawai)
             );
         }
 
-        return $this->berhasil('User berhasil diperbarui.');
+        return $this->berhasil('Akun berhasil diperbarui.');
     }
 
     /**
-     * Ubah role akun pegawai (aksi terpisah dari edit).
+     * Ubah role akun pegawai — mengubah akun yang SAMA.
      *
-     * Sengaja tidak menyentuh unit kerja maupun aset yang dipegang.
+     * Tidak membuat user baru, tidak membuat pegawai baru, tidak menghapus
+     * akun lama. Berlaku untuk skenario pergantian admin.
      */
     public function updateRole(Request $request, Pegawai $pegawai)
     {
+        abort_unless($this->scope->bolehLihatPegawai($pegawai), 403, 'Anda tidak memiliki hak akses untuk pegawai ini.');
+
         $data = $request->validate([
             'id_role' => ['required', 'exists:role,id_role'],
         ]);
@@ -260,14 +315,25 @@ class UserController extends Controller
             return $this->gagal('Anda tidak dapat mengubah role akun Anda sendiri.');
         }
 
+        $role = Role::find($data['id_role']);
+
+        if (! $role) {
+            throw ValidationException::withMessages([
+                'id_role' => 'Role tidak ditemukan.',
+            ]);
+        }
+
+        // Validasi role <-> penempatan (SKPD) pegawai + kewenangan aktor.
+        $this->scope->validasiRoleUntukPegawai($role->nama_role, $pegawai);
+
         $roleLama = $user->role?->nama_role;
-        $roleBaru = Role::find($data['id_role'])?->nama_role;
+        $roleBaru = $role->nama_role;
 
         if ((string) $user->id_role === (string) $data['id_role']) {
             return $this->berhasil('Role sudah tidak berubah.');
         }
 
-        $user->update(['id_role' => $data['id_role']]);
+        $user->update(['id_role' => $role->id_role]);
 
         $this->logger->log(
             'user.role_changed',
@@ -285,6 +351,8 @@ class UserController extends Controller
      */
     public function updateStatus(Request $request, Pegawai $pegawai)
     {
+        abort_unless($this->scope->bolehLihatPegawai($pegawai), 403, 'Anda tidak memiliki hak akses untuk pegawai ini.');
+
         $data = $request->validate([
             'status_user' => ['required', Rule::in(['aktif', 'nonaktif'])],
         ]);
@@ -330,7 +398,7 @@ class UserController extends Controller
     }
 
     /**
-     * Hapus pegawai beserta akun loginnya (permanen).
+     * Hapus pegawai beserta akun loginnya (permanen) — hanya Admin Aset.
      *
      * Ditolak bila masih terikat dengan aset, dokumen SPPBI, atau usulan
      * RKBMD — karena `pegawai` ber-cascade pada tabel-tabel tersebut.
@@ -338,6 +406,8 @@ class UserController extends Controller
      */
     public function destroy(Pegawai $pegawai)
     {
+        abort_unless($this->scope->isAdminAset(), 403, 'Anda tidak memiliki hak akses untuk menu ini.');
+
         if ($pegawai->user && $pegawai->user->id_user === Auth::id()) {
             return $this->gagal('Anda tidak dapat menghapus akun Anda sendiri.');
         }
@@ -376,7 +446,7 @@ class UserController extends Controller
 
     /**
      * Sukses. Mengembalikan JSON untuk permintaan AJAX, atau redirect
-     * kembali ke halaman detail dengan flash message untuk form biasa.
+     * dengan flash message untuk form biasa.
      */
     private function berhasil(string $message, ?string $redirectTo = null)
     {
@@ -387,14 +457,12 @@ class UserController extends Controller
             ]);
         }
 
-        return redirect($redirectTo ?? route('user.show', request()->route('pegawai')))
+        return redirect($redirectTo ?? route('user.index'))
             ->with('success', $message);
     }
 
     /**
-     * Gagal. Permintaan non-JSON di-redirect balik ke halaman detail dengan
-     * pesan error — mengembalikan 422 pada form biasa hanya akan menampilkan
-     * halaman error mentah.
+     * Gagal. Permintaan non-JSON di-redirect balik dengan pesan error.
      */
     private function gagal(string $message, int $status = 422, ?string $redirectTo = null)
     {
@@ -412,6 +480,9 @@ class UserController extends Controller
     /**
      * Potret pegawai + akun dalam bentuk label yang mudah dibaca.
      * Nilai id sengaja diubah ke nama agar timeline tidak perlu join.
+     * Kredensial tidak pernah disertakan.
+     *
+     * @return array<string, mixed>
      */
     private function snapshot(?Pegawai $pegawai): array
     {
@@ -426,7 +497,7 @@ class UserController extends Controller
             'nip' => $pegawai->nip,
             'jabatan' => $pegawai->jabatan,
             'skpd' => $pegawai->skpd?->nama_skpd,
-            'lokasi' => $this->namaLokasi($pegawai),
+            'lokasi' => Lokasi::untukSkpd($pegawai->id_skpd)?->nama_lokasi,
             'ruangan' => $pegawai->ruangan?->nama_ruangan,
             'username' => $pegawai->user?->username,
             'role' => $pegawai->user?->role?->nama_role,
@@ -449,107 +520,5 @@ class UserController extends Controller
         );
 
         return $prefix.': '.implode(', ', $parts).'.';
-    }
-
-    private function skpdList()
-    {
-        return Skpd::whereNotNull('jenis_skpd')
-            ->with('lokasi')
-            ->orderBy('jenis_skpd')
-            ->orderBy('nama_skpd')
-            ->get(['id_skpd', 'nama_skpd', 'jenis_skpd']);
-    }
-
-    private function ruanganList()
-    {
-        return Ruangan::with('skpd')
-            ->orderBy('nama_ruangan')
-            ->get(['id_ruangan', 'nama_ruangan', 'id_skpd', 'id_lokasi']);
-    }
-
-    private function validateData(Request $request, ?Pegawai $pegawai = null): array
-    {
-        $pegawaiId = $pegawai?->id_pegawai;
-        $userId = $pegawai?->user?->id_user;
-
-        return $request->validate([
-            'nip' => ['required', 'string', 'max:30', Rule::unique('pegawai', 'nip')->ignore($pegawaiId, 'id_pegawai')],
-            'nama_pegawai' => ['required', 'string', 'max:100'],
-            'jabatan' => ['nullable', 'string', 'max:100'],
-            'id_skpd' => ['nullable', 'exists:skpd,id_skpd'],
-            'id_ruangan' => [...$this->ruanganRules($request)],
-            'username' => ['nullable', 'string', 'max:255', Rule::unique('users', 'username')->ignore($userId, 'id_user')],
-            'password' => ['nullable', 'sometimes', 'string', 'min:8'],
-            'id_role' => ['required', 'exists:role,id_role'],
-        ]);
-    }
-
-    private function validateUpdateData(Request $request, ?Pegawai $pegawai = null): array
-    {
-        $pegawaiId = $pegawai?->id_pegawai;
-        $userId = $pegawai?->user?->id_user;
-
-        return $request->validate([
-            'nip' => ['required', 'string', 'max:30', Rule::unique('pegawai', 'nip')->ignore($pegawaiId, 'id_pegawai')],
-            'nama_pegawai' => ['required', 'string', 'max:100'],
-            'jabatan' => ['nullable', 'string', 'max:100'],
-            'id_skpd' => ['nullable', 'exists:skpd,id_skpd'],
-            'id_ruangan' => [...$this->ruanganRules($request)],
-            'username' => ['nullable', 'string', 'max:255', Rule::unique('users', 'username')->ignore($userId, 'id_user')],
-            'password' => ['nullable', 'sometimes', 'string', 'min:8'],
-            'id_role' => ['nullable', 'exists:role,id_role'],
-        ]);
-    }
-
-    /**
-     * Ruangan wajib berada pada lokasi kerja SKPD yang dipilih.
-     * Ruang bersama (id_skpd NULL) tetap boleh dipakai semua SKPD.
-     */
-    private function ruanganRules(Request $request): array
-    {
-        return [
-            'nullable',
-            'exists:ruangan,id_ruangan',
-            function (string $attribute, $value, \Closure $fail) use ($request) {
-                if ($value === null || $value === '') {
-                    return;
-                }
-
-                $ruangan = Ruangan::find($value);
-                $skpdId = $request->input('id_skpd');
-
-                if (! $ruangan) {
-                    return;
-                }
-
-                // Ruang bersama (tanpa skpd) boleh dipakai siapa saja.
-                if ($ruangan->id_skpd === null && $ruangan->id_lokasi !== null) {
-                    return;
-                }
-
-                $lokasiSkpd = Lokasi::untukSkpd($skpdId !== null && $skpdId !== '' ? (int) $skpdId : null);
-
-                if (! $lokasiSkpd) {
-                    return;
-                }
-
-                if ((int) $ruangan->id_lokasi !== (int) $lokasiSkpd->id_lokasi) {
-                    $fail('Ruangan yang dipilih tidak berada pada lokasi SKPD tersebut. Pilih ruang lain atau ganti SKPD.');
-                }
-            },
-        ];
-    }
-
-    /**
-     * Nama lokasi kerja pegawai, diturunkan dari skpd-nya (UPT -> kantor
-     * UPT-nya; Sekretariat & Bidang -> kantor dinas).
-     */
-    private function namaLokasi(?Pegawai $pegawai): ?string
-    {
-        if (! $pegawai) {
-            return null;
-        }
-
-        return Lokasi::untukSkpd($pegawai->id_skpd)?->nama_lokasi;
     }
 }

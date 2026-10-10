@@ -38,6 +38,16 @@
                 <svg class="h-3.5 w-3.5 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
                 <span>Cetak KIR</span>
             </a>
+
+            {{-- Pasang Aset (existing master, tanpa pemegang) --}}
+            @if ($asetPasang->isNotEmpty())
+            <button type="button" id="btn-pasang"
+                    class="inline-flex items-center gap-1.5 rounded-xl bg-disbun-700 px-3.5 py-2 text-xs font-bold text-white shadow-2xs transition hover:bg-disbun-800"
+                    title="Pasang master aset yang sudah ada ke ruangan ini">
+                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                <span>Pasang Aset</span>
+            </button>
+            @endif
             @endif
         </div>
     </div>
@@ -142,6 +152,54 @@
     </x-card>
 
     @if ($isAdminAset)
+    {{-- Modal Pasang Aset ke Ruangan.
+         PENEMPATAN AWAL: memasang master aset yang sudah ada dan belum
+         berpemegang. Tidak membuat record `aset` baru, tidak membuat
+         pemegang, dan tidak mencatat mutasi. --}}
+    <div id="pasang-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
+        <div class="fixed inset-0" data-pasang-close></div>
+        <div class="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+            <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
+                <div>
+                    <h3 class="text-lg font-semibold text-slate-900">Pasang Aset</h3>
+                    <p class="mt-0.5 text-sm text-slate-500">Pilih master aset tanpa pemegang untuk {{ $ruangan->nama_ruangan }}.</p>
+                </div>
+                <button type="button" data-pasang-close class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Tutup">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <form id="pasang-form" method="POST" autocomplete="off">
+                @csrf
+                <div class="max-h-[70vh] space-y-4 overflow-y-auto px-6 py-6">
+                    <div class="space-y-1.5">
+                        <label for="field-aset-select" class="block text-sm font-medium text-slate-700">Master Aset <span class="text-red-500">*</span></label>
+                        <select id="field-aset-select" required class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                            <option value="">-- Pilih Master Aset --</option>
+                            @foreach ($asetPasang as $kandidat)
+                                <option value="{{ $kandidat->id_aset }}">{{ $kandidat->barang?->nama_barang ?? '-' }} — {{ $kandidat->nomor_kartu_barang }}</option>
+                            @endforeach
+                        </select>
+                        <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_aset"></p>
+                    </div>
+
+                    <div class="space-y-1 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
+                        <p class="font-semibold text-slate-700">Aset dipasang tanpa pemegang.</p>
+                        <p class="mt-1">Pemegang: <span class="font-semibold text-slate-800">- (kosong)</span> · Ruangan: <span class="font-semibold text-slate-800">{{ $ruangan->nama_ruangan }}</span></p>
+                        <p class="mt-1">Aset yang sudah dipegang pegawai tidak bisa dipasang di sini — ruangannya mengikuti pemegang.</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
+                    <button type="button" data-pasang-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
+                    <button type="submit" id="btn-pasang-submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-disbun-700 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-disbun-800">
+                        Pasang
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     {{-- Modal Keluarkan Aset --}}
     <div id="detach-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
         <div class="fixed inset-0" data-detach-close></div>
@@ -169,6 +227,92 @@
     @push('scripts')
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+        // ---- Pasang Aset ke Ruangan (penempatan awal) ----
+        const pasangModal = document.getElementById('pasang-modal');
+        const pasangForm = document.getElementById('pasang-form');
+        const btnPasang = document.getElementById('btn-pasang');
+        const pasangUrl = @json(route('aset-ruangan.aset.pasang', ['ruangan' => $ruangan->id_ruangan, 'aset' => '__ID__']));
+
+        function clearPasangErrors() {
+            if (!pasangForm) return;
+            pasangForm.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
+        }
+        function showPasangErrors(errors) {
+            if (!pasangForm) return;
+            pasangForm.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
+            Object.keys(errors || {}).forEach(field => {
+                const err = pasangForm.querySelector('[data-error-for="' + field + '"]');
+                if (err) { err.textContent = errors[field][0]; err.classList.remove('hidden'); }
+            });
+        }
+        function openPasangModal() {
+            if (!pasangModal) return;
+            pasangModal.classList.remove('hidden');
+            pasangModal.classList.add('flex');
+            document.body.classList.add('overflow-hidden');
+            clearPasangErrors();
+            const select = document.getElementById('field-aset-select');
+            if (select) select.value = '';
+        }
+        function closePasangModal() {
+            if (!pasangModal) return;
+            pasangModal.classList.add('hidden');
+            pasangModal.classList.remove('flex');
+            document.body.classList.remove('overflow-hidden');
+            clearPasangErrors();
+        }
+
+        if (btnPasang && pasangModal) {
+            btnPasang.addEventListener('click', openPasangModal);
+            pasangModal.querySelectorAll('[data-pasang-close]').forEach(el => el.addEventListener('click', closePasangModal));
+        }
+
+        if (pasangForm) {
+            pasangForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const submit = document.getElementById('btn-pasang-submit');
+                const original = submit.textContent;
+                const idAset = document.getElementById('field-aset-select').value;
+
+                if (!idAset) {
+                    showPasangErrors({ id_aset: ['Pilih master aset yang akan dipasang.'] });
+                    return;
+                }
+
+                submit.textContent = 'Memasang...';
+                submit.disabled = true;
+                try {
+                    const res = await fetch(pasangUrl.replace('__ID__', idAset), {
+                        method: 'POST',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+                    });
+
+                    if (res.status === 422) {
+                        const data = await res.json().catch(() => ({}));
+                        showPasangErrors(data.errors || {});
+                        submit.textContent = original;
+                        submit.disabled = false;
+                        return;
+                    }
+
+                    const data = await res.json().catch(() => ({}));
+
+                    if (res.ok) {
+                        window.location.reload();
+                        return;
+                    }
+
+                    alert(data.message || 'Gagal memasang aset.');
+                    submit.textContent = original;
+                    submit.disabled = false;
+                } catch (err) {
+                    alert('Koneksi bermasalah. Coba lagi.');
+                    submit.textContent = original;
+                    submit.disabled = false;
+                }
+            });
+        }
 
         const detachModal = document.getElementById('detach-modal');
 

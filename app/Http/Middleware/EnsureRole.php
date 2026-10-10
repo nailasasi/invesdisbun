@@ -23,7 +23,12 @@ class EnsureRole
 
         $roleName = $user->role?->nama_role;
 
-        if (! in_array($roleName, $roles, true)) {
+        // Trim kedua sisi: spasi ganda di data role tidak boleh membuat
+        // user sah kehilangan akses (atau sebaliknya lolos salah).
+        $cocok = is_string($roleName)
+            && in_array(trim($roleName), array_map('trim', $roles), true);
+
+        if (! $cocok) {
             abort(403, 'Anda tidak memiliki hak akses untuk menu ini.');
         }
 

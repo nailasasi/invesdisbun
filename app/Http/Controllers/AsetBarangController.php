@@ -20,6 +20,7 @@ use App\Services\AsetScope;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -33,6 +34,17 @@ class AsetBarangController extends Controller
     const KONDISI = ['Baik', 'Rusak Ringan', 'Rusak Berat'];
 
     const KATEGORI_MESIN = 'Peralatan dan Mesin';
+
+    /**
+     * Status aset yang boleh dipilih user dari form master (Aturan 15).
+     * `kondisi` tetap field terpisah dan tidak bercampur dengan status.
+     */
+    const STATUS_USER = ['aktif', 'nonaktif'];
+
+    /**
+     * Status milik workflow penghapusan — tidak boleh ditulis lewat form.
+     */
+    const STATUS_SISTEM = ['diusulkan_hapus', 'dihapuskan'];
 
     public function __construct(private readonly AsetScope $scope)
     {
@@ -94,10 +106,12 @@ private function isAdminAset(): bool
     /**
      * Indeks Aset Barang: satu tabel flat untuk SEMUA role.
      *
-     * Role bercakupan penuh (Admin Aset, Admin Bidang, Pegawai Dinas)
-     * melihat seluruh aset dinas. User UPT hanya melihat aset yang
-     * lokasinya berada di dalam cakupan UPT-nya. Kedua pembatasan ditegakkan
-     * oleh AsetScope di dalam query — bukan dengan menyembunyikan menu.
+     * Cakupan ditentukan AsetScope: Admin Aset melihat seluruh aset;
+     * Admin Bidang hanya lokasi Dinas; Admin UPT hanya lokasi UPT-nya;
+     * Pegawai mengikuti skpd-nya (UPT -> lokasi UPT, Bidang/Sekretariat ->
+     * lokasi Dinas); identitas invalid/role tak dikenal -> nol baris.
+     * Kedua pembatasan ditegakkan oleh AsetScope di dalam query — bukan
+     * dengan menyembunyikan menu.
      *
      * Tombol CUD hanya dirender untuk Admin Aset; role lain read-only.
      */
@@ -111,15 +125,20 @@ private function isAdminAset(): bool
      */
     private function adminIndex(Request $request)
     {
-        $search = $request->query('search');
+        $search = trim((string) $request->query('search'));
         $penempatan = $request->query('penempatan'); // 'pemegang' | 'tanpa_pemegang' | null (semua)
         $pemegangId = $request->query('pemegang');
+
+        // Filter status: whitelist agar querystring acak tidak menghasilkan
+        // error atau membocorkan baris berstatus sistem.
+        $statusFilter = $request->query('status');
+        $statusFilter = in_array($statusFilter, self::STATUS_USER, true) ? $statusFilter : null;
 
         $isAdminAset = $this->isAdminAset();
 
         $asetList = Aset::with(['barang', 'pemegangSaatIni.pegawai', 'penempatanAktif.ruangan', 'skpd', 'lokasi'])
             ->barang()
-            ->where('status_aset', 'aktif')
+            ->whereIn('status_aset', self::STATUS_USER)
             ->tap(fn ($q) => $this->scope->terapkan($q))
             ->when($search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
@@ -129,6 +148,7 @@ private function isAdminAset(): bool
                         ->orWhereHas('pemegangSaatIni.pegawai', fn ($p) => $p->where('nama_pegawai', 'like', "%{$search}%"));
                 });
             })
+            ->when($statusFilter, fn ($query, $status) => $query->where('status_aset', $status))
             ->when($penempatan === 'pemegang', function ($query) {
                 $query->whereHas('pemegangSaatIni');
             })
@@ -184,8 +204,10 @@ private function isAdminAset(): bool
         $allPegawai = $ruanganOptions = $skpdOptions = $lokasiOptions = collect();
 
         if ($isAdminAset) {
-            // Dropdown pemegang pada form Tambah/Edit.
+            // Dropdown pemegang pada form Tambah/Edit. `skpd` ikut di-eager-load
+            // karena option Pemegang mencarry nama SKPD untuk pratinjau turunan.
             $allPegawai = $batasiPegawai(Pegawai::query())
+                ->with('skpd')
                 ->orderBy('nama_pegawai')
                 ->get(['id_pegawai', 'nama_pegawai', 'id_ruangan', 'id_skpd']);
 
@@ -206,7 +228,7 @@ private function isAdminAset(): bool
                 Ruangan::where('status', 'Aktif')->orderBy('nama_ruangan'),
                 'id_lokasi'
             )
-                ->with('lokasi')
+                ->with(['lokasi', 'skpd'])
                 ->get(['id_ruangan', 'nama_ruangan', 'id_lokasi', 'id_skpd']);
         }
 
@@ -240,51 +262,128 @@ private function isAdminAset(): bool
             abort_unless($dalamCakupan, 403, $this->scope->pesanAkses('melihat aset pegawai'));
         }
 
-        $pegawai->load('skpd');
+        $pegawai->load(['skpd', 'ruangan']);
 
         $asetList = PemegangAset::with('aset.barang.kategori')
             ->where('id_pegawai', $pegawai->id_pegawai)
             ->where('status', 'aktif')
-            ->whereHas('aset', fn ($a) => $a->where('is_kendaraan', false))
+            ->whereHas('aset', fn ($a) => $a->where('is_kendaraan', false)->whereIn('status_aset', self::STATUS_USER))
             ->orderByDesc('id_pemegang')
             ->get();
 
         $isAdminAset = $this->isAdminAset();
-        $kondisiList = self::KONDISI;
-        $allPegawai = Pegawai::orderBy('nama_pegawai')->get(['id_pegawai', 'nama_pegawai', 'id_skpd']);
-        $skpdOptions = Skpd::whereNotNull('jenis_skpd')
-            ->orderBy('jenis_skpd')->orderBy('nama_skpd')
-            ->get(['id_skpd', 'nama_skpd', 'jenis_skpd']);
+
+        // Kandidat "Pasang Aset": master barang aktif yang belum berpemegang.
+        // Aset diusulkan_hapus / dihapuskan tidak boleh dipasang lagi.
+        $asetPasang = $this->asetPasangKandidat();
 
         // Berkas SPPBI bertanda tangan: satu dokumen aktif per pegawai.
         $pegawai->load('dokumenSppbi');
 
         return view('aset-barang.show', compact(
-            'pegawai', 'asetList', 'kondisiList', 'allPegawai', 'isAdminAset', 'skpdOptions'
+            'pegawai', 'asetList', 'isAdminAset', 'asetPasang'
         ));
     }
 
     /**
-     * Tambah aset baru. Pemegang diambil dari request `id_pegawai`
-     * (dropdown pada tabel flat) atau default pegawai route.
+     * Master aset barang aktif dalam cakupan user yang belum mempunyai
+     * pemegang aktif — kandidat Pasang Aset (ke pegawai maupun ke ruangan).
+     *
+     * Cakupan ditentukan `AsetScope::terapkan()`; logika hak akses TIDAK
+     * ditulis ulang di sini agar konsisten dengan daftar Aset Barang.
+     *
+     * @param  bool  $harusTanpaPenempatan  true untuk Pasang Aset ke Ruangan
      */
-    public function store(Request $request, Pegawai $pegawai)
+    private function asetPasangKandidat(bool $harusTanpaPenempatan = false)
+    {
+        return Aset::with('barang')
+            ->barang()
+            ->where('status_aset', 'aktif')
+            ->whereDoesntHave('pemegangSaatIni')
+            ->when($harusTanpaPenempatan, fn ($q) => $q->whereDoesntHave('penempatanAktif'))
+            ->tap(fn ($q) => $this->scope->terapkan($q))
+            ->orderBy('nomor_kartu_barang')
+            // Hanya kolom yang benar-benar ada di tabel `aset`. Nama barang
+            // dibaca lewat relasi `barang` (tabel master_barang).
+            ->get(['id_aset', 'nomor_kartu_barang', 'id_barang']);
+    }
+
+    /**
+     * Penempatan awal aset ke pegawai: memasang MASTER aset yang sudah ada.
+     *
+     * Tidak membuat record `aset` baru dan tidak menulis `mutasi_aset` /
+     * `detail_mutasi_aset` (Aturan 3 & 10). Ruangan tidak ada di form —
+     * server menentukannya dari ruang kerja pegawai (Aturan 4/11/18).
+     */
+    public function pasangAsetKePegawai(Pegawai $pegawai, Aset $aset)
     {
         $this->authorizeAdminAset();
 
-        $pemegangId = $request->input('id_pegawai') ?: $pegawai->id_pegawai;
+        abort_if((bool) $aset->is_kendaraan, 422, 'Aset kendaraan tidak dapat dipasang sebagai aset barang.');
+        abort_if($aset->status_aset !== 'aktif', 422, 'Hanya aset berstatus aktif yang dapat dipasang.');
 
-        $warning = $this->createAsetFor($request, $pemegangId);
+        $this->authorizeAset($aset, 'memasang aset ke pegawai');
+
+        // Ruangan TIDAK diterima dari request. Sumbernya tunggal: ruang kerja
+        // pegawai. Bila pegawai belum punya ruangan, penempatan tetap sah dan
+        // aset akan tampil tanpa ruangan (kondisi master "berpemegang tanpa ruang").
+        $ruanganId = $pegawai->id_ruangan;
+
+        // Row locking + recheck: tabel pemegang_aset/penempatan_aset tidak punya
+        // unique index untuk baris aktif, jadi duplikasi dicegah di sini.
+        $result = DB::transaction(function () use ($aset, $pegawai, $ruanganId) {
+            $asetLock = Aset::where('id_aset', $aset->id_aset)->lockForUpdate()->first();
+
+            if ($asetLock->status_aset !== 'aktif') {
+                throw ValidationException::withMessages([
+                    'id_aset' => 'Hanya aset berstatus aktif yang dapat dipasang.',
+                ]);
+            }
+
+            if ($asetLock->pemegangSaatIni()->exists()) {
+                throw ValidationException::withMessages([
+                    'id_aset' => 'Aset sudah dipegang '.$asetLock->pemegangSaatIni->pegawai?->nama_pegawai
+                        .'. Gunakan Mutasi → Ganti Pemegang.',
+                ]);
+            }
+
+            PemegangAset::create([
+                'id_aset' => $asetLock->id_aset,
+                'id_pegawai' => $pegawai->id_pegawai,
+                'tanggal_mulai' => now()->toDateString(),
+                'status' => 'aktif',
+            ]);
+
+            if ($ruanganId) {
+                // Ruangan warisan pemegang juga harus berada dalam cakupan user.
+                $this->authorizeRuangan($ruanganId, 'memasang aset ke pegawai');
+
+                $this->placeAtRoom($asetLock, $ruanganId);
+
+                // SKPD & Lokasi ikut master: Pemegang -> pegawai.id_skpd,
+                // effective room -> ruangan.id_lokasi. Tidak ada input admin.
+                AsetPenempatan::sinkronAset($asetLock, $pegawai->id_pegawai, $ruanganId);
+            }
+
+            return $asetLock->fresh();
+        });
 
         return response()->json([
             'success' => true,
-            'message' => 'Aset berhasil ditambahkan.',
-            'warning' => $warning,
+            'message' => 'Aset berhasil dipasang ke '.$pegawai->nama_pegawai.'.',
+            'warning' => $ruanganId
+                ? null
+                : 'Pegawai belum punya ruangan. Aset akan tampil tanpa ruangan sampai ruangan pegawai diisi.',
+            'ruangan' => $ruanganId ? Ruangan::find($ruanganId)?->nama_ruangan : null,
+            'id_lokasi' => $result->id_lokasi,
         ]);
     }
 
     /**
      * Tambah aset dari tabel flat (tanpa pegawai di route).
+     *
+     * SATU-SATUNYA tempat pembuatan master aset (Aturan 2). Detail Pegawai
+     * dan Detail Ruangan hanya memasang master yang sudah ada.
      */
     public function storeFlat(Request $request)
     {
@@ -304,51 +403,47 @@ private function isAdminAset(): bool
         $data = $this->validateData($request);
         $data['id_barang'] = $this->resolveBarang($request->input('nama_barang'));
 
-        $skpdPJ = $request->input('id_skpd');
-        $ruanganId = $request->input('id_ruangan');
+        // Effective room ditetapkan SATU KALI di awal, sebelum ada tulisan DB:
+        //   - ada pemegang  -> ruang kerja pemegang (form diabaikan)
+        //   - tanpa pemegang -> ruangan yang dipilih admin (boleh kosong)
+        $ruanganEfektif = $pegawaiId
+            ? AsetPenempatan::ruanganKerjaPemegang($pegawaiId)
+            : ($request->input('id_ruangan') ?: null);
 
-        // User UPT hanya boleh membuat aset di lokasi fisiknya sendiri.
-        // Alur tanpa pemegang wajib pilih ruangan; alur ber-pemegang boleh
-        // kosong (mengikuti ruang kerja pegawai).
-        if ($ruanganId || ! $pemegangId) {
-            $this->authorizeRuangan($ruanganId, 'menambah aset');
+        // Otorisasi ruang di luar cakupan HARUS ditolak sebelum Aset::create()
+        // agar penolakan tidak meninggalkan baris yatim. Ruangan kosong sah
+        // (master tanpa pemegang & tanpa ruangan); aset tanpa `id_lokasi`
+        // otomatis fail-closed oleh AsetScope.
+        if ($ruanganEfektif) {
+            $this->authorizeRuangan($ruanganEfektif, 'menambah aset');
         }
-        $this->authorizeLokasi($request->input('id_lokasi'), 'menambah aset');
 
-        // Lokasi fisik aset mengikuti lokasi ruang yang dipilih.
-        $lokasiId = $this->validasiLokasiDanRuangan($request, $ruanganId);
-
-        $data['id_skpd'] = $skpdPJ ?: AsetPenempatan::skpdUntukPemegang($pemegangId);
-        $data['id_lokasi'] = $lokasiId;
+        // `id_skpd` dan `id_lokasi` TIDAK PERNAH dari request. Satu-satunya
+        // sumber: Pemegang->pegawai.id_skpd / Ruangan.id_skpd, dan
+        // effective room->ruangan.id_lokasi (lihat AsetPenempatan).
+        $data['id_skpd'] = AsetPenempatan::skpdUntuk($pegawaiId, $ruanganEfektif);
+        $data['id_lokasi'] = AsetPenempatan::lokasiUntukRuangan($ruanganEfektif);
 
         $aset = Aset::create($data);
 
         // Alur manual: aset melekat langsung ke ruangan, tanpa pemegang.
-        if (! $pemegangId) {
-            $this->placeAtRoom($aset, $ruanganId);
+        if (! $pegawaiId) {
+            $this->placeAtRoom($aset, $ruanganEfektif);
 
             return null;
         }
 
-        // Alur dengan pemegang: aset dipegang pegawai. Ruangan aset mengikuti
-        // ruang kerja pemegang kecuali form menentukan ruang lain.
+        // Alur dengan pemegang: aset dipegang pegawai.
         PemegangAset::create([
             'id_aset' => $aset->id_aset,
-            'id_pegawai' => $pemegangId,
+            'id_pegawai' => $pegawaiId,
             'tanggal_mulai' => now()->toDateString(),
             'status' => 'aktif',
         ]);
 
-        $ruanganAset = $ruanganId ?: Pegawai::where('id_pegawai', $pemegangId)->value('id_ruangan');
+        $this->placeAtRoom($aset, $ruanganEfektif);
 
-        // Ruangan warisan pemegang juga harus berada dalam cakupan user.
-        if ($ruanganAset) {
-            $this->authorizeRuangan($ruanganAset, 'menambah aset');
-        }
-
-        $this->placeAtRoom($aset, $ruanganAset);
-
-        if (! $ruanganAset) {
+        if (! $ruanganEfektif) {
             return 'Pemegang belum punya ruangan. Aset akan tampil tanpa ruangan sampai ruangan pegawai diisi.';
         }
 
@@ -380,50 +475,28 @@ private function isAdminAset(): bool
     }
 
     /**
-     * Pastikan user boleh memakai lokasi tertentu (create/edit aset).
-     */
-    private function authorizeLokasi(?int $lokasiId, string $aksi = 'mengakses aset'): void
-    {
-        if ($lokasiId === null) {
-            return;
-        }
-
-        abort_unless(
-            $this->scope->bolehAksesLokasi($lokasiId),
-            403,
-            $this->scope->pesanAkses($aksi)
-        );
-    }
-
-    /**
-     * Lokasi fisik aset mengikuti lokasi ruang yang dipilih. Bila form
-     * mengirim lokasi yang tidak cocok dengan ruang tersebut, ditolak —
-     * aset tidak boleh tercatat berada di dua tempat.
-     */
-    private function validasiLokasiDanRuangan(Request $request, ?int $ruanganId): ?int
-    {
-        $lokasiId = $request->input('id_lokasi');
-        $lokasiRuangan = AsetPenempatan::lokasiUntukRuangan($ruanganId);
-
-        if ($lokasiRuangan) {
-            if ($lokasiId && (int) $lokasiId !== (int) $lokasiRuangan) {
-                throw ValidationException::withMessages([
-                    'id_lokasi' => 'Lokasi fisik tidak sesuai dengan ruangan yang dipilih. Pilih lokasi yang sama dengan ruang tersebut.',
-                ]);
-            }
-
-            return $lokasiRuangan;
-        }
-
-        return $lokasiId;
-    }
-
-    /**
      * Tempatkan aset secara manual ke ruangan tertentu (tanpa pemegang).
      */
     private function placeAtRoom(Aset $aset, ?int $ruanganId): ?int
     {
         return $aset->placeAtRoom($ruanganId);
+    }
+
+    /**
+     * Tutup penempatan aktif tanpa membuka yang baru.
+     *
+     * Dipakai saat asset harus berada tanpa ruangan (mis. pemegang baru belum
+     * punya ruang kerja). `Aset::placeAtRoom()` tidak menutup penempatan lama
+     * saat dipanggil dengan null, jadi penutupan dilakukan di sini agar
+     * `penempatan_aset` dan `aset.id_lokasi` tetap konsisten.
+     */
+    private function tutupPenempatanAktif(Aset $aset): void
+    {
+        PenempatanAset::where('id_aset', $aset->id_aset)
+            ->where('status', 'aktif')
+            ->update(['status' => 'tidak aktif', 'tanggal_selesai' => now()->toDateString()]);
+
+        $aset->unsetRelation('penempatanAktif');
     }
 
     /**
@@ -442,6 +515,8 @@ private function isAdminAset(): bool
             'id_pegawai' => $pemegang?->id_pegawai ?? null,
             'nama_pemegang' => $pemegang?->pegawai?->nama_pegawai ?? '',
             'id_ruangan' => $aset->penempatanAktif?->id_ruangan ?? null,
+            // SKPD & Lokasi = nilai turunan yang SUDAH dihitung server; dikirim
+            // ke form hanya sebagai tampilan (form tidak punya name untuk keduanya).
             'id_skpd' => $aset->id_skpd,
             'nama_skpd' => $aset->skpd?->nama_skpd ?? '',
             'id_lokasi' => $aset->id_lokasi,
@@ -512,7 +587,9 @@ private function isAdminAset(): bool
      */
     private function pegawaiTerlihat(): Builder
     {
-        $query = Pegawai::orderBy('nama_pegawai');
+        // `skpd` di-eager-load: option Pemegang pada form Edit mencarry nama
+        // SKPD untuk pratinjau turunan (nilai tetap dihitung server).
+        $query = Pegawai::with('skpd')->orderBy('nama_pegawai');
 
         if (! $this->scope->cakupanPenuh()) {
             $query->whereHas('ruangan', fn ($q) => $q->whereIn('id_lokasi', $this->scope->idLokasi() ?: [0]));
@@ -527,7 +604,7 @@ private function isAdminAset(): bool
     private function ruanganTerlihat(): Builder
     {
         $query = Ruangan::where('status', 'Aktif')
-            ->with('lokasi')
+            ->with(['lokasi', 'skpd'])
             ->orderBy('nama_ruangan');
 
         if (! $this->scope->cakupanPenuh()) {
@@ -835,32 +912,127 @@ private function isAdminAset(): bool
     }
 
     /**
-     * Perbarui data aset (tanpa pemegang/ruangan).
-     * Ganti pemegang / pindah ruangan dilakukan via aksi "Mutasi" terpisah.
+     * Perbarui data aset.
+     *
+     * Berbeda dari create, form Edit MEMILIKI field Pemegang + Ruangan:
+     *  - Aset SUDAH berpemegang aktif -> keduanya read-only. Crafted request
+     *    yang mencoba mengganti pemegang/ruangan ditolak 422; perubahan hanya
+     *    lewat Mutasi → Ganti Pemegang.
+     *  - Aset BELUM berpemegang -> Pemegang boleh diisi (initial assignment)
+     *    dan Ruangan boleh dipilih. Ini initial assignment, BUKAN mutasi:
+     *    tidak ada baris MutasiAset/DetailMutasiAset yang dibuat.
      */
     public function update(Request $request, Aset $aset)
     {
         $this->authorizeAdminAset();
         $this->authorizeAset($aset, 'memperbarui aset');
 
+        // Status sistem milik workflow penghapusan tidak boleh ditimpa lewat
+        // form edit (Aturan 15) — pengajuannya lewat aksi "Usulkan Hapus".
+        abort_if(
+            in_array($aset->status_aset, self::STATUS_SISTEM, true),
+            422,
+            'Aset berstatus '.$aset->status_aset.' tidak dapat diubah. Kelola lewat workflow penghapusan.'
+        );
+
         $data = $this->validateUpdateData($request, $aset);
         $data['id_barang'] = $this->resolveBarang($request->input('nama_barang'));
 
-        // Unit penanggung jawab & lokasi fisik boleh disetel dari form edit.
-        if ($request->filled('id_skpd')) {
-            $data['id_skpd'] = $request->input('id_skpd');
+        $pemegangAktif = $aset->pemegangSaatIni;
+        $ruanganAktif = $aset->penempatanAktif?->id_ruangan;
+
+        if ($pemegangAktif) {
+            // (A) Aset sudah berpemegang: Pemegang & Ruangan terkunci.
+            $this->tolakPerubahanPemegangSaatEdit($request, $pemegangAktif, $ruanganAktif);
+
+            $pegawaiEfektif = (int) $pemegangAktif->id_pegawai;
+            $ruanganEfektif = AsetPenempatan::ruanganKerjaPemegang($pegawaiEfektif);
+        } else {
+            // (B) Aset tanpa pemegang: initial assignment / pilih ruangan.
+            $pegawaiDiminta = $request->input('id_pegawai');
+
+            $pegawaiEfektif = $pegawaiDiminta !== null && $pegawaiDiminta !== ''
+                ? (int) $pegawaiDiminta
+                : null;
+
+            $ruanganEfektif = $pegawaiEfektif
+                ? AsetPenempatan::ruanganKerjaPemegang($pegawaiEfektif)
+                : ($request->input('id_ruangan') ?: null);
         }
 
-        if ($request->filled('id_lokasi')) {
-            $data['id_lokasi'] = $request->input('id_lokasi');
+        // Otorisasi ruangan TIDAK pernah ditolak setelah ada tulisan: dicek
+        // sebelum Aset::update() supaya 403 tidak meninggalkan perubahan.
+        if ($ruanganEfektif) {
+            $this->authorizeRuangan($ruanganEfektif, 'mengubah aset');
         }
 
         $aset->update($data);
 
+        // Initial assignment: aset tanpa pemegang aktif boleh diberi pemegang
+        // pertama kali lewat Edit. Bukan mutasi, jadi TIDAK ada MutasiAset /
+        // DetailMutasiAset yang dicatat.
+        if (! $pemegangAktif && $pegawaiEfektif) {
+            PemegangAset::create([
+                'id_aset' => $aset->id_aset,
+                'id_pegawai' => $pegawaiEfektif,
+                'tanggal_mulai' => now()->toDateString(),
+                'status' => 'aktif',
+            ]);
+        }
+
+        if ($ruanganEfektif) {
+            $this->placeAtRoom($aset, $ruanganEfektif);
+        } else {
+            // Effective room kosong (tanpa pemegang, atau Pemegang belum punya
+            // ruang kerja): penempatan lama ditutup supaya aset tidak diam-diam
+            // masih "berada" di ruangan yang tak berlaku dan id_lokasi ikut NULL.
+            $this->tutupPenempatanAktif($aset);
+        }
+
+        // SKPD + Lokasi SELALU dari effective source, bukan dari request.
+        // Pemegang yang sudah aktif ikut diteruskan supaya SKPD-nya tetap
+        // mengikuti pegawai (bukan ruangan, yang bisa NULL bila ruang bersama).
+        AsetPenempatan::sinkronAset($aset, $pegawaiEfektif, $ruanganEfektif);
+
         return response()->json([
             'success' => true,
             'message' => 'Aset berhasil diperbarui.',
+            'id_skpd' => $aset->fresh()->id_skpd,
+            'nama_skpd' => $aset->fresh()->skpd?->nama_skpd ?? '',
+            'id_lokasi' => $aset->fresh()->id_lokasi,
+            'nama_lokasi' => $aset->fresh()->lokasi?->nama_lokasi ?? '',
+            'id_ruangan' => $aset->fresh()->penempatanAktif?->id_ruangan,
+            'id_pegawai' => $aset->fresh()->pemegangSaatIni?->id_pegawai,
         ]);
+    }
+
+    /**
+     * Tolak crafted request yang mencoba mengganti Pemegang atau Ruangan pada
+     * aset yang SUDAH memiliki pemegang aktif.
+     *
+     * Pemegang hanya berubah lewat Mutasi → Ganti Pemegang; Ruangan selalu
+     * mengikuti ruang kerja pemegang. Value kosong TIDAK dianggap permintaan
+     * perubahan (form read-only tidak mengirim key).
+     */
+    private function tolakPerubahanPemegangSaatEdit(Request $request, $pemegangAktif, ?int $ruanganAktif): void
+    {
+        $pegawaiDiminta = $request->input('id_pegawai');
+
+        if ($pegawaiDiminta !== null && $pegawaiDiminta !== ''
+            && (int) $pegawaiDiminta !== (int) $pemegangAktif->id_pegawai) {
+            throw ValidationException::withMessages([
+                'id_pegawai' => 'Pemegang aset diubah melalui Mutasi → Ganti Pemegang.',
+            ]);
+        }
+
+        $ruanganDiminta = $request->input('id_ruangan');
+
+        if ($ruanganDiminta !== null && $ruanganDiminta !== ''
+            && (int) $ruanganDiminta !== (int) $ruanganAktif) {
+            throw ValidationException::withMessages([
+                'id_ruangan' => 'Ruangan mengikuti ruang kerja pemegang. Perubahan pemegang dilakukan melalui Mutasi → Ganti Pemegang.',
+            ]);
+        }
     }
 
     /**
@@ -873,11 +1045,12 @@ private function isAdminAset(): bool
         $this->authorizeAdminAset();
         $this->authorizeAset($aset, 'memutasi aset');
 
+        // `id_skpd` SENGAJA TIDAK ada di kontrak input: SKPD aset bukan input
+        // admin, tapi turunan master (pegawai/ruangan) yang dihitung server.
         $data = $request->validate([
             'tipe' => ['required', Rule::in(['pegawai', 'ruangan'])],
             'id_pegawai' => ['nullable', 'exists:pegawai,id_pegawai'],
             'id_ruangan' => ['nullable', 'exists:ruangan,id_ruangan'],
-            'id_skpd' => ['nullable', 'exists:skpd,id_skpd'],
             'keterangan' => ['nullable', 'string', 'max:500'],
         ]);
 
@@ -910,10 +1083,9 @@ private function isAdminAset(): bool
 
         // tipe = ruangan (Pindah Ruangan / Lokasi Fisik).
         //
-        // Berpemegang TIDAK lagi menjadi penghalang: pemindahan fisik adalah
-        // proses mutasi tersendiri, terpisah dari perpindahan kepemilikan.
-        // Lokasi aset mengikuti lokasi ruang tujuan, sedangkan unit
-        // penanggung jawab hanya berubah bila diminta eksplisit.
+        // HANYA untuk aset TANPA pemegang aktif (Aturan 9 & 18). Barang yang
+        // berpemegang mengikuti ruang kerja pemegangnya — bukan ruangan yang
+        // berdiri sendiri, jadi Pindah Ruangan tidak boleh dipakai padanya.
         $ruanganBaru = $data['id_ruangan'] ?? null;
 
         if (! $ruanganBaru) {
@@ -922,15 +1094,25 @@ private function isAdminAset(): bool
             ]);
         }
 
+        $this->authorizeRuangan((int) $ruanganBaru, 'memutasi aset ke ruangan');
+
+        $pemegangAktif = $aset->pemegangSaatIni?->pegawai?->nama_pegawai;
+
+        if ($pemegangAktif) {
+            throw ValidationException::withMessages([
+                'id_ruangan' => 'Aset memiliki pemegang; ruangan mengikuti pemegang. Gunakan Mutasi → Ganti Pemegang.',
+            ]);
+        }
+
         $ruanganLama = $aset->penempatanAktif?->id_ruangan;
         $lokasiLama = $aset->id_lokasi;
 
         $this->placeAtRoom($aset, $ruanganBaru);
 
-        // Unit penanggung jawab hanya ikut berubah bila diminta.
-        if (! empty($data['id_skpd'])) {
-            $aset->update(['id_skpd' => $data['id_skpd']]);
-        }
+        // SKPD + Lokasi untuk aset TANPA pemegang mengikuti ruangan tujuan:
+        // `ruangan.id_skpd` dan `ruangan.id_lokasi`. Nilai dari request
+        // (`id_skpd`) tidak pernah dipercaya.
+        AsetPenempatan::sinkronAset($aset, null, $ruanganBaru);
 
         if ($ruanganLama == $ruanganBaru) {
             return response()->json([
@@ -1018,6 +1200,18 @@ private function isAdminAset(): bool
     {
         $now = now()->toDateString();
 
+        // Effective room = ruang kerja pemegang baru (null bila pegawai belum
+        // punya ruangan). Ruangan lama dicatat sebagai riwayat sebelum berubah.
+        $ruanganLama = $aset->penempatanAktif?->id_ruangan;
+        $ruanganBaru = Pegawai::where('id_pegawai', $pemegangBaruId)->value('id_ruangan');
+
+        // Otorisasi dijalankan SEBELUM ada satu pun penulisan database, supaya
+        // penolakan tidak meninggalkan pemegang lama tertutup atau history
+        // setengah jadi.
+        if ($ruanganBaru) {
+            $this->authorizeRuangan($ruanganBaru, 'memindahkan aset ke pemegang baru');
+        }
+
         // Tutup pemegang lama
         PemegangAset::where('id_aset', $aset->id_aset)
             ->where('status', 'aktif')
@@ -1031,14 +1225,19 @@ private function isAdminAset(): bool
             'status' => 'aktif',
         ]);
 
-        // Lokasi aset mengikuti lokasi ruang tujuan. Unit penanggung jawab tidak
-        // ikut berubah — perpindahan kepemilikan bukan perpindahan fisik.
-        $ruanganLama = $aset->penempatanAktif?->id_ruangan;
-        $ruanganBaru = Pegawai::where('id_pegawai', $pemegangBaruId)->value('id_ruangan');
-
+        // Ruangan aset mengikuti ruang kerja pemegang baru.
         if ($ruanganBaru) {
             $this->placeAtRoom($aset, $ruanganBaru);
+        } else {
+            // Pemegang baru belum punya ruang: penempatan lama harus ditutup,
+            // kalau tidak aset tetap "berada" di ruang lamanya.
+            $this->tutupPenempatanAktif($aset);
         }
+
+        // SKPD aset mengikuti `pegawai.id_skpd` PEMEGANG BARU, dan lokasi
+        // mengikuti `ruangan.id_lokasi` ruang kerjanya. Keduanya NULL bila
+        // efektif tidak ada — nilai lama tidak dipertahankan.
+        AsetPenempatan::sinkronAset($aset, $pemegangBaruId, $ruanganBaru);
 
         // Catat mutasi sebagai riwayat
         $mutasi = MutasiAset::create([
@@ -1068,11 +1267,13 @@ private function isAdminAset(): bool
     {
         $asetId = $aset?->id_aset;
 
-        return $request->validate([
+        $data = $request->validate([
             'id_pegawai' => ['nullable', 'exists:pegawai,id_pegawai'],
             'id_ruangan' => ['nullable', 'exists:ruangan,id_ruangan'],
-            'id_skpd' => ['nullable', 'exists:skpd,id_skpd'],
-            'id_lokasi' => ['nullable', 'exists:lokasi,id_lokasi'],
+            // `id_skpd` dan `id_lokasi` SENGAJA tidak ada di aturan validasi:
+            // keduanya bukan input admin. Server menghitungnya dari
+            // Pemegang->pegawai.id_skpd / Ruangan.id_skpd dan
+            // effective room->ruangan.id_lokasi (lihat AsetPenempatan).
             'nama_barang' => ['required', 'string', 'max:100'],
             'nomor_kartu_barang' => ['required', 'string', 'max:255', Rule::unique('aset', 'nomor_kartu_barang')->ignore($asetId, 'id_aset')],
             'merk' => ['nullable', 'string', 'max:100'],
@@ -1081,8 +1282,39 @@ private function isAdminAset(): bool
             'tanggal_habis_pakai' => ['nullable', 'date'],
             'nilai_perolehan' => ['nullable', 'numeric'],
             'kondisi' => ['required', Rule::in(self::KONDISI)],
-            'status_aset' => ['required', 'string', 'max:50'],
+            'status_aset' => ['nullable', 'string', 'max:50'],
         ]);
+
+        // Buang key turunan kalau crafted request tetap mengirimnya.
+        unset($data['id_skpd'], $data['id_lokasi']);
+
+        $data['status_aset'] = $this->normalizeStatusAset($data['status_aset'] ?? null);
+
+        return $data;
+    }
+
+    /**
+     * Normalisasi + whitelist status aset yang boleh ditulis user.
+     *
+     * Trim + lowercase, kosong menjadi "aktif", dan nilai di luar
+     * {aktif, nonaktif} ditolak. Status sistem (diusulkan_hapus/dihapuskan)
+     * TIDAK bisa diieuwati lewat form ini.
+     */
+    private function normalizeStatusAset(mixed $value): string
+    {
+        $status = mb_strtolower(trim((string) $value));
+
+        if ($status === '') {
+            return 'aktif';
+        }
+
+        if (! in_array($status, self::STATUS_USER, true)) {
+            throw ValidationException::withMessages([
+                'status_aset' => 'Status aset hanya boleh "aktif" atau "nonaktif".',
+            ]);
+        }
+
+        return $status;
     }
 
     private function validateUpdateData(Request $request, ?Aset $aset = null): array
@@ -1090,8 +1322,13 @@ private function isAdminAset(): bool
         $asetId = $aset?->id_aset;
 
         $rules = [
-            'id_skpd' => ['nullable', 'exists:skpd,id_skpd'],
-            'id_lokasi' => ['nullable', 'exists:lokasi,id_lokasi'],
+            // `id_pegawai`/`id_ruangan` divalidasi di sini supaya initial
+            // assignment lewat Edit punya rules yang sama dengan create.
+            // `id_skpd` dan `id_lokasi` SENGAJA TIDAK divalidasi: keduanya
+            // bukan input admin dan selalu dihitung ulang dari effective
+            // source oleh AsetPenempatan::sinkronAset().
+            'id_pegawai' => ['nullable', 'exists:pegawai,id_pegawai'],
+            'id_ruangan' => ['nullable', 'exists:ruangan,id_ruangan'],
             'nama_barang' => ['required', 'string', 'max:100'],
             'nomor_kartu_barang' => ['required', 'string', 'max:255', Rule::unique('aset', 'nomor_kartu_barang')->ignore($asetId, 'id_aset')],
             'merk' => ['nullable', 'string', 'max:100'],
@@ -1100,10 +1337,15 @@ private function isAdminAset(): bool
             'tanggal_habis_pakai' => ['nullable', 'date'],
             'nilai_perolehan' => ['nullable', 'numeric'],
             'kondisi' => ['required', Rule::in(self::KONDISI)],
-            'status_aset' => ['required', 'string', 'max:50'],
+            'status_aset' => ['nullable', 'string', 'max:50'],
         ];
 
         $data = $request->validate($rules);
+
+        // Buang key turunan kalau crafted request tetap mengirimnya.
+        unset($data['id_skpd'], $data['id_lokasi']);
+
+        $data['status_aset'] = $this->normalizeStatusAset($data['status_aset'] ?? null);
 
         return $data;
     }

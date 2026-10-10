@@ -62,15 +62,17 @@
             <a href="{{ route('aset-barang.label.download', $pegawai->id_pegawai) }}"
                class="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-700 shadow-2xs transition hover:bg-amber-100"
                title="Unduh semua label aset pegawai dalam format Excel">
-                <svg class="h-4 w-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6z"/></svg>
+                <svg class="h-4 w-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6h.008v.008H6V6z"/></svg>
                 <span>Cetak Semua Label</span>
             </a>
 
-            {{-- 4. Tombol Utama --}}
-            <button type="button" id="btn-tambah" class="inline-flex items-center gap-1.5 rounded-xl bg-disbun-700 px-4 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-disbun-800">
+            {{-- 4. Tombol Utama: Pasang Aset (existing master, bukan membuat master baru) --}}
+            @if ($asetPasang->isNotEmpty())
+            <button type="button" id="btn-pasang" class="inline-flex items-center gap-1.5 rounded-xl bg-disbun-700 px-4 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-disbun-800">
                 <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-                Tambah Aset
+                Pasang Aset
             </button>
+            @endif
         </div>
         @endif
     </div>
@@ -88,7 +90,7 @@
                     $words = preg_split('/\s+/', trim((string) $pegawai->nama_pegawai));
                     $initOne = mb_substr($words[0] ?? '?', 0, 1);
                     $initTwo = isset($words[1]) ? mb_substr($words[1], 0, 1) : mb_substr($words[0] ?? '', 1, 1);
-                    $inisial = strtoupper($initOne . $initTwo);
+                    $inisial = strtoupper($initOne.$initTwo);
                 @endphp
                 {{-- Avatar Kotak --}}
                 <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-xl font-extrabold tracking-wide text-white shadow-md">
@@ -174,10 +176,10 @@
                                     <td class="whitespace-nowrap px-3 py-4 text-sm">
                                         <div class="inline-flex items-center gap-1 rounded-2xl border border-slate-200/70 bg-slate-50/60 p-1 shadow-2xs">
                                             <a href="{{ route('aset-barang.cetak.label.single', $aset->id_aset) }}" target="_blank" title="Cetak Label" class="flex h-7 w-7 items-center justify-center rounded-xl bg-amber-50 text-amber-600 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
-                                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.01"/></svg>
+                                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6h.01"/></svg>
                                             </a>
                                             <button type="button" data-delete-target="{{ $aset->id_aset }}" data-delete-name="{{ $aset->barang->nama_barang ?? $aset->nomor_kartu_barang }}" title="Hapus" class="flex h-7 w-7 items-center justify-center rounded-xl bg-red-50 text-red-600 transition hover:bg-red-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
-                                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                                             </button>
                                         </div>
                                     </td>
@@ -195,116 +197,52 @@
     </div>
 
     @if ($isAdminAset)
-        {{-- Modal Tambah / Edit Aset --}}
-        <div id="aset-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
-            <div class="fixed inset-0" data-modal-close></div>
-            <div class="relative w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
-                    <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
-                        <div>
-                            <h3 id="modal-title" class="text-lg font-semibold text-slate-900">Tambah Aset</h3>
-                            <p id="modal-subtitle" class="mt-0.5 text-sm text-slate-500">Aset baru akan dipegang oleh {{ $pegawai->nama_pegawai }}.</p>
+        {{-- Modal Pasang Aset ke Pegawai.
+             PENEMPATAN AWAL: memasang master aset yang sudah ada.
+             Tidak membuat record `aset` baru. Ruangan ditentukan server dari
+             ruang kerja pegawai sehingga tidak ada input ruangan di sini. --}}
+        <div id="pasang-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
+            <div class="fixed inset-0" data-pasang-close></div>
+            <div class="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+                <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
+                    <div>
+                        <h3 class="text-lg font-semibold text-slate-900">Pasang Aset</h3>
+                        <p class="mt-0.5 text-sm text-slate-500">Pilih master aset yang sudah ada untuk {{ $pegawai->nama_pegawai }}.</p>
+                    </div>
+                    <button type="button" data-pasang-close class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Tutup">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+
+                <form id="pasang-form" method="POST" autocomplete="off">
+                    @csrf
+                    <div class="max-h-[70vh] space-y-4 overflow-y-auto px-6 py-6">
+                        <div class="space-y-1.5">
+                            <label for="field-aset-select" class="block text-sm font-medium text-slate-700">Master Aset <span class="text-red-500">*</span></label>
+                            <select id="field-aset-select" required class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                                <option value="">-- Pilih Master Aset --</option>
+                                @foreach ($asetPasang as $kandidat)
+                                    <option value="{{ $kandidat->id_aset }}">{{ $kandidat->barang?->nama_barang ?? '-' }} — {{ $kandidat->nomor_kartu_barang }}</option>
+                                @endforeach
+                            </select>
+                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_aset"></p>
                         </div>
-                        <button type="button" data-modal-close class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Tutup">
-                            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                        </button>
+
+                        <div class="space-y-1 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
+                            <p class="font-semibold text-slate-700">Ruangan mengikuti ruang kerja {{ $pegawai->nama_pegawai }}.</p>
+                            <p class="mt-1">Ruang kerja: <span class="font-semibold text-slate-800">{{ $pegawai->ruangan?->nama_ruangan ?? 'Pegawai belum punya ruangan' }}</span></p>
+                            <p class="mt-1">Ruangan tidak dapat dipilih di sini — pemegangnya yang menentukan lokasi aset.</p>
+                        </div>
                     </div>
 
-                    <form id="aset-form" method="POST" action="{{ route('aset-barang.store', $pegawai->id_pegawai) }}" autocomplete="off">
-                        @csrf
-                        <input type="hidden" id="field-id" name="id" value="">
-                        <div class="max-h-[90vh] space-y-5 overflow-y-auto px-6 py-6">
-                            <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                                <div class="space-y-1.5">
-                                    <label for="field-pegawai" class="block text-sm font-medium text-slate-700">Pemegang <span class="text-red-500">*</span></label>
-                                    <select id="field-pegawai" name="id_pegawai" required class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                                        @foreach ($allPegawai as $p)
-                                            <option value="{{ $p->id_pegawai }}" data-skpd="{{ $p->id_skpd ?? '' }}" @selected($p->id_pegawai === $pegawai->id_pegawai)>{{ $p->nama_pegawai }}</option>
-                                        @endforeach
-                                    </select>
-                                    <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_pegawai"></p>
-                                </div>
-
-                                <div class="space-y-1.5">
-                                    <label for="field-skpd" class="block text-sm font-medium text-slate-700">Unit Penanggung Jawab Aset</label>
-                                    <select id="field-skpd" name="id_skpd" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                                        <option value="">-- Pilih Unit PJ --</option>
-                                        @foreach ($skpdOptions as $skpd)
-                                            <option value="{{ $skpd->id_skpd }}">{{ $skpd->nama_skpd }} ({{ $skpd->jenis_skpd }})</option>
-                                        @endforeach
-                                    </select>
-                                    <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_skpd"></p>
-                                    <p class="text-xs text-slate-400">Default mengikuti SKPD pemegang; boleh diubah bila perlu.</p>
-                                </div>
-
-                                <div class="space-y-1.5">
-                                    <label for="field-barang" class="block text-sm font-medium text-slate-700">Nama Barang <span class="text-red-500">*</span></label>
-                                    <input type="text" id="field-barang" name="nama_barang" required maxlength="100" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: Laptop">
-                                    <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="nama_barang"></p>
-                                </div>
-
-                                <div class="space-y-1.5">
-                                    <label for="field-kartu" class="block text-sm font-medium text-slate-700">Nomor Kartu Barang <span class="text-red-500">*</span></label>
-                                    <input type="text" id="field-kartu" name="nomor_kartu_barang" maxlength="50" required class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: KIB-001">
-                                    <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="nomor_kartu_barang"></p>
-                                </div>
-
-                                <div class="space-y-1.5">
-                                    <label for="field-merk" class="block text-sm font-medium text-slate-700">Merk</label>
-                                    <input type="text" id="field-merk" name="merk" maxlength="100" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: Canon">
-                                    <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="merk"></p>
-                                </div>
-
-                                <div class="space-y-1.5">
-                                    <label for="field-pengadaan" class="block text-sm font-medium text-slate-700">Tanggal Pengadaan</label>
-                                    <input type="date" id="field-pengadaan" name="tanggal_pengadaan" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                                    <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="tanggal_pengadaan"></p>
-                                </div>
-
-                                <div class="space-y-1.5">
-                                    <label for="field-perolehan" class="block text-sm font-medium text-slate-700">Tanggal Perolehan</label>
-                                    <input type="date" id="field-perolehan" name="tanggal_perolehan" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                                    <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="tanggal_perolehan"></p>
-                                </div>
-
-                                <div class="space-y-1.5">
-                                    <label for="field-habis-pakai" class="block text-sm font-medium text-slate-700">Tanggal Habis Pakai</label>
-                                    <input type="date" id="field-habis-pakai" name="tanggal_habis_pakai" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                                    <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="tanggal_habis_pakai"></p>
-                                </div>
-
-                                <div class="space-y-1.5">
-                                    <label for="field-nilai" class="block text-sm font-medium text-slate-700">Nilai Perolehan</label>
-                                    <input type="number" id="field-nilai" name="nilai_perolehan" step="0.01" min="0" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: 5000000">
-                                    <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="nilai_perolehan"></p>
-                                </div>
-
-                                <div class="space-y-1.5">
-                                    <label for="field-kondisi" class="block text-sm font-medium text-slate-700">Kondisi <span class="text-red-500">*</span></label>
-                                    <select id="field-kondisi" name="kondisi" required class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                                        <option value="" selected>-- Pilih Kondisi --</option>
-                                        @foreach ($kondisiList as $kondisi)
-                                            <option value="{{ $kondisi }}">{{ $kondisi }}</option>
-                                        @endforeach
-                                    </select>
-                                    <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="kondisi"></p>
-                                </div>
-
-                                <div class="space-y-1.5">
-                                    <label for="field-status" class="block text-sm font-medium text-slate-700">Status Aset <span class="text-red-500">*</span></label>
-                                    <input type="text" id="field-status" name="status_aset" required maxlength="50" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: aktif">
-                                    <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="status_aset"></p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="flex items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
-                            <button type="button" data-modal-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
-                            <button type="submit" id="btn-submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-disbun-700 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-disbun-800">
-                                Simpan
-                            </button>
-                        </div>
-                    </form>
-                </div>
+                    <div class="flex items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
+                        <button type="button" data-pasang-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
+                        <button type="submit" id="btn-pasang-submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-disbun-700 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-disbun-800">
+                            Pasang
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
 
         {{-- Modal Konfirmasi Hapus --}}
@@ -313,7 +251,7 @@
             <div class="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
                     <div class="flex items-start gap-4">
                         <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-100">
-                            <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                            <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
                         </div>
                         <div class="min-w-0">
                             <h3 class="text-lg font-semibold text-slate-900">Usulkan Penghapusan Aset</h3>
@@ -337,7 +275,7 @@
                             <p class="mt-0.5 text-sm text-slate-500">Hasil scan tanda tangan basah SPPBI {{ $pegawai->nama_pegawai }}.</p>
                         </div>
                         <button type="button" data-ttd-close class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Tutup">
-                            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                         </button>
                     </div>
 
@@ -371,32 +309,11 @@
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
         const isAdminAset = @json($isAdminAset);
 
-        const storeUrl = @json(route('aset-barang.store', $pegawai->id_pegawai));
-        const updateUrl = @json(route('aset-barang.aset.update', ['aset' => '__ID__']));
+        // PENTING: URL dasar aset dipakai oleh aksi "Usulkan Hapus" (DELETE).
+        const asetUrl = @json(route('aset-barang.aset.update', ['aset' => '__ID__']));
+        const pasangUrlTemplate = @json(route('aset-barang.aset.pasang.pegawai', ['pegawai' => $pegawai->id_pegawai, 'aset' => '__ID__']));
 
-        const modal = document.getElementById('aset-modal');
         const deleteModal = document.getElementById('delete-modal');
-        const form = document.getElementById('aset-form');
-
-        function showErrors(errors) {
-            form.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
-            Object.keys(errors).forEach(field => {
-                const err = form.querySelector('[data-error-for="' + field + '"]');
-                if (err) { err.textContent = errors[field][0]; err.classList.remove('hidden'); }
-            });
-        }
-
-        function openModal() {
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
-            document.body.classList.add('overflow-hidden');
-        }
-        function closeModal() {
-            modal.classList.add('hidden');
-            modal.classList.remove('flex');
-            document.body.classList.remove('overflow-hidden');
-            form.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
-        }
 
         function openDeleteModal(id, name) {
             if (!deleteModal) return;
@@ -411,103 +328,92 @@
             deleteModal.classList.remove('flex');
         }
 
-        // Default Unit PJ mengikuti SKPD pemegang yang dipilih.
-        const fieldPegawaiShow = document.getElementById('field-pegawai');
-        const fieldSkpdShow = document.getElementById('field-skpd');
-        function syncSkpdFromPegawai() {
-            const opt = fieldPegawaiShow.selectedOptions[0];
-            if (fieldSkpdShow && opt) {
-                fieldSkpdShow.value = (opt.dataset.skpd ?? '');
-            }
-        }
-        if (fieldPegawaiShow) {
-            fieldPegawaiShow.addEventListener('change', syncSkpdFromPegawai);
-            syncSkpdFromPegawai();
-        }
+        // ---- Pasang Aset ke Pegawai (penempatan awal, tanpa membuat master) ----
+        const pasangModal = document.getElementById('pasang-modal');
+        const pasangForm = document.getElementById('pasang-form');
+        const btnPasang = document.getElementById('btn-pasang');
 
-        if (form) {
-            const btnTambah = document.getElementById('btn-tambah');
-            if (btnTambah) {
-                btnTambah.addEventListener('click', () => {
-                    form.reset();
-                    document.getElementById('field-id').value = '';
-                    document.getElementById('field-pegawai').value = @json($pegawai->id_pegawai);
-                    syncSkpdFromPegawai();
-                    form.action = storeUrl;
-                    document.getElementById('modal-title').textContent = 'Tambah Aset';
-                    document.getElementById('modal-subtitle').textContent = 'Aset baru akan dipegang oleh ' + @json($pegawai->nama_pegawai) + '.';
-                    document.getElementById('btn-submit').textContent = 'Simpan';
-                    form.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
-                    openModal();
-                });
-            }
-
-            document.querySelectorAll('[data-edit-modal]').forEach(btn => {
-                btn.addEventListener('click', async () => {
-                    const id = btn.dataset.editModal;
-                    form.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
-                    try {
-                        const res = await fetch(updateUrl.replace('__ID__', id), { headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } });
-                        if (!res.ok) throw new Error('Gagal mengambil data');
-                        const data = await res.json();
-                        document.getElementById('field-id').value = data.id_aset;
-                        document.getElementById('field-pegawai').value = data.id_pegawai ?? '';
-                        document.getElementById('field-barang').value = data.nama_barang ?? '';
-                        document.getElementById('field-kartu').value = data.nomor_kartu_barang ?? '';
-                        document.getElementById('field-merk').value = data.merk ?? '';
-                        document.getElementById('field-pengadaan').value = data.tanggal_pengadaan ?? '';
-                        document.getElementById('field-perolehan').value = data.tanggal_perolehan ?? '';
-                        document.getElementById('field-habis-pakai').value = data.tanggal_habis_pakai ?? '';
-                        document.getElementById('field-nilai').value = data.nilai_perolehan ?? '';
-                        document.getElementById('field-kondisi').value = data.kondisi ?? '';
-                        document.getElementById('field-status').value = data.status_aset ?? '';
-                        document.getElementById('field-skpd').value = data.id_skpd ?? '';
-                        form.action = updateUrl.replace('__ID__', id);
-                        document.getElementById('modal-title').textContent = 'Edit Aset';
-                        document.getElementById('modal-subtitle').textContent = 'Perbarui data aset.';
-                        document.getElementById('btn-submit').textContent = 'Perbarui';
-                        openModal();
-                    } catch (e) {
-                        alert(e.message);
-                    }
-                });
+        function clearPasangErrors() {
+            if (!pasangForm) return;
+            pasangForm.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
+        }
+        function showPasangErrors(errors) {
+            if (!pasangForm) return;
+            pasangForm.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
+            Object.keys(errors || {}).forEach(field => {
+                const err = pasangForm.querySelector('[data-error-for="' + field + '"]');
+                if (err) { err.textContent = errors[field][0]; err.classList.remove('hidden'); }
             });
+        }
+        function openPasangModal() {
+            if (!pasangModal) return;
+            pasangModal.classList.remove('hidden');
+            pasangModal.classList.add('flex');
+            document.body.classList.add('overflow-hidden');
+            clearPasangErrors();
+            const select = document.getElementById('field-aset-select');
+            if (select) select.value = '';
+        }
+        function closePasangModal() {
+            if (!pasangModal) return;
+            pasangModal.classList.add('hidden');
+            pasangModal.classList.remove('flex');
+            document.body.classList.remove('overflow-hidden');
+            clearPasangErrors();
+        }
 
-            form.addEventListener('submit', async (e) => {
+        if (btnPasang && pasangModal) {
+            btnPasang.addEventListener('click', openPasangModal);
+            pasangModal.querySelectorAll('[data-pasang-close]').forEach(el => el.addEventListener('click', closePasangModal));
+        }
+
+        if (pasangForm) {
+            pasangForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
-                const submit = document.getElementById('btn-submit');
+                const submit = document.getElementById('btn-pasang-submit');
                 const original = submit.textContent;
-                submit.textContent = 'Menyimpan...';
+                const idAset = document.getElementById('field-aset-select').value;
+
+                if (!idAset) {
+                    showPasangErrors({ id_aset: ['Pilih master aset yang akan dipasang.'] });
+                    return;
+                }
+
+                submit.textContent = 'Memasang...';
                 submit.disabled = true;
-                const body = new FormData(form);
                 try {
-                    const res = await fetch(form.action, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken }, body });
+                    const res = await fetch(pasangUrlTemplate.replace('__ID__', idAset), {
+                        method: 'POST',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+                    });
+
                     if (res.status === 422) {
-                        const data = await res.json();
-                        showErrors(data.errors);
+                        const data = await res.json().catch(() => ({}));
+                        showPasangErrors(data.errors || {});
                         submit.textContent = original;
                         submit.disabled = false;
                         return;
                     }
+
+                    const data = await res.json().catch(() => ({}));
+
                     if (res.ok) {
-                        const data = await res.json();
                         window.location.reload();
                         if (data.warning) {
                             setTimeout(() => alert(data.warning), 100);
                         }
-                    } else {
-                        alert('Terjadi kesalahan. Coba lagi.');
-                        submit.textContent = original;
-                        submit.disabled = false;
+                        return;
                     }
+
+                    alert(data.message || 'Gagal memasang aset.');
+                    submit.textContent = original;
+                    submit.disabled = false;
                 } catch (err) {
                     alert('Koneksi bermasalah. Coba lagi.');
                     submit.textContent = original;
                     submit.disabled = false;
                 }
             });
-
-            modal.querySelectorAll('[data-modal-close]').forEach(el => el.addEventListener('click', closeModal));
         }
 
         const modalTtd = document.getElementById('modal-ttd');
@@ -559,7 +465,7 @@
                 btnConfirm.textContent = 'Memproses...';
                 btnConfirm.disabled = true;
                 try {
-                    const res = await fetch(updateUrl.replace('__ID__', id), { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken } });
+                    const res = await fetch(asetUrl.replace('__ID__', id), { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken } });
                     if (res.ok) {
                         window.location.reload();
                     } else {

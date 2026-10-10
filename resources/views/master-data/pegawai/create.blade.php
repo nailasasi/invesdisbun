@@ -9,9 +9,11 @@
         </x-slot:actions>
     </x-page-header>
 
+    <x-alert type="error" />
+
     <form action="{{ route('master-data.pegawai.store') }}" method="POST">
         @csrf
-        @include('master-data.pegawai._form', ['skpdList' => $skpdList])
+        @include('master-data.pegawai._form', ['pegawai' => null, 'skpdList' => $skpdList, 'ruanganList' => $ruanganList, 'lokasiDinas' => $lokasiDinas])
 
         <div class="mt-6 flex items-center justify-end gap-2">
             <x-button href="{{ route('master-data.pegawai.index') }}" variant="secondary">Batal</x-button>

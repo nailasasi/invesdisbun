@@ -16,16 +16,20 @@ use Illuminate\Support\Collection;
  * Semua query aset WAJIB melewati `terapkan()`. Menyembunyikan menu di
  * frontend bukan keamanan; filter harus ada di query/controller.
  *
- * Role generik (lihat migration 2026_10_01_000009):
- *   Admin Aset  -> seluruh aset lintas unit
- *   Admin Bidang-> seluruh aset lingkungan dinas, termasuk aset di UPT
+ * Role generik (lihat migration 2026_10_01_000009) + penempatan skpd user:
+ *   Admin Aset  -> cakupan penuh, seluruh aset lintas unit
+ *   Admin Bidang-> HANYA lokasi Dinas (bila penempatannya Bidang);
+ *                  selain itu / identitas NULL -> DENY
+ *   Admin UPT   -> HANYA lokasi UPT miliknya (bila penempatannya UPT);
+ *                  selain itu / identitas NULL -> DENY
  *   Pegawai     -> mengikuti skpd-nya:
- *                    skpd non-UPT (Bidang/Sekretariat) -> seluruh aset dinas
- *                    skpd UPT                         -> hanya aset di lokasi UPT
- *   Admin UPT   -> hanya aset yang lokasinya di dalam lokasi UPT tersebut
+ *                    skpd UPT          -> hanya aset di lokasi UPT tsb
+ *                    skpd Bidang/Sekretariat -> hanya aset di lokasi Dinas
+ *                  identitas NULL/tanpa pegawai -> DENY
+ *   Role tak dikenal / tanpa role -> DENY (deny by default).
  *
  * Penentuan UPT memakai `skpd.jenis_skpd` (migration 2026_10_01_000010),
- * bukan inferensi nama.
+ * bukan inferensi nama. Tabel role <-> placement di `idLokasi()`.
  *
  * Aset tanpa lokasi fisik (belum pernah ditempatkan) tetap mengikuti aturan
  * yang sama: hanya terlihat oleh user dengan cakupan penuh.
@@ -154,24 +158,15 @@ class AsetScope
     }
 
     /**
-     * True bila user berwenang administers seluruh unit.
+     * True bila user berwenang mengakses seluruh unit (lintas skpd).
      *
-     * Cakupan penuh hanya untuk role yang memang berwenang: Admin Aset,
-     * Admin Bidang, dan Pegawai non-UPT. Role tak dikenal / user tanpa
-     * role TIDAK mendapat cakupan penuh (fail closed).
+     * Cakupan penuh HANYA untuk Admin Aset. Role lain — termasuk Admin
+     * Bidang dan Admin UPT — dibatasi lokasi di `idLokasi()`. Role tak
+     * dikenal / user tanpa role TIDAK mendapat cakupan penuh (fail closed).
      */
     public function cakupanPenuh(): bool
     {
-        if (! $this->roleValid()) {
-            return false;
-        }
-
-        if ($this->isAdminAset() || $this->roleKey() === mb_strtolower(self::ROLE_ADMIN_BIDANG)) {
-            return true;
-        }
-
-        // Pegawai / Admin UPT: seluruh dinas KECUALI bila skpd-nya UPT.
-        return ! $this->adalahUpt();
+        return $this->roleValid() && $this->isAdminAset();
     }
 
     // ------------------------------------------------------------------
@@ -189,8 +184,19 @@ class AsetScope
     }
 
     /**
-     * ID lokasi fisik yang boleh diakses user. Null = tidak ada lokasi
-     * yang boleh diakses (fail closed), bukan "semua".
+     * ID lokasi fisik yang boleh diakses user.
+     *
+     * - Admin Aset (cakupan penuh): null = tanpa filter lokasi. Caller WAJIB
+     *   mengecek `cakupanPenuh()` sebelum memakai nilai ini (konvensi lama).
+     * - Role lain: array lokasi sah, ATAU null = DENY (fail closed) bila
+     *   role tak dikenal / penempatan skpd tidak cocok dengan role /
+     *   identitas NULL (tanpa pegawai, id_skpd kosong, dsb).
+     *
+     * Tabel penempatan (role <-> jenis_skpd):
+     *   Admin Bidang : Bidang -> [lokasi Dinas]; selain itu -> deny
+     *   Admin UPT    : UPT    -> [lokasi UPT-nya]; selain itu -> deny
+     *   Pegawai      : UPT    -> [lokasi UPT-nya]
+     *                  Bidang/Sekretariat -> [lokasi Dinas]; selain itu -> deny
      */
     public function idLokasi(): ?array
     {
@@ -201,15 +207,29 @@ class AsetScope
         $this->idLokasiSudahDihitung = true;
         $this->idLokasiUpt = [];
 
-        if ($this->cakupanPenuh() || ! $this->adalahUpt()) {
-            // Cakupan penuh tidak difilter lokasi; user non-UPT tanpa lokasi
-            // juga tidak perlu daftar lokasi.
-            $this->idLokasiUpt = [];
-
+        // Cakupan penuh tidak difilter lokasi; tetap null agar konsisten
+        // dengan konvensi lama (caller cek cakupanPenuh() lebih dulu).
+        if ($this->cakupanPenuh()) {
             return null;
         }
 
-        $lokasi = Lokasi::untukSkpd($this->skpdId);
+        // Role tak dikenal / tanpa role -> deny.
+        if (! $this->roleValid()) {
+            return null;
+        }
+
+        $lokasi = match (true) {
+            $this->roleKey() === mb_strtolower(self::ROLE_ADMIN_BIDANG) =>
+                $this->jenisSkpd() === 'Bidang' ? Lokasi::dinas() : null,
+            $this->isAdminUpt() =>
+                $this->jenisSkpd() === 'UPT' ? Lokasi::untukSkpd($this->skpdId) : null,
+            $this->roleKey() === mb_strtolower(self::ROLE_PEGAWAI) => match ($this->jenisSkpd()) {
+                'UPT' => Lokasi::untukSkpd($this->skpdId),
+                'Bidang', 'Sekretariat' => Lokasi::dinas(),
+                default => null,
+            },
+            default => null,
+        };
 
         $this->idLokasiUpt = $lokasi ? [$lokasi->id_lokasi] : [];
 

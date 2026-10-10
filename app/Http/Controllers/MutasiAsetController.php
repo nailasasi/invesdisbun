@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\MutasiAset;
 use App\Models\Kendaraan;
 use App\Models\DetailMutasiAset;
+use App\Models\Pegawai;
 use App\Models\TemplateDokumen;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -92,6 +93,8 @@ class MutasiAsetController extends Controller
         $p1 = $detail->pegawaiLama;
         $p2 = $detail->pegawaiBaru;
         $aset = $detail->aset;
+        $pihak1 = $this->resolvePihak($p1, $this->namaPemegangLamaDariKeterangan($mutasi->keterangan));
+        $pihak2 = $this->resolvePihak($p2);
 
         // 1. Cara standar PhpWord: placeholder ${...}
         $phpWord->setValue('hari', $tgl->translatedFormat('l'));
@@ -99,13 +102,15 @@ class MutasiAsetController extends Controller
         $phpWord->setValue('bulan', $tgl->translatedFormat('F'));
         $phpWord->setValue('tahun_terbilang', $this->terbilang((int) $tgl->format('Y')));
 
-        $phpWord->setValue('nama_pihak_pertama', $p1->nama_pegawai ?? '-');
-        $phpWord->setValue('nip_pihak_pertama', $p1->nip ?? '-');
-        $phpWord->setValue('jabatan_pihak_pertama', $p1->jabatan ?? '-');
+        $phpWord->setValue('nama_pihak_pertama', $pihak1['nama']);
+        $phpWord->setValue('nip_pihak_pertama', $pihak1['nip']);
+        $phpWord->setValue('jabatan_pihak_pertama', $pihak1['jabatan']);
+        $phpWord->setValue('alamat_pihak_pertama', $pihak1['alamat']);
 
-        $phpWord->setValue('nama_pihak_kedua', $p2->nama_pegawai ?? '-');
-        $phpWord->setValue('nip_pihak_kedua', $p2->nip ?? '-');
-        $phpWord->setValue('jabatan_pihak_kedua', $p2->jabatan ?? '-');
+        $phpWord->setValue('nama_pihak_kedua', $pihak2['nama']);
+        $phpWord->setValue('nip_pihak_kedua', $pihak2['nip']);
+        $phpWord->setValue('jabatan_pihak_kedua', $pihak2['jabatan']);
+        $phpWord->setValue('alamat_pihak_kedua', $pihak2['alamat']);
 
         $phpWord->setValue('nomor', '1');
         $phpWord->setValue('nama_barang', $aset->barang->nama_barang ?? '-');
@@ -122,12 +127,14 @@ class MutasiAsetController extends Controller
             '{tanggal_terbilang}' => $this->terbilang((int) $tgl->format('d')),
             '{bulan}'             => $tgl->translatedFormat('F'),
             '{tahun_terbilang}'   => $this->terbilang((int) $tgl->format('Y')),
-            '{nama_pihak_pertama}'  => $p1->nama_pegawai ?? '-',
-            '{nip_pihak_pertama}'   => $p1->nip ?? '-',
-            '{jabatan_pihak_pertama}' => $p1->jabatan ?? '-',
-            '{nama_pihak_kedua}'    => $p2->nama_pegawai ?? '-',
-            '{nip_pihak_kedua}'     => $p2->nip ?? '-',
-            '{jabatan_pihak_kedua}' => $p2->jabatan ?? '-',
+            '{nama_pihak_pertama}'  => $pihak1['nama'],
+            '{nip_pihak_pertama}'   => $pihak1['nip'],
+            '{jabatan_pihak_pertama}' => $pihak1['jabatan'],
+            '{alamat_pihak_pertama}' => $pihak1['alamat'],
+            '{nama_pihak_kedua}'    => $pihak2['nama'],
+            '{nip_pihak_kedua}'     => $pihak2['nip'],
+            '{jabatan_pihak_kedua}' => $pihak2['jabatan'],
+            '{alamat_pihak_kedua}' => $pihak2['alamat'],
             '{nomor}'           => '1',
             '{nama_barang}'     => $aset->barang->nama_barang ?? '-',
             '{merk_barang}'     => $aset->merk ?? '-',
@@ -179,6 +186,8 @@ class MutasiAsetController extends Controller
         $knd = Kendaraan::where('id_aset', $aset->id_aset)->first();
         $platAktif = $knd?->platAktif;
         $namaKendaraan = $aset?->barang?->nama_barang ?? $knd?->merk ?? '-';
+        $pihak1 = $this->resolvePihak($p1, $this->namaPemegangLamaDariKeterangan($mutasi->keterangan));
+        $pihak2 = $this->resolvePihak($p2, $knd?->pemegang);
 
         // Sesuaikan placeholder dengan template 'bast_kendaraan'.
         $values = [
@@ -186,12 +195,14 @@ class MutasiAsetController extends Controller
             'tanggal_terbilang' => $this->terbilang((int) $tgl->format('d')),
             'bulan' => $tgl->translatedFormat('F'),
             'tahun_terbilang' => $this->terbilang((int) $tgl->format('Y')),
-            'nama_pihak_pertama' => $p1->nama_pegawai ?? '-',
-            'nip_pihak_pertama' => $p1->nip ?? '-',
-            'jabatan_pihak_pertama' => $p1->jabatan ?? '-',
-            'nama_pihak_kedua' => $p2->nama_pegawai ?? '-',
-            'nip_pihak_kedua' => $p2->nip ?? '-',
-            'jabatan_pihak_kedua' => $p2->jabatan ?? '-',
+            'nama_pihak_pertama' => $pihak1['nama'],
+            'nip_pihak_pertama' => $pihak1['nip'],
+            'jabatan_pihak_pertama' => $pihak1['jabatan'],
+            'alamat_pihak_pertama' => $pihak1['alamat'],
+            'nama_pihak_kedua' => $pihak2['nama'],
+            'nip_pihak_kedua' => $pihak2['nip'],
+            'jabatan_pihak_kedua' => $pihak2['jabatan'],
+            'alamat_pihak_kedua' => $pihak2['alamat'],
             'nomor' => '1',
             'no_plat' => $platAktif?->nomor_plat ?? '-',
             'jenis_kendaraan' => $namaKendaraan,
@@ -251,6 +262,7 @@ class MutasiAsetController extends Controller
         $knd = Kendaraan::where('id_aset', $aset->id_aset)->first();
         $platAktif = $knd?->platAktif;
         $namaKendaraan = $aset?->barang?->nama_barang ?? $knd?->merk ?? '-';
+        $pihak2 = $this->resolvePihak($p2, $knd?->pemegang);
 
         // Ambil nomor surat dari keterangan jika dicatat saat mutasi.
         $nomorSurat = '';
@@ -261,9 +273,10 @@ class MutasiAsetController extends Controller
         // Sesuaikan placeholder dengan template 'sppkd'.
         $values = [
             'nomor' => $nomorSurat ?: '1',
-            'nama_asn' => $p2->nama_pegawai ?? '-',
-            'nip_asn' => $p2->nip ?? '-',
-            'jabatan_asn' => $p2->jabatan ?? '-',
+            'nama_asn' => $pihak2['nama'],
+            'nip_asn' => $pihak2['nip'],
+            'jabatan_asn' => $pihak2['jabatan'],
+            'alamat_asn' => $pihak2['alamat'],
             'tanggal' => (int) $tgl->format('d'),
             'bulan' => $tgl->translatedFormat('F'),
             'tahun' => (int) $tgl->format('Y'),
@@ -286,7 +299,7 @@ class MutasiAsetController extends Controller
 
         $this->applyReplacements($phpWord, $swap);
 
-        $namaFile = 'SPPKD_' . Str::slug($p2->nama_pegawai ?? 'Kendaraan', '_') . '_' . $tgl->format('Ymd') . '.docx';
+        $namaFile = 'SPPKD_' . ($pihak2['nama'] !== '-' ? Str::slug($pihak2['nama'], '_') : 'Kendaraan') . '_' . $tgl->format('Ymd') . '.docx';
         $tempPath = tempnam(sys_get_temp_dir(), 'SPPKD_');
         $phpWord->saveAs($tempPath);
 
@@ -355,6 +368,42 @@ class MutasiAsetController extends Controller
         } catch (\Throwable $th) {
             // Abaikan; placeholder yang tersisa tetap tampil agar terlihat oleh pembuat template.
         }
+    }
+
+    /**
+     * Bahan data satu pihak (penyerah/penerima) pada dokumen BAST/SPPKD.
+     *
+     * Relasi Pegawai (via ID pada detail_mutasi_aset) tetap prioritas utama.
+     * Bila relasi tidak ada (pemegang disimpan sebagai teks), nama memakai
+     * fallback teks; NIP/Jabatan/Alamat yang tidak tersedia menjadi '-'.
+     * Tidak pernah menebak data pegawai lain berdasarkan nama/NIP.
+     *
+     * @return array{nama: string, nip: string, jabatan: string, alamat: string}
+     */
+    private function resolvePihak(?Pegawai $pegawai, ?string $namaFallback = null): array
+    {
+        return [
+            'nama' => $pegawai?->nama_pegawai ?: ($namaFallback ?: '-'),
+            'nip' => $pegawai?->nip ?: '-',
+            'jabatan' => $pegawai?->jabatan ?: '-',
+            'alamat' => $pegawai?->alamat ?: '-',
+        ];
+    }
+
+    /**
+     * Nama pemegang lama dari teks keterangan mutasi kendaraan, bila tidak ada
+     * relasi Pegawai. Format keterangan dicatat `mutasiPemegang()` sebagai
+     * "Serah terima dari {nama}...". Mengembalikan null bila tidak tersedia.
+     */
+    private function namaPemegangLamaDariKeterangan(?string $keterangan): ?string
+    {
+        if ($keterangan && preg_match('/Serah terima dari ([^\.]+)/', $keterangan, $m)) {
+            $nama = trim($m[1]);
+
+            return $nama !== '' ? $nama : null;
+        }
+
+        return null;
     }
 
     /**

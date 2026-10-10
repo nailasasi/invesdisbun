@@ -12,6 +12,7 @@ use App\Http\Controllers\LaporanBulananController;
 use App\Http\Controllers\MonitoringAsetController;
 use App\Http\Controllers\MutasiAsetController;
 use App\Http\Controllers\PajakKendaraanController;
+use App\Http\Controllers\PegawaiController;
 use App\Http\Controllers\PenghapusanAsetController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RetribusiTanahController;
@@ -79,8 +80,10 @@ Route::middleware('auth')->group(function () {
         Route::middleware('role:Admin Aset')->group(function () {
             Route::post('store', [AsetBarangController::class, 'storeFlat'])
                 ->name('store.flat');
-            Route::post('{pegawai}/aset', [AsetBarangController::class, 'store'])
-                ->name('store');
+            // Penempatan awal: memasang MASTER aset yang sudah ada ke pegawai.
+            // Tidak pernah membuat record `aset` baru (lihatpasangAsetKePegawai).
+            Route::post('{pegawai}/aset/{aset}/pasang', [AsetBarangController::class, 'pasangAsetKePegawai'])
+                ->name('aset.pasang.pegawai');
             Route::post('aset/{aset}', [AsetBarangController::class, 'update'])
                 ->name('aset.update');
             Route::post('aset/{aset}/mutasi', [AsetBarangController::class, 'mutasi'])
@@ -118,6 +121,10 @@ Route::middleware('auth')->group(function () {
                 ->name('update');
             Route::post('{ruangan}/toggle-status', [AsetRuanganController::class, 'toggleStatus'])
                 ->name('toggle-status');
+            // Penempatan awal: memasang MASTER aset yang sudah ada ke ruangan
+            // (aset tanpa pemegang). Tidak pernah membuat record `aset` baru.
+            Route::post('{ruangan}/aset/{aset}/pasang', [AsetRuanganController::class, 'pasangAset'])
+                ->name('aset.pasang');
             Route::delete('{ruangan}/aset/{aset}', [AsetRuanganController::class, 'detachAset'])
                 ->name('aset.detach');
         });
@@ -201,13 +208,38 @@ Route::middleware('auth')->group(function () {
     });
 
     // ==========================================
-    // USER MANAGEMENT
+    // MASTER DATA - DATA PEGAWAI
+    // Data orang (NIP, nama, jabatan, SKPD, ruangan). Tanpa akun login.
+    // Admin Aset: seluruh pegawai. Admin UPT: hanya pegawai UPT miliknya.
+    // Admin Bidang & Pegawai: tidak punya akses (dicegah middleware role).
     // ==========================================
-    Route::prefix('user')->name('user.')->middleware('role:Admin Aset')->group(function () {
+    Route::prefix('master-data/pegawai')->name('master-data.pegawai.')->middleware('role:Admin Aset,Admin UPT')->group(function () {
+        Route::get('search', [PegawaiController::class, 'search'])
+            ->name('search');
+        Route::get('', [PegawaiController::class, 'index'])
+            ->name('index');
+        Route::get('create', [PegawaiController::class, 'create'])
+            ->name('create');
+        Route::post('', [PegawaiController::class, 'store'])
+            ->name('store');
+        Route::get('{pegawai}', [PegawaiController::class, 'show'])
+            ->name('show');
+        Route::get('{pegawai}/edit', [PegawaiController::class, 'edit'])
+            ->name('edit');
+        Route::put('{pegawai}', [PegawaiController::class, 'update'])
+            ->name('update');
+    });
+
+    // ==========================================
+    // USER MANAGEMENT (akun login milik pegawai yang sudah ada)
+    // Admin Aset & Admin UPT; controller membatasi Admin UPT ke UPT-nya.
+    // ==========================================
+    Route::prefix('user')->name('user.')->middleware('role:Admin Aset,Admin UPT')->group(function () {
         Route::get('', [UserController::class, 'index'])
             ->name('index');
-        Route::post('', [UserController::class, 'store'])
-            ->name('store');
+        // Buat akun dari pegawai YANG SUDAH ADA (bukan membuat pegawai baru).
+        Route::post('buat-akun/{pegawai}', [UserController::class, 'storeAccount'])
+            ->name('akun.store');
         Route::get('{pegawai}', [UserController::class, 'show'])
             ->name('show');
         Route::post('{pegawai}', [UserController::class, 'update'])
@@ -216,7 +248,9 @@ Route::middleware('auth')->group(function () {
             ->name('role.update');
         Route::post('{pegawai}/status', [UserController::class, 'updateStatus'])
             ->name('status.update');
+        // Hapus permanen hanya Admin Aset.
         Route::delete('{pegawai}', [UserController::class, 'destroy'])
+            ->middleware('role:Admin Aset')
             ->name('destroy');
     });
 
@@ -268,6 +302,16 @@ Route::middleware('auth')->group(function () {
     Route::prefix('kendaraan')->name('kendaraan.')->group(function () {
         Route::get('', [KendaraanController::class, 'index'])
             ->name('index');
+
+        // Route statis WAJIB didaftarkan SEBELUM route berparameter
+        // {kendaraan}. Jika tidak, '/kendaraan/template' dicocokkan sebagai
+        // parameter {kendaraan} bernilai 'template' — route model binding
+        // gagal dan hasilnya 404.
+        Route::middleware('role:Admin Aset')->group(function () {
+            Route::get('template', [KendaraanController::class, 'downloadTemplate'])
+                ->name('template');
+        });
+
         Route::get('{kendaraan}', [KendaraanController::class, 'show'])
             ->name('show');
 
@@ -289,9 +333,6 @@ Route::middleware('auth')->group(function () {
             Route::delete('{kendaraan}', [KendaraanController::class, 'destroy'])
                 ->name('destroy');
 
-            Route::post('{kendaraan}/plat', [KendaraanController::class, 'storePlat'])
-                ->name('plat.store');
-
             Route::post('{kendaraan}/mutasi-pemegang', [KendaraanController::class, 'mutasiPemegang'])
                 ->name('mutasi-pemegang.store');
 
@@ -308,6 +349,12 @@ Route::middleware('auth')->group(function () {
 
             Route::post('{kendaraan}/pajak', [PajakKendaraanController::class, 'store'])
                 ->name('pajak.store');
+            Route::put('{kendaraan}/pajak/{pajak}', [PajakKendaraanController::class, 'update'])
+                ->name('pajak.update');
+            Route::get('{kendaraan}/pajak/{pajak}/bukti', [PajakKendaraanController::class, 'downloadBukti'])
+                ->name('pajak.bukti');
+            Route::get('{kendaraan}/pajak/{pajak}/preview', [PajakKendaraanController::class, 'previewBukti'])
+                ->name('pajak.preview');
             Route::delete('{kendaraan}/pajak/{pajak}', [PajakKendaraanController::class, 'destroy'])
                 ->name('pajak.destroy');
 
@@ -320,8 +367,13 @@ Route::middleware('auth')->group(function () {
 
     // ==========================================
     // RKBMD (Rencana Kebutuhan Barang Milik Daerah)
+    // Pegawai TIDAK punya akses (keputusan Fase 1B): pengusul = Admin Aset
+    // (Pengurus Barang), Admin Bidang, Admin UPT — masing-masing usulan
+    // tetap di-scope ke SKPD-nya oleh RkbmdController.
     // ==========================================
-    Route::prefix('rkbmd')->name('rkbmd.')->group(function () {
+    Route::prefix('rkbmd')->name('rkbmd.')
+        ->middleware('role:Admin Aset,Admin Bidang,Admin UPT')
+        ->group(function () {
         Route::get('', [RkbmdController::class, 'index'])
             ->name('index');
         Route::get('template-usulan', [RkbmdController::class, 'downloadTemplate'])

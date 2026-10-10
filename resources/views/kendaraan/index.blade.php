@@ -17,7 +17,7 @@
                         type="text"
                         name="search"
                         value="{{ request('search') }}"
-                        placeholder="Cari nama, kartu, merk, rangka, mesin..."
+                        placeholder="Cari nama, kartu, merk, tipe, rangka, mesin, nomor plat..."
                         autocomplete="off"
                         class="block w-full rounded-xl border border-slate-300 py-2 pl-11 pr-4 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-disbun-600 focus:ring-2 focus:ring-disbun-400 transition"
                     >
@@ -27,11 +27,11 @@
                     <option value="aktif" @selected(request('status') === 'aktif')>Aktif</option>
                     <option value="nonaktif" @selected(request('status') === 'nonaktif')>Non-Aktif</option>
                 </select>
-                <button type="submit" class="inline-flex items-center gap-2 rounded-2xl bg-disbun-700 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-disbun-800">
+                <button type="submit" class="inline-flex items-center gap-2 rounded-xl bg-disbun-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-disbun-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-disbun-400">
                     Cari
                 </button>
                 @if (request('search') || request('status'))
-                    <a href="{{ route('kendaraan.index') }}" class="inline-flex items-center rounded-2xl border border-disbun-card-border bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50">
+                    <a href="{{ route('kendaraan.index') }}" class="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300">
                         Reset
                     </a>
                 @endif
@@ -58,7 +58,8 @@
                         <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Nama Kendaraan</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Jenis</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Plat Aktif</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Pajak Jatuh Tempo</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Pajak Tahunan</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Jatuh Tempo Plat (5 Tahunan)</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Pemegang</th>
                         @if ($isAdminAset)
                             <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Nilai</th>
@@ -71,8 +72,37 @@
                         @php
                             $platAktif = $k->platAktif;
                             $pajakAktif = $k->pajakAktif;
-                            $isLate = $pajakAktif?->tanggal_berakhir ? $pajakAktif->tanggal_berakhir->lt(\Carbon\Carbon::today()) : false;
-                            $pajakColor = $isLate ? 'bg-red-100 text-red-700' : 'bg-disbun-100 text-disbun-800';
+                            $now = \Carbon\Carbon::today();
+                            $pajakJatuh = $pajakAktif?->tanggal_berakhir;
+                            $platJatuh = $platAktif?->tanggal_berlaku;
+                            $diffPajak = $pajakJatuh ? $now->diffInDays($pajakJatuh, false) : null;
+                            $diffPlat = $platJatuh ? $now->diffInDays($platJatuh, false) : null;
+                            $pajakClass = match (true) {
+                                $diffPajak === null => 'bg-slate-100 text-slate-600',
+                                $diffPajak < 0 => 'bg-red-100 text-red-700',
+                                $diffPajak <= 30 => 'bg-amber-100 text-amber-700',
+                                default => 'bg-emerald-100 text-emerald-700',
+                            };
+                            $platClass = match (true) {
+                                $diffPlat === null => 'bg-slate-100 text-slate-600',
+                                $diffPlat < 0 => 'bg-red-100 text-red-700',
+                                $diffPlat <= 30 => 'bg-amber-100 text-amber-700',
+                                default => 'bg-emerald-100 text-emerald-700',
+                            };
+                            $pajakLabel = match (true) {
+                                $diffPajak === null => '-',
+                                $diffPajak < 0 => $pajakJatuh->format('d M Y') . ' (Terlambat)',
+                                $pajakJatuh->isSameDay($now) => $pajakJatuh->format('d M Y') . ' (Jatuh Hari Ini)',
+                                $diffPajak <= 30 => $pajakJatuh->format('d M Y') . ' (' . (int) round($diffPajak) . ' hari lagi)',
+                                default => $pajakJatuh->format('d M Y'),
+                            };
+                            $platLabel = match (true) {
+                                $diffPlat === null => '-',
+                                $diffPlat < 0 => $platJatuh->format('d M Y') . ' (Terlambat)',
+                                $platJatuh->isSameDay($now) => $platJatuh->format('d M Y') . ' (Jatuh Hari Ini)',
+                                $diffPlat <= 30 => $platJatuh->format('d M Y') . ' (' . (int) round($diffPlat) . ' hari lagi)',
+                                default => $platJatuh->format('d M Y'),
+                            };
                         @endphp
                         <tr class="transition hover:bg-slate-50">
                             <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-500">{{ $kendaraanList->firstItem() + $index }}</td>
@@ -94,9 +124,18 @@
                             <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $k->jenis_kendaraan ?? '-' }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-700">{{ $platAktif->nomor_plat ?? '-' }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm">
-                                @if ($pajakAktif?->tanggal_berakhir)
-                                    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {{ $pajakColor }}">
-                                        {{ $pajakAktif->tanggal_berakhir->format('d M Y') }}{{ $isLate ? ' (Terlambat)' : '' }}
+                                @if ($pajakJatuh)
+                                    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {{ $pajakClass }}">
+                                        {{ $pajakLabel }}
+                                    </span>
+                                @else
+                                    <span class="text-slate-400">-</span>
+                                @endif
+                            </td>
+                            <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                @if ($platJatuh)
+                                    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {{ $platClass }}">
+                                        {{ $platLabel }}
                                     </span>
                                 @else
                                     <span class="text-slate-400">-</span>
@@ -163,19 +202,33 @@
                     </div>
                     <form method="POST" action="{{ route('kendaraan.import') }}" enctype="multipart/form-data" class="px-6 py-6">
                         @csrf
+                        <div class="mb-4 flex items-center justify-between gap-3 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
+                            <div>
+                                <span class="block text-sm font-semibold text-slate-700">Belum punya format file?</span>
+                                <span class="text-xs text-slate-500">Unduh template standar import kendaraan</span>
+                            </div>
+                            <a href="{{ route('kendaraan.template') }}"
+                               class="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-disbun-100 bg-white px-3 py-1.5 text-xs font-semibold text-disbun-800 shadow-sm transition hover:bg-disbun-50">
+                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                                <span>Unduh Template</span>
+                            </a>
+                        </div>
                         <div class="space-y-1.5">
                             <label class="block text-sm font-medium text-slate-700">File Excel / CSV <span class="text-red-500">*</span></label>
                             <input type="file" name="file" accept=".xlsx,.xls,.csv" required class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                            <p class="text-xs text-slate-400">Format kolom: Nama, No. Kartu, Jenis, No. Rangka, No. Mesin, Pemegang, Pajak Jatuh Tempo, Nominal/Total Pajak, No. Polisi, Masa Aktif. Maks 5MB.</p>
+                            <p class="text-xs text-slate-400">Kolom: Jenis Kendaraan, Nomor Polisi, No. Rangka, No. Mesin, Pemegang Kendaraan, Jatuh Tempo Pajak 1 Tahun, Jatuh Tempo Pajak 5 Tahun, Nominal Pajak, Total Pajak, Pajak 5 Tahunan, Dokumentasi (gambar disisip di baris terkait). Maks 5MB.</p>
                             @error('file')
                                 <p class="text-xs font-medium text-red-600">{{ $message }}</p>
                             @enderror
                         </div>
-                        <div class="space-y-1.5">
-                            <label for="import-header-row" class="block text-sm font-medium text-slate-700">Baris Header</label>
-                            <input type="number" id="import-header-row" name="header_row" value="2" min="1" max="50" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                            <p class="text-xs text-slate-400">Nomor baris tempat nama kolom berada (baris judul besar di atasnya dihitung). Urutan kolom bebas; nama header dikenali otomatis.</p>
-                            @error('header_row')
+                        <div class="mt-4 space-y-1.5">
+                            <label for="import-mode" class="block text-sm font-medium text-slate-700">Mode Duplicate</label>
+                            <select id="import-mode" name="mode" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                                <option value="skip">Lewati jika No. Rangka / No. Mesin sudah ada</option>
+                                <option value="update">Perbarui data master jika No. Rangka / No. Mesin sama</option>
+                            </select>
+                            <p class="text-xs text-slate-400">Mode Update hanya mengubah data master kendaraan. Pajak dan Riwayat Plat tidak ikut diubah — pergantian plat tetap melalui Pajak 5 Tahunan.</p>
+                            @error('mode')
                                 <p class="text-xs font-medium text-red-600">{{ $message }}</p>
                             @enderror
                         </div>
@@ -206,6 +259,16 @@
         const modal = document.getElementById('kendaraan-modal');
         const form = document.getElementById('kendaraan-form');
         let loadedDropdowns = false;
+
+        const pemegangAddBlock = document.getElementById('block-pemegang-add');
+        const pemegangEditBlock = document.getElementById('block-pemegang-edit');
+
+        // Form pemegang dibedakan eksplisit: mode Tambah = input teks
+        // (pemegang awal), mode Edit = tampilan read-only (ganti lewat Mutasi).
+        function setModePemegang(tambah) {
+            if (pemegangAddBlock) pemegangAddBlock.classList.toggle('hidden', !tambah);
+            if (pemegangEditBlock) pemegangEditBlock.classList.toggle('hidden', tambah);
+        }
 
         const importModal = document.getElementById('import-modal');
         if (document.getElementById('btn-import')) {
@@ -268,6 +331,7 @@
                 form.reset();
                 document.getElementById('field-id').value = '';
                 document.getElementById('field-id-aset').value = '';
+                setModePemegang(true);
                 form.action = storeUrl;
                 openModal();
             });
@@ -289,8 +353,6 @@
                 if (pemegangValue) pemegangValue.textContent = d.pemegang || 'Belum ada pemegang';
                 document.getElementById('field-keterangan').value = d.keterangan ?? '';
                 document.getElementById('field-kartu').value = d.nomor_kartu_barang ?? '';
-                document.getElementById('field-plat').value = d.plat_nomor ?? '';
-                document.getElementById('field-tgl-plat').value = d.plat_tanggal ?? '';
                 document.getElementById('field-rangka').value = d.nomor_rangka ?? '';
                 document.getElementById('field-mesin').value = d.nomor_mesin ?? '';
                 document.getElementById('field-merk').value = d.merk ?? '';
@@ -301,10 +363,10 @@
                 document.getElementById('field-tgl-pengadaan').value = d.tanggal_pengadaan ?? '';
                 document.getElementById('field-tgl-perolehan').value = d.tanggal_perolehan ?? '';
                 document.getElementById('field-tgl-habis').value = d.tanggal_habis_pakai ?? '';
-                document.getElementById('field-pajak-tgl').value = d.pajak_tanggal_berakhir ?? '';
-                document.getElementById('field-pajak-5thn').checked = !!d.pajak_max_tahunan;
-                document.getElementById('field-pajak-nominal').value = d.pajak_nominal ?? '';
-                document.getElementById('field-pajak-total').value = d.pajak_total ?? '';
+                document.getElementById('field-plat').value = d.nomor_plat ?? '';
+                const pemegangInputEl = document.getElementById('field-pemegang-input');
+                if (pemegangInputEl) pemegangInputEl.value = '';
+                setModePemegang(false);
                 form.action = updateUrl.replace('__ID__', id);
                 openModal();
             });

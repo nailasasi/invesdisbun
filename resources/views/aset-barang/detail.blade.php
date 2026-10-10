@@ -130,7 +130,7 @@
             <div class="flex h-9 w-9 items-center justify-center rounded-2xl bg-disbun-50 text-disbun-700">
                 <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"/></svg>
             </div>
-            <p class="mt-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Unit Penanggung Jawab</p>
+            <p class="mt-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">SKPD</p>
             <p class="mt-1 break-words text-sm font-bold text-slate-900">{{ $aset->skpd?->nama_skpd ?? '-' }}</p>
             @if ($aset->skpd?->jenis_skpd)
                 <span class="mt-1.5 inline-flex items-center rounded-full border border-disbun-100 bg-disbun-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-disbun-800">{{ $aset->skpd->jenis_skpd }}</span>
@@ -315,52 +315,120 @@
         </div>
     </x-card>
 
-    {{-- Modal Edit Aset --}}
-    <div id="aset-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
+    @push('modals')
+    {{-- Modal Edit Aset (di-root via @push agar selalu di atas sidebar) --}}
+    <div id="aset-modal" class="invisible fixed inset-0 z-[1000] flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-sm">
         <div class="fixed inset-0" data-modal-close></div>
-        <div class="relative w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
-            <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
-                <div>
-                    <h3 class="text-lg font-semibold text-slate-900">Edit Aset</h3>
-                    <p class="mt-0.5 text-sm text-slate-500">Perbarui data aset. Ganti pemegang / pindah ruangan via halaman Aset Barang.</p>
+        <div class="relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div class="flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 px-6 py-4">
+                <div class="min-w-0">
+                    <h3 class="text-base font-semibold text-slate-900">Edit Aset</h3>
+                    <p id="modal-edit-subtitle" class="mt-0.5 text-xs text-slate-500 sm:text-sm">Perbarui data aset. Pemegang aktif hanya bisa diganti lewat Mutasi &rarr; Ganti Pemegang.</p>
                 </div>
-                <button type="button" data-modal-close class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Tutup">
+                <button type="button" data-modal-close class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Tutup">
                     <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
             </div>
 
-            <form id="aset-form" method="POST" autocomplete="off">
+            <form id="aset-form" method="POST" autocomplete="off" class="flex min-h-0 flex-1 flex-col overflow-hidden">
                 @csrf
                 <input type="hidden" id="field-id" name="id" value="">
-                <div class="max-h-[90vh] space-y-5 overflow-y-auto px-6 py-6">
-                    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                        <div class="space-y-1.5">
+                <div class="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                    <div class="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <div id="edit-placement-fields" class="contents">
+                            <div class="flex flex-col gap-1.5">
+                                <label for="field-pegawai" class="block text-sm font-medium text-slate-700">Pemegang</label>
+                                <select id="field-pegawai" name="id_pegawai" class="block h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                                    <option value="" selected>-- Pilih Pegawai --</option>
+                                    @foreach ($allPegawai as $p)
+                                        <option value="{{ $p->id_pegawai }}" data-ruangan="{{ $p->id_ruangan ?? '' }}" data-skpd-nama="{{ $p->skpd?->nama_skpd ?? '' }}">{{ $p->nama_pegawai }}</option>
+                                    @endforeach
+                                </select>
+                                <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_pegawai"></p>
+                            </div>
+
+                            <div class="flex flex-col gap-1.5">
+                                <label for="field-ruangan" class="block text-sm font-medium text-slate-700">Ruangan</label>
+                                <select id="field-ruangan" name="id_ruangan" class="block h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                                    <option value="" selected>-- Pilih Ruangan --</option>
+                                    @foreach ($ruanganList as $r)
+                                        <option value="{{ $r->id_ruangan }}" data-lokasi-nama="{{ $r->lokasi?->nama_lokasi ?? '' }}" data-skpd-nama="{{ $r->skpd?->nama_skpd ?? '' }}">{{ $r->nama_ruangan }}</option>
+                                    @endforeach
+                                </select>
+                                <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_ruangan"></p>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col gap-1.5">
+                            <label for="field-skpd" class="block text-sm font-medium text-slate-700">SKPD</label>
+                            <input
+                                type="text"
+                                id="field-skpd"
+                                readonly
+                                disabled
+                                placeholder="-- Otomatis mengikuti Pemegang / Ruangan --"
+                                class="block h-10 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-600 shadow-sm focus:outline-none transition"
+                            >
+                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_skpd"></p>
+                        </div>
+
+                        <div class="flex flex-col gap-1.5">
+                            <label for="field-lokasi" class="block text-sm font-medium text-slate-700">Lokasi Fisik Aset</label>
+                            <input
+                                type="text"
+                                id="field-lokasi"
+                                readonly
+                                disabled
+                                placeholder="-- Mengikuti ruangan --"
+                                class="block h-10 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-600 shadow-sm focus:outline-none transition"
+                            >
+                        </div>
+
+                        <div class="flex flex-col gap-1.5">
                             <label for="field-barang" class="block text-sm font-medium text-slate-700">Nama Barang <span class="text-red-500">*</span></label>
-                            <input type="text" id="field-barang" name="nama_barang" required maxlength="100" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: Laptop">
+                            <input type="text" id="field-barang" name="nama_barang" required maxlength="100" class="block h-10 w-full rounded-xl border border-slate-300 px-3 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: Laptop">
                             <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="nama_barang"></p>
                         </div>
 
-                        <div class="space-y-1.5">
+                        <div class="flex flex-col gap-1.5">
                             <label for="field-kartu" class="block text-sm font-medium text-slate-700">Nomor Kartu Barang <span class="text-red-500">*</span></label>
-                            <input type="text" id="field-kartu" name="nomor_kartu_barang" maxlength="255" required class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: KIB-001">
+                            <input type="text" id="field-kartu" name="nomor_kartu_barang" maxlength="255" required class="block h-10 w-full rounded-xl border border-slate-300 px-3 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: KIB-001">
                             <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="nomor_kartu_barang"></p>
                         </div>
 
-                        <div class="space-y-1.5">
+                        <div class="flex flex-col gap-1.5">
                             <label for="field-merk" class="block text-sm font-medium text-slate-700">Merk</label>
-                            <input type="text" id="field-merk" name="merk" maxlength="100" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: Canon">
+                            <input type="text" id="field-merk" name="merk" maxlength="100" class="block h-10 w-full rounded-xl border border-slate-300 px-3 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: Canon">
                             <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="merk"></p>
                         </div>
 
-                        <div class="space-y-1.5">
+                        <div class="flex flex-col gap-1.5">
+                            <label for="field-pengadaan" class="block text-sm font-medium text-slate-700">Tanggal Pengadaan</label>
+                            <input type="date" id="field-pengadaan" name="tanggal_pengadaan" class="block h-10 w-full rounded-xl border border-slate-300 px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="tanggal_pengadaan"></p>
+                        </div>
+
+                        <div class="flex flex-col gap-1.5">
+                            <label for="field-perolehan" class="block text-sm font-medium text-slate-700">Tanggal Perolehan</label>
+                            <input type="date" id="field-perolehan" name="tanggal_perolehan" class="block h-10 w-full rounded-xl border border-slate-300 px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="tanggal_perolehan"></p>
+                        </div>
+
+                        <div class="flex flex-col gap-1.5">
+                            <label for="field-habis-pakai" class="block text-sm font-medium text-slate-700">Tanggal Habis Pakai</label>
+                            <input type="date" id="field-habis-pakai" name="tanggal_habis_pakai" class="block h-10 w-full rounded-xl border border-slate-300 px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="tanggal_habis_pakai"></p>
+                        </div>
+
+                        <div class="flex flex-col gap-1.5">
                             <label for="field-nilai" class="block text-sm font-medium text-slate-700">Nilai Perolehan</label>
-                            <input type="number" id="field-nilai" name="nilai_perolehan" step="0.01" min="0" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: 5000000">
+                            <input type="number" id="field-nilai" name="nilai_perolehan" step="0.01" min="0" class="block h-10 w-full rounded-xl border border-slate-300 px-3 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: 5000000">
                             <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="nilai_perolehan"></p>
                         </div>
 
-                        <div class="space-y-1.5">
+                        <div class="flex flex-col gap-1.5">
                             <label for="field-kondisi" class="block text-sm font-medium text-slate-700">Kondisi <span class="text-red-500">*</span></label>
-                            <select id="field-kondisi" name="kondisi" required class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                            <select id="field-kondisi" name="kondisi" required class="block h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
                                 <option value="" selected>-- Pilih Kondisi --</option>
                                 @foreach ($kondisiList as $kondisi)
                                     <option value="{{ $kondisi }}">{{ $kondisi }}</option>
@@ -369,64 +437,31 @@
                             <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="kondisi"></p>
                         </div>
 
-                        <div class="space-y-1.5">
+                        <div class="flex flex-col gap-1.5">
                             <label for="field-status" class="block text-sm font-medium text-slate-700">Status Aset <span class="text-red-500">*</span></label>
-                            <input type="text" id="field-status" name="status_aset" required maxlength="50" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: aktif">
+                            <select id="field-status" name="status_aset" required class="block h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                                <option value="aktif">Aktif</option>
+                                <option value="nonaktif">Nonaktif</option>
+                            </select>
                             <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="status_aset"></p>
                         </div>
-
-                        <div class="space-y-1.5">
-                            <label for="field-pengadaan" class="block text-sm font-medium text-slate-700">Tanggal Pengadaan</label>
-                            <input type="date" id="field-pengadaan" name="tanggal_pengadaan" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="tanggal_pengadaan"></p>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="field-perolehan" class="block text-sm font-medium text-slate-700">Tanggal Perolehan</label>
-                            <input type="date" id="field-perolehan" name="tanggal_perolehan" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="tanggal_perolehan"></p>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="field-habis-pakai" class="block text-sm font-medium text-slate-700">Tanggal Habis Pakai</label>
-                            <input type="date" id="field-habis-pakai" name="tanggal_habis_pakai" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="tanggal_habis_pakai"></p>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="field-skpd" class="block text-sm font-medium text-slate-700">Unit Penanggung Jawab</label>
-                            <select id="field-skpd" name="id_skpd" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                                <option value="">-- Pilih Unit PJ --</option>
-                                @foreach ($skpdOptions as $skpd)
-                                    <option value="{{ $skpd->id_skpd }}">{{ $skpd->nama_skpd }} ({{ $skpd->jenis_skpd }})</option>
-                                @endforeach
-                            </select>
-                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_skpd"></p>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="field-lokasi" class="block text-sm font-medium text-slate-700">Lokasi Fisik</label>
-                            <input
-                                type="text"
-                                id="field-lokasi"
-                                readonly
-                                placeholder="-- Mengikuti ruangan --"
-                                class="block w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-sm text-slate-600 shadow-sm focus:outline-none transition"
-                            >
-                            <p class="text-xs text-slate-400">Lokasi fisik mengikuti ruangan. Pindah lokasi via tombol Mutasi di halaman Aset Barang.</p>
-                        </div>
                     </div>
+
+                    <p id="modal-note" class="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] leading-snug text-slate-500">
+                        Aset ini belum berpemegang — Pemegang &amp; Ruangan boleh diisi sekali (initial assignment, bukan mutasi). SKPD &amp; Lokasi mengikuti master secara otomatis.
+                    </p>
                 </div>
 
-                <div class="flex items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
-                    <button type="button" data-modal-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
-                    <button type="submit" id="btn-submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-disbun-700 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-disbun-800">
+                <div class="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/60 px-6 py-4">
+                    <button type="button" data-modal-close class="inline-flex h-10 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50">Batal</button>
+                    <button type="submit" id="btn-submit" class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-disbun-700 px-5 text-sm font-medium text-white shadow-sm transition hover:bg-disbun-800">
                         Perbarui
                     </button>
                 </div>
             </form>
         </div>
     </div>
+    @endpush
 
     @push('scripts')
     <script>
@@ -466,17 +501,87 @@
         }
 
         function openModal() {
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
+            modal.classList.remove('invisible');
+            modal.classList.add('visible');
             document.body.classList.add('overflow-hidden');
         }
         function closeModal() {
-            modal.classList.add('hidden');
-            modal.classList.remove('flex');
+            modal.classList.add('invisible');
+            modal.classList.remove('visible');
             document.body.classList.remove('overflow-hidden');
             form.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
         }
         modal.querySelectorAll('[data-modal-close]').forEach(el => el.addEventListener('click', closeModal));
+
+        const fieldPegawai = document.getElementById('field-pegawai');
+        const fieldRuangan = document.getElementById('field-ruangan');
+        const fieldSkpd = document.getElementById('field-skpd');
+        const fieldLokasi = document.getElementById('field-lokasi');
+        const modalNote = document.getElementById('modal-note');
+        const modalSubtitle = document.getElementById('modal-edit-subtitle');
+
+        // SKPD & Lokasi hanya DISPLAY: nilainya selalu dihitung server. JS ini
+        // hanya menampilkan pratinjau yang sama supaya tidak membingungkan.
+        // SKPD: Pemegang -> pegawai.id_skpd; tanpa Pemegang -> ruangan.id_skpd.
+        // Lokasi: selalu dari effective room (ruangan.id_lokasi).
+        function syncTampilanTurunan() {
+            const optRuangan = fieldRuangan.selectedOptions[0];
+            const namaLokasi = optRuangan ? (optRuangan.dataset.lokasiNama ?? '') : '';
+
+            const optPegawai = fieldPegawai.selectedOptions[0];
+            const namaSkpdPemegang = (optPegawai && optPegawai.value) ? (optPegawai.dataset.skpdNama ?? '') : '';
+            const namaSkpd = namaSkpdPemegang || (optRuangan ? (optRuangan.dataset.skpdNama ?? '') : '');
+
+            fieldLokasi.value = namaLokasi;
+            fieldLokasi.placeholder = namaLokasi ? '' : '-- Mengikuti ruangan --';
+
+            fieldSkpd.value = namaSkpd;
+            fieldSkpd.placeholder = namaSkpd ? '' : '-- Otomatis mengikuti Pemegang / Ruangan --';
+        }
+
+        function setRuanganState() {
+            const opt = fieldPegawai.selectedOptions[0];
+            const adaPemegang = !!(opt && opt.value);
+
+            fieldRuangan.disabled = adaPemegang;
+            fieldRuangan.value = adaPemegang ? (opt.dataset.ruangan ?? '') : '';
+
+            if (fieldRuangan.options[0]) {
+                fieldRuangan.options[0].textContent = adaPemegang
+                    ? 'Mengikuti ruangan pegawai'
+                    : '-- Pilih Ruangan --';
+            }
+
+            syncTampilanTurunan();
+        }
+        fieldPegawai.addEventListener('change', setRuanganState);
+        fieldRuangan.addEventListener('change', syncTampilanTurunan);
+
+        // Aset SUDAH berpemegang aktif => Pemegang + Ruangan dikunci.
+// Aset BELUM berpemegang => keduanya aktif untuk initial assignment.
+        function kuncikanPencetakan(data) {
+            const adaPemegang = !!(data.id_pegawai);
+
+            fieldPegawai.disabled = adaPemegang;
+            fieldRuangan.disabled = adaPemegang;
+            fieldRuangan.value = data.id_ruangan ?? '';
+
+            modalNote.textContent = adaPemegang
+                ? 'Pemegang & Ruangan terkunci karena aset sudah berpemegang — ganti pemegang lewat Mutasi → Ganti Pemegang. SKPD & Lokasi mengikuti master secara otomatis.'
+                : 'Aset ini belum berpemegang — Pemegang & Ruangan boleh diisi sekali (initial assignment, bukan mutasi). SKPD & Lokasi mengikuti master secara otomatis.';
+
+            modalSubtitle.textContent = adaPemegang
+                ? 'Perbarui data aset. Pemegang aktif hanya bisa diganti lewat Mutasi → Ganti Pemegang.'
+                : 'Perbarui data aset dan boleh menetapkan pemegang pertama kali (initial assignment, tanpa mutasi).';
+
+            if (fieldRuangan.options[0]) {
+                fieldRuangan.options[0].textContent = adaPemegang
+                    ? 'Mengikuti ruangan pemegang'
+                    : '-- Pilih Ruangan --';
+            }
+
+            return adaPemegang;
+        }
 
         document.querySelectorAll('[data-edit-modal]').forEach(btn => {
             btn.addEventListener('click', async () => {
@@ -496,8 +601,11 @@
                     document.getElementById('field-pengadaan').value = data.tanggal_pengadaan ?? '';
                     document.getElementById('field-perolehan').value = data.tanggal_perolehan ?? '';
                     document.getElementById('field-habis-pakai').value = data.tanggal_habis_pakai ?? '';
-                    document.getElementById('field-skpd').value = data.id_skpd ?? '';
-                    document.getElementById('field-lokasi').value = data.nama_lokasi ?? '';
+
+                    fieldPegawai.value = data.id_pegawai ?? '';
+                    kuncikanPencetakan(data);
+                    syncTampilanTurunan();
+
                     form.action = updateUrl.replace('__ID__', id);
                     openModal();
                 } catch (e) {

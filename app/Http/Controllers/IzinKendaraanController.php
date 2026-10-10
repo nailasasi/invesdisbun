@@ -7,6 +7,7 @@ use App\Models\Kendaraan;
 use App\Models\Pegawai;
 use App\Models\TemplateDokumen;
 use App\Models\User;
+use App\Services\AsetScope;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -18,6 +19,10 @@ use PhpOffice\PhpWord\TemplateProcessor;
 
 class IzinKendaraanController extends Controller
 {
+    public function __construct(private readonly AsetScope $scope)
+    {
+    }
+
     /**
      * Daftar pengajuan izin kendaraan (halaman layanan).
      *
@@ -39,9 +44,14 @@ class IzinKendaraanController extends Controller
             ->get();
 
         // Kendaraan dinas yang tersedia untuk diajukan (belum dihapus & tidak
-        // sedang dipakai oleh pengajuan lain yang masih berjalan).
+        // sedang dipakai oleh pengajuan lain yang masih berjalan). Kandidat
+        // disesuaikan cakupan user lewat AsetScope — user non-admin hanya
+        // bisa mengajukan kendaraan yang lokasinya dalam scope-nya.
         $kendaraanList = Kendaraan::with(['aset.barang', 'platAktif'])
-            ->whereHas('aset', fn ($a) => $a->where('status_aset', 'aktif'))
+            ->whereHas('aset', function ($a) {
+                $a->where('status_aset', 'aktif')
+                    ->tap(fn ($q) => $this->scope->terapkan($q));
+            })
             ->where('status_penggunaan', 'Tersedia')
             ->orderBy('jenis_kendaraan')
             ->get();
@@ -87,6 +97,13 @@ class IzinKendaraanController extends Controller
             'durasi' => ['required', 'string', 'max:50'],
             'tanggal_berangkat' => ['required', 'date'],
         ]);
+
+        // Object-level: kendaraan yang dipilih harus dalam cakupan user.
+        abort_unless(
+            $this->scope->bolehAksesAset(Kendaraan::find($data['id_kendaraan'])?->aset),
+            403,
+            $this->scope->pesanAkses('mengajukan izin kendaraan')
+        );
 
         // Pastikan kendaraan tidak sudah disetujui dipakai pada tanggal yang sama.
         $bentrok = IzinKendaraan::where('id_kendaraan', $data['id_kendaraan'])
@@ -232,6 +249,17 @@ class IzinKendaraanController extends Controller
     public function downloadSurat(IzinKendaraan $izin)
     {
         abort_unless($izin->status_approval === 'Disetujui', 403);
+
+        // Object-level: hanya pengaju sendiri, atau user yang cakupannya
+        // mencakup kendaraan tersebut (mis. Admin Aset / pengurus barang).
+        // Menutup bocor surat izin lintas unit via URL langsung.
+        $isPengaju = $izin->id_pegawai_pengaju === auth()->user()?->pegawai?->id_pegawai;
+
+        abort_unless(
+            $isPengaju || $this->scope->bolehAksesAset($izin->kendaraan?->aset),
+            403,
+            $this->scope->pesanAkses('mengunduh surat izin kendaraan')
+        );
 
         $izin->load(['kendaraan.aset.barang', 'kendaraan.platAktif', 'pengaju', 'penyerah']);
 
@@ -463,8 +491,14 @@ class IzinKendaraanController extends Controller
      */
     public function kendaraanStore(Request $request, Kendaraan $kendaraan)
     {
+        // Object-level: kendaraan yang diajukan harus dalam cakupan user.
+        abort_unless(
+            $this->scope->bolehAksesAset($kendaraan->aset),
+            403,
+            $this->scope->pesanAkses('mengajukan izin kendaraan')
+        );
+
         $data = $request->validate([
-            'id_pegawai_pengaju' => ['nullable', 'exists:pegawai,id_pegawai'],
             'tanggal_berangkat' => ['nullable', 'date'],
             'waktu_berangkat' => ['nullable', 'string', 'max:5'],
             'tanggal_kembali' => ['nullable', 'date'],
@@ -483,7 +517,10 @@ class IzinKendaraanController extends Controller
 
         IzinKendaraan::create([
             'id_kendaraan' => $kendaraan->id_kendaraan,
-            'id_pegawai_pengaju' => $data['id_pegawai_pengaju'] ?? auth()->user()->pegawai?->id_pegawai,
+            // Pengaju SELALU user yang login — nilai client (mis.
+            // `id_pegawai_pengaju` lama) diabaikan agar tidak bisa
+            // mengajukan izin atas nama pegawai lain (impersonasi).
+            'id_pegawai_pengaju' => auth()->user()->pegawai?->id_pegawai,
             'tanggal_berangkat' => $data['tanggal_berangkat'] ?? null,
             'waktu_berangkat' => $data['waktu_berangkat'] ?? null,
             'tanggal_kembali' => $data['tanggal_kembali'] ?? null,

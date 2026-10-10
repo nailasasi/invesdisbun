@@ -1,14 +1,15 @@
 @extends('layouts.app')
 
-@section('title', 'Detail User')
+@section('title', 'Detail Akun')
 
-@section('page-title', 'Detail User')
+@section('page-title', 'Detail Akun')
 
 @section('content')
     @php
         $user = $pegawai->user;
         $isAktif = $user?->status_user === 'aktif';
         $isSelf = auth()->id() === $user?->id_user;
+        $isAdminAset = auth()->user()?->role?->nama_role === 'Admin Aset';
         $initial = mb_substr((string) ($pegawai->nama_pegawai ?: '?'), 0, 1);
 
         // Konfigurasi tampilan timeline per jenis aktivitas.
@@ -45,10 +46,6 @@
             ],
         ];
         $logMetaDefault = $logMeta['user.updated'];
-
-        $oldSkpd = old('id_skpd', $pegawai->id_skpd);
-        $oldRuangan = old('id_ruangan', $pegawai->id_ruangan);
-        $lokasiPegawai = \App\Models\Lokasi::untukSkpd($pegawai->id_skpd);
     @endphp
 
     {{-- Navigasi Kembali --}}
@@ -86,28 +83,36 @@
         </div>
 
         <div class="flex flex-wrap items-center justify-end gap-2">
-            <x-button type="button" id="btn-edit" variant="primary" icon="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
-                Edit Pengguna
+            <x-button href="{{ route('master-data.pegawai.edit', $pegawai) }}" variant="secondary" icon="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
+                Edit Data Pegawai
             </x-button>
 
-            <x-button type="button" id="btn-role" variant="secondary" icon="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z">
-                Ubah Role
-            </x-button>
-
-            @if ($user && ! $isSelf)
-                @if ($isAktif)
-                    <x-button type="button" id="btn-status" variant="secondary" icon="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
-                        Nonaktifkan Akun
-                    </x-button>
-                @else
-                    <x-button type="button" id="btn-status" variant="secondary" icon="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z">
-                        Aktifkan Akun
-                    </x-button>
-                @endif
-
-                <x-button type="button" id="btn-hapus" variant="outline" icon="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
-                    Hapus
+            @if ($user)
+                <x-button type="button" id="btn-edit" variant="primary" icon="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
+                    Edit Akun
                 </x-button>
+
+                <x-button type="button" id="btn-role" variant="secondary" icon="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z">
+                    Ubah Role
+                </x-button>
+
+                @if (! $isSelf)
+                    @if ($isAktif)
+                        <x-button type="button" id="btn-status" variant="secondary" icon="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                            Nonaktifkan Akun
+                        </x-button>
+                    @else
+                        <x-button type="button" id="btn-status" variant="secondary" icon="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z">
+                            Aktifkan Akun
+                        </x-button>
+                    @endif
+
+                    @if ($isAdminAset)
+                        <x-button type="button" id="btn-hapus" variant="outline" icon="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                            Hapus
+                        </x-button>
+                    @endif
+                @endif
             @endif
         </div>
     </div>
@@ -137,17 +142,20 @@
         <x-card :padding="false">
             <div class="border-b border-slate-100 px-6 py-4">
                 <h3 class="text-base font-bold text-slate-900">Informasi Pegawai</h3>
-                <p class="text-xs text-slate-400">Data jabatan, struktur organisasi, dan akun login</p>
+                <p class="text-xs text-slate-400">Dikelola melalui menu <a href="{{ route('master-data.pegawai.edit', $pegawai) }}" class="font-semibold text-disbun-700 hover:underline">Edit Data Pegawai</a></p>
             </div>
 
             <div class="grid grid-cols-1 gap-x-6 gap-y-5 p-6 sm:grid-cols-2 lg:grid-cols-3">
-                {{-- Jabatan --}}
+                <div class="space-y-1">
+                    <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">NIP</p>
+                    <p class="font-mono text-sm font-medium text-slate-800">{{ $pegawai->nip ?? '-' }}</p>
+                </div>
+
                 <div class="space-y-1">
                     <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Jabatan</p>
                     <p class="text-sm font-medium text-slate-800">{{ $pegawai->jabatan ?? '-' }}</p>
                 </div>
 
-                {{-- SKPD --}}
                 <div class="space-y-1">
                     <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">SKPD</p>
                     @if ($pegawai->skpd)
@@ -158,14 +166,12 @@
                     @endif
                 </div>
 
-                {{-- Lokasi --}}
                 <div class="space-y-1">
                     <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Lokasi</p>
-                    <p class="text-sm font-medium text-slate-800">{{ $lokasiPegawai?->nama_lokasi ?? '-' }}</p>
-                    <p class="text-[11px] text-slate-400">Terisi otomatis dari SKPD</p>
+                    <p class="text-sm font-medium text-slate-800">{{ \App\Models\Lokasi::untukSkpd($pegawai->id_skpd)?->nama_lokasi ?? '-' }}</p>
+                    <p class="text-[11px] text-slate-400">Turunan dari SKPD</p>
                 </div>
 
-                {{-- Ruangan --}}
                 <div class="space-y-1">
                     <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Ruangan</p>
                     <p class="text-sm font-medium text-slate-800">{{ $pegawai->ruangan?->nama_ruangan ?? '-' }}</p>
@@ -174,13 +180,6 @@
                     @endif
                 </div>
 
-                {{-- Username --}}
-                <div class="space-y-1">
-                    <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Username</p>
-                    <p class="font-mono text-sm font-medium text-slate-800">{{ $user?->username ?? '-' }}</p>
-                </div>
-
-                {{-- Role --}}
                 <div class="space-y-1">
                     <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Role / Hak Akses</p>
                     <p class="text-sm font-medium text-slate-800">{{ $user?->role?->nama_role ?? '-' }}</p>
@@ -196,6 +195,10 @@
             </div>
             <div class="grid grid-cols-1 gap-x-6 gap-y-5 p-6 sm:grid-cols-2 lg:grid-cols-4">
                 <div class="space-y-1">
+                    <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Username</p>
+                    <p class="font-mono text-sm font-medium text-slate-800">{{ $user?->username ?? '-' }}</p>
+                </div>
+                <div class="space-y-1">
                     <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Status Akun</p>
                     <p class="text-sm font-medium {{ $isAktif ? 'text-disbun-700' : 'text-red-600' }}">
                         {{ $user ? ($isAktif ? 'Aktif' : 'Nonaktif') : 'Belum ada akun' }}
@@ -205,12 +208,6 @@
                     <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Akun Dibuat</p>
                     <p class="text-sm font-medium text-slate-800">
                         {{ $user?->created_at ? \Carbon\Carbon::parse($user->created_at)->format('d M Y, H:i') : '-' }}
-                    </p>
-                </div>
-                <div class="space-y-1">
-                    <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Terakhir Diperbarui</p>
-                    <p class="text-sm font-medium text-slate-800">
-                        {{ $user?->updated_at ? \Carbon\Carbon::parse($user->updated_at)->format('d M Y, H:i') : '-' }}
                     </p>
                 </div>
                 <div class="space-y-1">
@@ -318,113 +315,40 @@
         </div>
     </div>
 
-    {{-- ===== Modal Edit Pengguna ===== --}}
+    {{-- ===== Modal Edit Akun (username & password) ===== --}}
     <div id="edit-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
         <div class="fixed inset-0" data-edit-close></div>
-        <div class="relative w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+        <div class="relative w-full max-w-md rounded-2xl bg-white shadow-2xl">
             <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
                 <div>
-                    <h3 class="text-lg font-semibold text-slate-900">Edit Pengguna</h3>
-                    <p class="mt-0.5 text-sm text-slate-500">Role diubah lewat tombol Ubah Role, bukan di sini.</p>
+                    <h3 class="text-lg font-semibold text-slate-900">Edit Akun</h3>
+                    <p class="mt-0.5 text-sm text-slate-500">Ubah username dan password <strong>{{ $pegawai->nama_pegawai }}</strong>.</p>
                 </div>
                 <button type="button" data-edit-close class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Tutup">
                     <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
             </div>
 
-            <form method="POST" action="{{ route('user.update', $pegawai->id_pegawai) }}" autocomplete="off">
+            <form method="POST" action="{{ route('user.update', $pegawai) }}" autocomplete="off">
                 @csrf
                 <input type="hidden" name="_form" value="edit">
                 <div class="max-h-[90vh] space-y-5 overflow-y-auto px-6 py-6">
-                    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                        <div class="space-y-1.5">
-                            <label for="e-nip" class="block text-sm font-medium text-slate-700">NIP <span class="text-red-500">*</span></label>
-                            <input type="text" id="e-nip" name="nip" required value="{{ old('nip', $pegawai->nip) }}"
-                                   class="block w-full rounded-xl border px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-0 transition {{ $errors->has('nip') ? 'border-red-400 focus:border-red-500 focus:ring-red-400' : 'border-slate-300 focus:border-emerald-500 focus:ring-emerald-400' }}">
-                            @error('nip')<p class="text-xs font-medium text-red-600">{{ $message }}</p>@enderror
-                        </div>
+                    <div class="space-y-1.5">
+                        <label for="e-username" class="block text-sm font-medium text-slate-700">Username <span class="text-red-500">*</span></label>
+                        <input type="text" id="e-username" name="username" maxlength="255" required value="{{ old('username', $user?->username) }}"
+                               class="block w-full rounded-xl border px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-offset-0 transition {{ $errors->has('username') ? 'border-red-400 focus:border-red-500 focus:ring-red-400' : 'border-slate-300 focus:border-emerald-500 focus:ring-emerald-400' }}">
+                        @error('username')<p class="text-xs font-medium text-red-600">{{ $message }}</p>@enderror
+                    </div>
 
-                        <div class="space-y-1.5">
-                            <label for="e-nama" class="block text-sm font-medium text-slate-700">Nama Pegawai <span class="text-red-500">*</span></label>
-                            <input type="text" id="e-nama" name="nama_pegawai" required value="{{ old('nama_pegawai', $pegawai->nama_pegawai) }}"
-                                   class="block w-full rounded-xl border px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-0 transition {{ $errors->has('nama_pegawai') ? 'border-red-400 focus:border-red-500 focus:ring-red-400' : 'border-slate-300 focus:border-emerald-500 focus:ring-emerald-400' }}">
-                            @error('nama_pegawai')<p class="text-xs font-medium text-red-600">{{ $message }}</p>@enderror
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="e-jabatan" class="block text-sm font-medium text-slate-700">Jabatan</label>
-                            <input type="text" id="e-jabatan" name="jabatan" value="{{ old('jabatan', $pegawai->jabatan) }}"
-                                   class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                            @error('jabatan')<p class="text-xs font-medium text-red-600">{{ $message }}</p>@enderror
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="e-skpd" class="block text-sm font-medium text-slate-700">SKPD</label>
-                            <select id="e-skpd" name="id_skpd"
-                                    class="block w-full rounded-xl border bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-0 transition {{ $errors->has('id_skpd') ? 'border-red-400 focus:border-red-500 focus:ring-red-400' : 'border-slate-300 focus:border-emerald-500 focus:ring-emerald-400' }}">
-                                <option value="">-- Pilih SKPD --</option>
-                                @foreach ($skpdList as $skpd)
-                                    @php
-                                        $lokasiSkpd = $skpd->isUpt() ? $skpd->lokasi : $lokasiDinas;
-                                    @endphp
-                                    <option
-                                        value="{{ $skpd->id_skpd }}"
-                                        data-lokasi-id="{{ $lokasiSkpd?->id_lokasi ?? '' }}"
-                                        data-lokasi-nama="{{ $lokasiSkpd?->nama_lokasi ?? '' }}"
-                                        @selected((string) $oldSkpd === (string) $skpd->id_skpd)
-                                    >{{ $skpd->nama_skpd }} ({{ $skpd->jenis_skpd }})</option>
-                                @endforeach
-                            </select>
-                            @error('id_skpd')<p class="text-xs font-medium text-red-600">{{ $message }}</p>@enderror
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="e-lokasi" class="block text-sm font-medium text-slate-700">Lokasi</label>
-                            <input
-                                type="text"
-                                id="e-lokasi"
-                                readonly
-                                value="{{ $lokasiPegawai?->nama_lokasi ?? '' }}"
-                                class="block w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-sm text-slate-600 shadow-sm focus:outline-none transition"
-                            >
-                            <p class="text-xs text-slate-400">Terisi otomatis dari SKPD: Sekretariat &amp; Bidang → Kantor Dinas; UPT → kantor UPT-nya.</p>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="e-ruangan" class="block text-sm font-medium text-slate-700">Ruangan</label>
-                            <select id="e-ruangan" name="id_ruangan"
-                                    class="block w-full rounded-xl border bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-0 transition {{ $errors->has('id_ruangan') ? 'border-red-400 focus:border-red-500 focus:ring-red-400' : 'border-slate-300 focus:border-emerald-500 focus:ring-emerald-400' }}">
-                                <option value="">-- Pilih Ruangan --</option>
-                                @foreach ($ruanganList as $ruangan)
-                                    <option
-                                        value="{{ $ruangan->id_ruangan }}"
-                                        data-lokasi="{{ $ruangan->id_lokasi ?? '' }}"
-                                        @if ($ruangan->id_skpd === null) data-shared="1" @endif
-                                        @selected((string) $oldRuangan === (string) $ruangan->id_ruangan)
-                                    >{{ $ruangan->nama_ruangan }}</option>
-                                @endforeach
-                            </select>
-                            @error('id_ruangan')<p class="text-xs font-medium text-red-600">{{ $message }}</p>@enderror
-                            <p class="text-xs text-slate-400">Ruang bersama tersedia untuk semua SKPD.</p>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="e-username" class="block text-sm font-medium text-slate-700">Username</label>
-                            <input type="text" id="e-username" name="username" maxlength="255" value="{{ old('username', $user?->username) }}"
-                                   class="block w-full rounded-xl border px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-offset-0 transition {{ $errors->has('username') ? 'border-red-400 focus:border-red-500 focus:ring-red-400' : 'border-slate-300 focus:border-emerald-500 focus:ring-emerald-400' }}">
-                            @error('username')<p class="text-xs font-medium text-red-600">{{ $message }}</p>@enderror
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="e-password" class="block text-sm font-medium text-slate-700">
-                                Password
-                                <span class="text-xs font-normal text-slate-400">(kosongkan = tidak diubah)</span>
-                            </label>
-                            <input type="password" id="e-password" name="password" autocomplete="new-password"
-                                   class="block w-full rounded-xl border px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-offset-0 transition {{ $errors->has('password') ? 'border-red-400 focus:border-red-500 focus:ring-red-400' : 'border-slate-300 focus:border-emerald-500 focus:ring-emerald-400' }}"
-                                   placeholder="Minimal 8 karakter">
-                            @error('password')<p class="text-xs font-medium text-red-600">{{ $message }}</p>@enderror
-                        </div>
+                    <div class="space-y-1.5">
+                        <label for="e-password" class="block text-sm font-medium text-slate-700">
+                            Password
+                            <span class="text-xs font-normal text-slate-400">(kosongkan = tidak diubah)</span>
+                        </label>
+                        <input type="password" id="e-password" name="password" autocomplete="new-password"
+                               class="block w-full rounded-xl border px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-offset-0 transition {{ $errors->has('password') ? 'border-red-400 focus:border-red-500 focus:ring-red-400' : 'border-slate-300 focus:border-emerald-500 focus:ring-emerald-400' }}"
+                               placeholder="Minimal 8 karakter">
+                        @error('password')<p class="text-xs font-medium text-red-600">{{ $message }}</p>@enderror
                     </div>
                 </div>
 
@@ -452,7 +376,7 @@
                 </button>
             </div>
 
-            <form method="POST" action="{{ route('user.role.update', $pegawai->id_pegawai) }}">
+            <form method="POST" action="{{ route('user.role.update', $pegawai) }}">
                 @csrf
                 <input type="hidden" name="_form" value="role">
                 <div class="px-6 py-5">
@@ -464,6 +388,7 @@
                                 <option value="{{ $role->id_role }}" @selected((string) old('id_role', $user?->id_role) === (string) $role->id_role)>{{ $role->nama_role }}</option>
                             @endforeach
                         </select>
+                        <p class="text-[11px] text-slate-400">Daftar role di sini sudah menyesuaikan SKPD pegawai ({{ $pegawai->skpd?->nama_skpd ?? '-' }}).</p>
                         @error('id_role')<p class="text-xs font-medium text-red-600">{{ $message }}</p>@enderror
                     </div>
                     <p class="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-500">
@@ -495,7 +420,7 @@
                 </button>
             </div>
 
-            <form method="POST" action="{{ route('user.status.update', $pegawai->id_pegawai) }}">
+            <form method="POST" action="{{ route('user.status.update', $pegawai) }}">
                 @csrf
                 <input type="hidden" name="status_user" value="{{ $isAktif ? 'nonaktif' : 'aktif' }}">
 
@@ -528,15 +453,17 @@
         </div>
     </div>
 
-    {{-- ===== Modal Hapus Permanen ===== --}}
-    <x-modal-confirm
-        id="hapus-modal"
-        :action="route('user.destroy', $pegawai->id_pegawai)"
-        method="DELETE"
-        title="Hapus Permanen User"
-        :message="'Menghapus '.$pegawai->nama_pegawai.' akan menghilangkan akun login dan data pegawai secara permanen. Aset, dokumen SPPBI, dan usulan RKBMD ikut terhapus. Bila hanya ingin menutup akses login, gunakan tombol Nonaktifkan Akun.'"
-        button-text="Hapus Permanen"
-    />
+    {{-- ===== Modal Hapus Permanen (Admin Aset saja) ===== --}}
+    @if ($user && ! $isSelf && $isAdminAset)
+        <x-modal-confirm
+            id="hapus-modal"
+            :action="route('user.destroy', $pegawai)"
+            method="DELETE"
+            title="Hapus Permanen User"
+            :message="'Menghapus akun '.$pegawai->nama_pegawai.' akan menghilangkan akun login secara permanen. Data pegawai tetap tersimpan. Bila hanya ingin menutup akses login, gunakan tombol Nonaktifkan Akun.'"
+            button-text="Hapus Permanen"
+        />
+    @endif
 
     @push('scripts')
     <script>
@@ -604,49 +531,8 @@
             }));
         }
 
-        // ---------- Cascade SKPD -> Lokasi -> Ruangan ----------
-        const eSkpd = document.getElementById('e-skpd');
-        const eLokasi = document.getElementById('e-lokasi');
-        const eRuangan = document.getElementById('e-ruangan');
-
-        let stickyRuangan = @json($oldRuangan);
-
-        function applyEditRuanganFilter(selectedRuangan) {
-            const lokasiId = eSkpd.options[eSkpd.selectedIndex]?.dataset.lokasiId || '';
-            let hasOption = false;
-
-            eRuangan.querySelectorAll('option').forEach((opt) => {
-                if (!opt.value) { opt.style.display = ''; return; }
-                // Ruang bersama (tanpa skpd) selalu boleh dipilih.
-                const match = opt.dataset.shared === '1' || (lokasiId && opt.dataset.lokasi === lokasiId);
-                opt.style.display = match ? '' : 'none';
-                if (match) hasOption = true;
-            });
-
-            const stick = selectedRuangan || '';
-            eRuangan.value = stick && hasOption ? stick : '';
-            eRuangan.querySelector('option[value=""]').textContent = hasOption
-                ? '-- Pilih Ruangan --'
-                : (lokasiId ? '-- Tidak ada ruangan untuk lokasi ini --' : '-- Pilih SKPD dulu --');
-        }
-
-        function applyEditLokasiDisplay() {
-            const opt = eSkpd.options[eSkpd.selectedIndex];
-            if (eLokasi) {
-                eLokasi.value = opt && opt.value ? (opt.dataset.lokasiNama || '-') : '';
-            }
-            stickyRuangan = '';
-            applyEditRuanganFilter();
-        }
-
-        if (eSkpd && eRuangan) {
-            applyEditRuanganFilter(stickyRuangan);
-
-            eSkpd.addEventListener('change', applyEditLokasiDisplay);
-        }
-
         // Buka kembali modal yang gagal tervalidasi agar pesan error langsung terlihat.
-        @if ($errors->hasAny(['nip', 'nama_pegawai', 'jabatan', 'id_skpd', 'id_ruangan', 'username', 'password']) && old('_form') !== 'role')
+        @if ($errors->hasAny(['username', 'password']))
             editModal.modal?.classList.remove('hidden');
             editModal.modal?.classList.add('flex');
             document.body.classList.add('overflow-hidden');
