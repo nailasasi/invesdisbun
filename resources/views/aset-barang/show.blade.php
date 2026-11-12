@@ -5,15 +5,11 @@
 @section('page-title', 'Detail Aset Barang')
 
 @section('content')
-    @php
-        $berkasSppbi = $pegawai->dokumenSppbi?->file_path;
-    @endphp
-
     {{-- Navigasi Kembali --}}
     <div class="mb-4">
-        <a href="{{ route('aset-barang.index') }}" class="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 transition hover:text-disbun-700">
+        <a href="{{ $kembaliUrl ?? route('aset-barang.index') }}" class="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 transition hover:text-disbun-700">
             <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
-            Kembali ke Aset Barang
+            {{ $kembaliLabel ?? 'Kembali ke Aset Barang' }}
         </a>
     </div>
 
@@ -24,50 +20,20 @@
             <p class="mt-1 text-sm text-slate-500">Daftar aset inventaris yang dipegang dan menjadi tanggung jawab pegawai.</p>
         </div>
 
-        @if ($isAdminAset)
+        @if (($canPrintLabel ?? false) || (($canManage ?? false) && $asetPasang->isNotEmpty()))
         <div class="flex flex-wrap items-center justify-end gap-2">
-            {{-- 1. Berkas Tanda Tangan Basah --}}
-            @if (! empty($berkasSppbi))
-                <div class="inline-flex items-center rounded-xl border border-disbun-200 bg-disbun-50 p-0.5 shadow-2xs">
-                    <a href="{{ asset('storage/'.$berkasSppbi) }}" target="_blank" rel="noopener"
-                       class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-disbun-800 transition hover:bg-disbun-100"
-                       title="Buka dokumen hasil scan tanda tangan basah">
-                        <svg class="h-4 w-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                        <span>Lihat Dokumen TTD</span>
-                    </a>
-                    <button type="button" data-ttd-open data-ttd-title="Ganti / Upload Ulang Berkas TTD"
-                            title="Ganti / Upload Ulang Berkas"
-                            class="inline-flex h-7 w-7 items-center justify-center rounded-lg text-disbun-700 transition hover:bg-disbun-100">
-                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
-                    </button>
-                </div>
-            @else
-                <button type="button" data-ttd-open
-                        class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50"
-                        title="Unggah hasil scan tanda tangan basah SPPBI (PDF/JPG/PNG)">
-                    <svg class="h-4 w-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-                    <span>+ Upload Scan TTD</span>
-                </button>
-            @endif
-
-            {{-- 2. Unduh Word --}}
-            <a href="{{ route('aset-barang.sppbi.download.word', $pegawai->id_pegawai) }}"
-               class="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-xs font-semibold text-blue-700 shadow-2xs transition hover:bg-blue-100"
-               title="Download Word (.docx)">
-                <svg class="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                <span>Unduh Word</span>
-            </a>
-
-            {{-- 3. Cetak Semua Label --}}
+            {{-- 1. Cetak Semua Label --}}
+            @if ($canPrintLabel ?? false)
             <a href="{{ route('aset-barang.label.download', $pegawai->id_pegawai) }}"
                class="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-700 shadow-2xs transition hover:bg-amber-100"
                title="Unduh semua label aset pegawai dalam format Excel">
                 <svg class="h-4 w-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6h.008v.008H6V6z"/></svg>
                 <span>Cetak Semua Label</span>
             </a>
+            @endif
 
-            {{-- 4. Tombol Utama: Pasang Aset (existing master, bukan membuat master baru) --}}
-            @if ($asetPasang->isNotEmpty())
+            {{-- 2. Tombol Utama: Pasang Aset (existing master, bukan membuat master baru) --}}
+            @if (($canManage ?? false) && $asetPasang->isNotEmpty())
             <button type="button" id="btn-pasang" class="inline-flex items-center gap-1.5 rounded-xl bg-disbun-700 px-4 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-disbun-800">
                 <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
                 Pasang Aset
@@ -105,8 +71,8 @@
                 </div>
             </div>
 
-            {{-- Sisi Kanan: Kartu Statistik Ringkas (NIP & Total Aset) --}}
-            <div class="inline-flex items-center gap-5 rounded-2xl border border-slate-100 bg-slate-50/60 px-6 py-4 shrink-0">
+            {{-- Sisi Kanan: Kartu Statistik Ringkas (NIP, Total Aset Barang & Total Kendaraan) --}}
+            <div class="inline-flex flex-wrap items-center gap-x-5 gap-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 px-6 py-4 shrink-0">
                 <div class="min-w-0">
                     <span class="block text-[10px] font-bold uppercase tracking-wider text-slate-400">NIP</span>
                     <span class="mt-1 block break-all font-mono text-sm font-bold text-slate-700">{{ $pegawai->nip ?? '-' }}</span>
@@ -115,10 +81,22 @@
                 <span class="h-8 w-px bg-slate-200"></span>
 
                 <div class="min-w-0">
-                    <span class="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Aset</span>
+                    <span class="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Aset Barang</span>
                     <div class="mt-1 flex items-baseline gap-1.5">
                         <span class="text-2xl font-extrabold leading-none text-emerald-600">{{ $asetList->count() }}</span>
                         <span class="text-[10px] font-semibold text-slate-400">Unit Barang</span>
+                    </div>
+                </div>
+
+                <span class="h-8 w-px bg-slate-200"></span>
+
+                {{-- Sumber sama dengan tabel "Aset Kendaraan Dipegang": hanya
+                     kendaraan dengan nama pemegang cocok PERSIS & UNIK. --}}
+                <div class="min-w-0">
+                    <span class="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Kendaraan</span>
+                    <div class="mt-1 flex items-baseline gap-1.5">
+                        <span class="text-2xl font-extrabold leading-none text-emerald-600">{{ $kendaraanList->count() }}</span>
+                        <span class="text-[10px] font-semibold text-slate-400">Unit Kendaraan</span>
                     </div>
                 </div>
             </div>
@@ -145,6 +123,9 @@
                             @endif
                             <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Kondisi</th>
                             @if ($isAdminAset)
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">SPPBI</th>
+                            @endif
+                            @if (($canPrintLabel ?? false) || ($canManage ?? false))
                                 <th scope="col" class="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Aksi</th>
                             @endif
                         </tr>
@@ -173,21 +154,39 @@
                                     <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {{ $kondisiColor }}">{{ $aset->kondisi ?? '-' }}</span>
                                 </td>
                                 @if ($isAdminAset)
+                                    <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                        @if ($item->id_pegawai && ($aset->siap_sppbi ?? false))
+                                            <a href="{{ route('aset-barang.sppbi.download.word', $item->id_pegawai) }}"
+                                               title="Unduh SPPBI {{ $pegawai->nama_pegawai }}"
+                                               class="inline-flex items-center rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-200">
+                                                SPPBI
+                                            </a>
+                                        @else
+                                            {{-- SPPBI hanya tampil bila penempatan aktif sudah difinalisasi (Sudah Difinalisasi). --}}
+                                            <span class="text-slate-400">-</span>
+                                        @endif
+                                    </td>
+                                @endif
+                                @if (($canPrintLabel ?? false) || ($canManage ?? false))
                                     <td class="whitespace-nowrap px-3 py-4 text-sm">
                                         <div class="inline-flex items-center gap-1 rounded-2xl border border-slate-200/70 bg-slate-50/60 p-1 shadow-2xs">
-                                            <a href="{{ route('aset-barang.cetak.label.single', $aset->id_aset) }}" target="_blank" title="Cetak Label" class="flex h-7 w-7 items-center justify-center rounded-xl bg-amber-50 text-amber-600 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
-                                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6h.01"/></svg>
-                                            </a>
-                                            <button type="button" data-delete-target="{{ $aset->id_aset }}" data-delete-name="{{ $aset->barang->nama_barang ?? $aset->nomor_kartu_barang }}" title="Hapus" class="flex h-7 w-7 items-center justify-center rounded-xl bg-red-50 text-red-600 transition hover:bg-red-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
-                                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                                            </button>
+                                            @if ($canPrintLabel ?? false)
+                                                <a href="{{ route('aset-barang.cetak.label.single', $aset->id_aset) }}" target="_blank" title="Cetak Label" class="flex h-7 w-7 items-center justify-center rounded-xl bg-amber-50 text-amber-600 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
+                                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6h.01"/></svg>
+                                                </a>
+                                            @endif
+                                            @if ($canManage ?? false)
+                                                <button type="button" data-delete-target="{{ $aset->id_aset }}" data-delete-name="{{ $aset->barang->nama_barang ?? $aset->nomor_kartu_barang }}" title="Hapus" class="flex h-7 w-7 items-center justify-center rounded-xl bg-red-50 text-red-600 transition hover:bg-red-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
+                                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                                </button>
+                                            @endif
                                         </div>
                                     </td>
                                 @endif
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="{{ $isAdminAset ? 8 : 5 }}" class="px-6 py-12 text-center text-sm text-slate-400">Belum ada aset yang dipegang pegawai ini.</td>
+                                <td colspan="{{ ($isAdminAset ? 8 : 4) + (($canPrintLabel ?? false) || ($canManage ?? false) ? 1 : 0) }}" class="px-6 py-12 text-center text-sm text-slate-400">Belum ada aset yang dipegang pegawai ini.</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -196,7 +195,93 @@
         </x-card>
     </div>
 
-    @if ($isAdminAset)
+    {{-- Daftar kendaraan yang dipegang --}}
+    <div class="mt-6">
+        <x-card :padding="false">
+            <div class="border-b border-slate-100 px-6 py-4">
+                <h3 class="font-semibold text-slate-900">Aset Kendaraan Dipegang</h3>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-slate-200">
+                    <thead class="bg-slate-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">#</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Nama Kendaraan</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Jenis</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Plat Aktif</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Pajak Tahunan</th>
+                            @if ($isAdminAset)
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">SPPKD</th>
+                            @endif
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 bg-white">
+                        @forelse ($kendaraanList as $i => $k)
+                            @php
+                                $platAktif = $k->platAktif;
+                                $pajakAktif = $k->pajakAktif;
+                                $pajakJatuh = $pajakAktif?->tanggal_berakhir;
+                                $now = \Carbon\Carbon::today();
+                                $diffPajak = $pajakJatuh ? $now->diffInDays($pajakJatuh, false) : null;
+                                $pajakClass = match (true) {
+                                    $diffPajak === null => 'bg-slate-100 text-slate-600',
+                                    $diffPajak < 0 => 'bg-red-100 text-red-700',
+                                    $diffPajak <= 30 => 'bg-amber-100 text-amber-700',
+                                    default => 'bg-emerald-100 text-emerald-700',
+                                };
+                                $pajakLabel = match (true) {
+                                    $diffPajak === null => '-',
+                                    $diffPajak < 0 => $pajakJatuh->format('d M Y') . ' (Terlambat)',
+                                    $pajakJatuh->isSameDay($now) => $pajakJatuh->format('d M Y') . ' (Jatuh Hari Ini)',
+                                    $diffPajak <= 30 => $pajakJatuh->format('d M Y') . ' (' . (int) round($diffPajak) . ' hari lagi)',
+                                    default => $pajakJatuh->format('d M Y'),
+                                };
+                            @endphp
+                            <tr class="transition hover:bg-slate-50">
+                                <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-500">{{ $i + 1 }}</td>
+                                <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                    <a href="{{ route('kendaraan.show', $k->id_kendaraan) }}" class="font-medium text-disbun-700 hover:underline">
+                                        {{ $k->namaTampil() ?? 'Kendaraan' }}
+                                    </a>
+                                    <p class="text-xs text-slate-400">{{ $k->aset?->nomor_kartu_barang ?? '-' }}</p>
+                                </td>
+                                <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $k->jenis_kendaraan ?? '-' }}</td>
+                                <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-700">{{ $platAktif?->nomor_plat ?? '-' }}</td>
+                                <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                    @if ($pajakJatuh)
+                                        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {{ $pajakClass }}">
+                                            {{ $pajakLabel }}
+                                        </span>
+                                    @else
+                                        <span class="text-slate-400">-</span>
+                                    @endif
+                                </td>
+                                @if ($isAdminAset)
+                                    <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                        @if (trim((string) $k->pemegang) !== '')
+                                            <a href="{{ route('kendaraan.sppkd-aktif.download', $k->id_kendaraan) }}"
+                                               title="Unduh SPPKD {{ $k->namaTampil() ?? 'Kendaraan' }}"
+                                               class="inline-flex items-center rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-200">
+                                                SPPKD
+                                            </a>
+                                        @else
+                                            <span class="text-slate-400">-</span>
+                                        @endif
+                                    </td>
+                                @endif
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="{{ $isAdminAset ? 6 : 5 }}" class="px-6 py-12 text-center text-sm text-slate-400">Belum ada kendaraan yang dipegang pegawai ini.</td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </x-card>
+    </div>
+
+    @if ($canManage ?? false)
         {{-- Modal Pasang Aset ke Pegawai.
              PENEMPATAN AWAL: memasang master aset yang sudah ada.
              Tidak membuat record `aset` baru. Ruangan ditentukan server dari
@@ -264,44 +349,6 @@
                     </div>
                 </div>
         </div>
-
-        {{-- Modal Upload / Ganti Berkas TTD --}}
-        <div id="modal-ttd" @if ($errors->has('file_ttd')) data-ttd-autopen @endif class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
-            <div class="fixed inset-0" data-ttd-close></div>
-            <div class="relative w-full max-w-md rounded-2xl bg-white shadow-2xl">
-                    <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
-                        <div>
-                            <h3 id="ttd-modal-title" class="text-lg font-semibold text-slate-900">{{ ! empty($berkasSppbi) ? 'Ganti / Upload Ulang Berkas TTD' : 'Upload Scan TTD' }}</h3>
-                            <p class="mt-0.5 text-sm text-slate-500">Hasil scan tanda tangan basah SPPBI {{ $pegawai->nama_pegawai }}.</p>
-                        </div>
-                        <button type="button" data-ttd-close class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Tutup">
-                            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                        </button>
-                    </div>
-
-                    <form method="POST" action="{{ route('aset-barang.sppbi.upload.ttd', $pegawai->id_pegawai) }}" enctype="multipart/form-data" autocomplete="off">
-                        @csrf
-                        <div class="space-y-4 px-6 py-6">
-                            <div class="space-y-1.5">
-                                <label for="field-ttd-file" class="block text-sm font-medium text-slate-700">Berkas Scan (PDF/JPG/PNG) <span class="text-red-500">*</span></label>
-                                <input type="file" id="field-ttd-file" name="file_ttd" required accept=".pdf,.jpg,.jpeg,.png"
-                                       class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                                <p class="text-xs text-slate-400">Maksimal 5 MB. Berkas lama akan diganti dengan berkas yang baru diunggah.</p>
-                                @error('file_ttd')
-                                    <p class="text-xs font-medium text-red-600">{{ $message }}</p>
-                                @enderror
-                            </div>
-                        </div>
-
-                        <div class="flex items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
-                            <button type="button" data-ttd-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
-                            <button type="submit" id="btn-submit-ttd" class="inline-flex items-center justify-center gap-2 rounded-xl bg-disbun-700 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-disbun-800">
-                                Simpan Berkas
-                            </button>
-                        </div>
-                    </form>
-                </div>
-        </div>
     @endif
 
     @push('scripts')
@@ -310,7 +357,7 @@
         const isAdminAset = @json($isAdminAset);
 
         // PENTING: URL dasar aset dipakai oleh aksi "Usulkan Hapus" (DELETE).
-        const asetUrl = @json(route('aset-barang.aset.update', ['aset' => '__ID__']));
+        const asetUrl = @json(route('aset-barang.aset.destroy', ['aset' => '__ID__']));
         const pasangUrlTemplate = @json(route('aset-barang.aset.pasang.pegawai', ['pegawai' => $pegawai->id_pegawai, 'aset' => '__ID__']));
 
         const deleteModal = document.getElementById('delete-modal');
@@ -414,42 +461,6 @@
                     submit.disabled = false;
                 }
             });
-        }
-
-        const modalTtd = document.getElementById('modal-ttd');
-
-        if (modalTtd) {
-            const openTtd = () => {
-                modalTtd.classList.remove('hidden');
-                modalTtd.classList.add('flex');
-            };
-            const closeTtd = () => {
-                modalTtd.classList.add('hidden');
-                modalTtd.classList.remove('flex');
-            };
-
-            document.querySelectorAll('[data-ttd-open]').forEach(el => {
-                el.addEventListener('click', () => {
-                    const title = el.dataset.ttdTitle;
-                    if (title) {
-                        document.getElementById('ttd-modal-title').textContent = title;
-                    }
-                    openTtd();
-                });
-            });
-
-            modalTtd.querySelectorAll('[data-ttd-close]').forEach(el => el.addEventListener('click', closeTtd));
-
-            const btnSubmitTtd = document.getElementById('btn-submit-ttd');
-            modalTtd.querySelector('form').addEventListener('submit', () => {
-                btnSubmitTtd.disabled = true;
-                btnSubmitTtd.textContent = 'Mengunggah...';
-            });
-
-            // Tampilkan kembali modal bila validasi gagal (flash error dari server).
-            if (modalTtd.hasAttribute('data-ttd-autopen')) {
-                openTtd();
-            }
         }
 
         document.querySelectorAll('[data-delete-target]').forEach(btn => {

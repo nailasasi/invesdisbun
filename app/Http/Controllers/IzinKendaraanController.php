@@ -10,8 +10,10 @@ use App\Models\User;
 use App\Services\AsetScope;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use PhpOffice\PhpWord\IOFactory;
 use PhpOffice\PhpWord\PhpWord;
 use PhpOffice\PhpWord\SimpleType\Jc;
@@ -43,45 +45,184 @@ class IzinKendaraanController extends Controller
             ->orderByDesc('id_izin')
             ->get();
 
-        // Kendaraan dinas yang tersedia untuk diajukan (belum dihapus & tidak
-        // sedang dipakai oleh pengajuan lain yang masih berjalan). Kandidat
-        // disesuaikan cakupan user lewat AsetScope — user non-admin hanya
-        // bisa mengajukan kendaraan yang lokasinya dalam scope-nya.
-        $kendaraanList = Kendaraan::with(['aset.barang', 'platAktif'])
-            ->whereHas('aset', function ($a) {
-                $a->where('status_aset', 'aktif')
-                    ->tap(fn ($q) => $this->scope->terapkan($q));
-            })
-            ->where('status_penggunaan', 'Tersedia')
-            ->orderBy('jenis_kendaraan')
+        // Opsi kendaraan: jika pemohon kembali dari error validasi dengan input jadwal yang sah,
+        // muat kendaraan yang sesuai dengan jadwal tersebut. Jika belum ada jadwal, kosongkan
+        // agar pemohon menentukan jadwal pemakaian terlebih dahulu.
+        $kendaraanOptions = [];
+        $oldMulaiTgl = old('tanggal_berangkat');
+        $oldMulaiJam = old('waktu_berangkat');
+        $oldSelesaiTgl = old('tanggal_kembali');
+        $oldSelesaiJam = old('waktu_kembali');
+
+        if ($oldMulaiTgl && $oldMulaiJam && $oldSelesaiTgl && $oldSelesaiJam) {
+            try {
+                $start = Carbon::parse($oldMulaiTgl . ' ' . $oldMulaiJam);
+                $end = Carbon::parse($oldSelesaiTgl . ' ' . $oldSelesaiJam);
+                if ($end->greaterThan($start)) {
+                    $kendaraanOptions = $this->queryKendaraanTersedia($start, $end)->mapWithKeys(function (Kendaraan $k) {
+                        $nama = $k->namaTampil();
+                        $plat = $k->platAktif?->nomor_plat;
+                        return [$k->id_kendaraan => trim($nama . ($plat ? " ({$plat})" : ''))];
+                    })->all();
+                }
+            } catch (\Exception $e) {
+                $kendaraanOptions = [];
+            }
+        }
+
+        // Pengurus Barang (Penyerah): HANYA pegawai yang ditempatkan di "Ruang Aset".
+        $pengurusBarangList = Pegawai::whereHas('ruangan', fn ($q) => $q->where('nama_ruangan', 'Ruang Aset'))
+            ->orderBy('nama_pegawai')
             ->get();
-
-        // Calon Pengurus Barang (Penyerah): hanya pegawai yang memiliki
-        // akun/role "Admin Aset" yang ditampilkan di dropdown.
-        $pengurusBarangList = User::whereHas('role', fn ($q) => $q->where('nama_role', 'Admin Aset'))
-            ->with('pegawai')
-            ->get()
-            ->pluck('pegawai')
-            ->filter()
-            ->unique('id_pegawai')
-            ->sortBy('nama_pegawai')
-            ->values();
-
-        $kendaraanOptions = $kendaraanList->mapWithKeys(function (Kendaraan $k) {
-            $nama = $k->aset?->barang?->nama_barang ?: ($k->jenis_kendaraan ?? 'Kendaraan');
-            $plat = $k->platAktif?->nomor_plat;
-
-            return [$k->id_kendaraan => trim($nama.($plat ? " ({$plat})" : ''))];
-        })->all();
 
         $pengurusOptions = $pengurusBarangList->mapWithKeys(function (Pegawai $p) {
             return [$p->id_pegawai => $p->nama_pegawai];
         })->all();
 
         return view('layanan.izin-kendaraan.index', compact(
-            'izinList', 'kendaraanList', 'pengurusBarangList', 'kendaraanOptions',
+            'izinList', 'pengurusBarangList', 'kendaraanOptions',
             'pengurusOptions', 'isAdminAset'
         ));
+    }
+
+    /**
+     * Endpoint ketersediaan kendaraan secara dinamis berdasarkan rentang jadwal yang dipilih.
+     */
+    public function ketersediaan(Request $request)
+    {
+        $validator = validator($request->all(), [
+            'tanggal_berangkat' => ['required', 'date'],
+            'waktu_berangkat' => ['required', 'string'],
+            'tanggal_kembali' => ['required', 'date'],
+            'waktu_kembali' => ['required', 'string'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Jadwal belum lengkap atau format tidak valid.',
+                'kendaraan' => [],
+            ], 422);
+        }
+
+        try {
+            $timeStart = Carbon::parse($request->waktu_berangkat)->format('H:i:s');
+            $timeEnd = Carbon::parse($request->waktu_kembali)->format('H:i:s');
+            $start = Carbon::parse($request->tanggal_berangkat . ' ' . $timeStart);
+            $end = Carbon::parse($request->tanggal_kembali . ' ' . $timeEnd);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Format tanggal atau jam pemakaian tidak valid.',
+                'kendaraan' => [],
+            ], 422);
+        }
+
+        if ($end->lessThanOrEqualTo($start)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tanggal dan jam selesai harus lebih besar daripada waktu mulai.',
+                'kendaraan' => [],
+            ], 422);
+        }
+
+        $kendaraanList = $this->queryKendaraanTersedia($start, $end);
+
+        return response()->json([
+            'success' => true,
+            'durasi' => self::hitungDurasi($start, $end),
+            'kendaraan' => $kendaraanList->map(function (Kendaraan $k) {
+                $nama = $k->namaTampil();
+                $plat = $k->platAktif?->nomor_plat;
+                return [
+                    'id' => $k->id_kendaraan,
+                    'text' => trim($nama . ($plat ? " ({$plat})" : '')),
+                ];
+            })->values(),
+        ]);
+    }
+
+    /**
+     * Query kendaraan dinas yang memenuhi seluruh syarat ketersediaan jadwal:
+     * - Aset berstatus aktif.
+     * - Penempatan aset sudah difinalisasi (penempatanAktif.is_finalized = 1).
+     * - Berada dalam cakupan lokasi pengguna (AsetScope).
+     * - Tidak memiliki pengajuan berstatus "Menunggu" atau "Disetujui" yang jadwalnya bertabrakan.
+     * - Tidak sedang digunakan secara aktual pada waktu yang dipilih.
+     */
+    public function queryKendaraanTersedia(Carbon $start, Carbon $end)
+    {
+        $startStr = $start->format('Y-m-d H:i:s');
+        $endStr = $end->format('Y-m-d H:i:s');
+
+        $driver = DB::connection()->getDriverName();
+        $startExpr = $driver === 'sqlite'
+            ? "datetime(tanggal_berangkat || ' ' || coalesce(waktu_berangkat, '00:00:00'))"
+            : "TIMESTAMP(tanggal_berangkat, COALESCE(waktu_berangkat, '00:00:00'))";
+        $endExpr = $driver === 'sqlite'
+            ? "datetime(coalesce(tanggal_kembali, tanggal_berangkat) || ' ' || coalesce(waktu_kembali, '23:59:59'))"
+            : "TIMESTAMP(COALESCE(tanggal_kembali, tanggal_berangkat), COALESCE(waktu_kembali, '23:59:59'))";
+
+        return Kendaraan::with(['aset.barang', 'platAktif', 'aset.penempatanAktif'])
+            ->whereHas('aset', function ($a) {
+                $a->where('status_aset', 'aktif')
+                    ->whereHas('penempatanAktif', function ($p) {
+                        $p->where('is_finalized', 1);
+                    })
+                    ->tap(fn ($q) => $this->scope->terapkan($q));
+            })
+            ->whereDoesntHave('izin', function ($q) use ($startStr, $endStr, $startExpr, $endExpr) {
+                $q->whereIn('status_approval', ['Menunggu', 'Disetujui'])
+                    ->whereRaw("{$startExpr} < ?", [$endStr])
+                    ->whereRaw("{$endExpr} > ?", [$startStr]);
+            })
+            ->when($start->lessThanOrEqualTo(now()) && $end->greaterThanOrEqualTo(now()), function ($q) {
+                $q->where('status_penggunaan', '!=', 'Digunakan');
+            })
+            ->orderBy('jenis_kendaraan')
+            ->get();
+    }
+
+    /**
+     * Pengecekan benturan jadwal terhadap pengajuan lain.
+     */
+    public function cekBenturanJadwal(int $idKendaraan, string $startStr, string $endStr, ?int $exceptIzinId = null): bool
+    {
+        $driver = DB::connection()->getDriverName();
+        $startExpr = $driver === 'sqlite'
+            ? "datetime(tanggal_berangkat || ' ' || coalesce(waktu_berangkat, '00:00:00'))"
+            : "TIMESTAMP(tanggal_berangkat, COALESCE(waktu_berangkat, '00:00:00'))";
+        $endExpr = $driver === 'sqlite'
+            ? "datetime(coalesce(tanggal_kembali, tanggal_berangkat) || ' ' || coalesce(waktu_kembali, '23:59:59'))"
+            : "TIMESTAMP(COALESCE(tanggal_kembali, tanggal_berangkat), COALESCE(waktu_kembali, '23:59:59'))";
+
+        return IzinKendaraan::where('id_kendaraan', $idKendaraan)
+            ->whereIn('status_approval', ['Menunggu', 'Disetujui'])
+            ->when($exceptIzinId, fn ($q) => $q->where('id_izin', '!=', $exceptIzinId))
+            ->whereRaw("{$startExpr} < ?", [$endStr])
+            ->whereRaw("{$endExpr} > ?", [$startStr])
+            ->exists();
+    }
+
+    /**
+     * Hitung durasi otomatis dari tanggal dan jam mulai sampai selesai.
+     */
+    public static function hitungDurasi(Carbon $start, Carbon $end): string
+    {
+        if ($start->isSameDay($end)) {
+            $diffHours = $start->diffInMinutes($end) / 60;
+            $jamLabel = $start->format('H:i') . ' - ' . $end->format('H:i');
+
+            if ($diffHours <= 5) {
+                return 'Setengah Hari (' . $jamLabel . ')';
+            }
+
+            return '1 Hari (' . $jamLabel . ')';
+        }
+
+        $diffDays = (int) $start->copy()->startOfDay()->diffInDays($end->copy()->startOfDay());
+        $totalHari = $diffDays + 1;
+        return $totalHari . ' Hari (' . $start->translatedFormat('d M') . ' - ' . $end->translatedFormat('d M Y') . ')';
     }
 
     /**
@@ -94,42 +235,97 @@ class IzinKendaraanController extends Controller
             'nama_pengemudi' => ['required', 'string', 'max:100'],
             'id_pengurus_barang' => ['required', 'exists:pegawai,id_pegawai'],
             'tujuan' => ['required', 'string', 'max:500'],
-            'durasi' => ['required', 'string', 'max:50'],
             'tanggal_berangkat' => ['required', 'date'],
+            'waktu_berangkat' => ['required', 'string'],
+            'tanggal_kembali' => ['required', 'date'],
+            'waktu_kembali' => ['required', 'string'],
+            'durasi' => ['nullable', 'string', 'max:50'],
         ]);
 
-        // Object-level: kendaraan yang dipilih harus dalam cakupan user.
-        abort_unless(
-            $this->scope->bolehAksesAset(Kendaraan::find($data['id_kendaraan'])?->aset),
-            403,
-            $this->scope->pesanAkses('mengajukan izin kendaraan')
-        );
-
-        // Pastikan kendaraan tidak sudah disetujui dipakai pada tanggal yang sama.
-        $bentrok = IzinKendaraan::where('id_kendaraan', $data['id_kendaraan'])
-            ->where('tanggal_berangkat', $data['tanggal_berangkat'])
-            ->where('status_approval', 'Disetujui')
-            ->exists();
-
-        if ($bentrok) {
-            return redirect()->back()
-                ->withInput()
-                ->withErrors(['id_kendaraan' => 'Kendaraan tersebut sudah dipakai (disetujui) pada tanggal berangkat yang dipilih.']);
+        try {
+            $timeStart = Carbon::parse($data['waktu_berangkat'])->format('H:i:s');
+            $timeEnd = Carbon::parse($data['waktu_kembali'])->format('H:i:s');
+            $startDateTime = Carbon::parse($data['tanggal_berangkat'] . ' ' . $timeStart);
+            $endDateTime = Carbon::parse($data['tanggal_kembali'] . ' ' . $timeEnd);
+        } catch (\Exception $e) {
+            throw ValidationException::withMessages([
+                'waktu_berangkat' => 'Format tanggal atau jam pemakaian tidak valid.',
+            ]);
         }
 
-        IzinKendaraan::create([
-            'id_kendaraan' => $data['id_kendaraan'],
-            'id_pegawai_pengaju' => auth()->user()->pegawai?->id_pegawai,
-            'id_pengurus_barang' => $data['id_pengurus_barang'],
-            'nama_pengemudi' => $data['nama_pengemudi'],
-            'tujuan' => $data['tujuan'],
-            'durasi' => $data['durasi'],
-            'tanggal_berangkat' => $data['tanggal_berangkat'],
-            'status_approval' => 'Menunggu',
-        ]);
+        if ($endDateTime->lessThanOrEqualTo($startDateTime)) {
+            throw ValidationException::withMessages([
+                'tanggal_kembali' => 'Tanggal dan jam selesai pemakaian harus lebih besar daripada waktu mulai.',
+            ]);
+        }
 
-        return redirect()->route('layanan.izin-kendaraan.index')
-            ->with('success', 'Pengajuan izin berhasil dikirim dan menunggu verifikasi pengurus barang.');
+        $durasi = self::hitungDurasi($startDateTime, $endDateTime);
+
+        // Gunakan transaksi dengan row-level lock untuk mencegah race condition (dua pemohon bersamaan)
+        return DB::transaction(function () use ($data, $startDateTime, $endDateTime, $timeStart, $timeEnd, $durasi) {
+            $kendaraan = Kendaraan::with(['aset.penempatanAktif'])->lockForUpdate()->find($data['id_kendaraan']);
+
+            abort_unless($kendaraan, 404, 'Kendaraan tidak ditemukan.');
+
+            // Object-level: kendaraan yang dipilih harus dalam cakupan user.
+            abort_unless(
+                $this->scope->bolehAksesAset($kendaraan->aset),
+                403,
+                $this->scope->pesanAkses('mengajukan izin kendaraan')
+            );
+
+            // Syarat aset aktif
+            if ($kendaraan->aset?->status_aset !== 'aktif') {
+                throw ValidationException::withMessages([
+                    'id_kendaraan' => 'Kendaraan yang dipilih tidak berstatus aktif.',
+                ]);
+            }
+
+            // Syarat finalisasi: penempatan aktif harus is_finalized = 1
+            $penempatanAktif = $kendaraan->aset?->penempatanAktif;
+            if (! $penempatanAktif || (int) ($penempatanAktif->is_finalized ?? 0) !== 1) {
+                throw ValidationException::withMessages([
+                    'id_kendaraan' => 'Kendaraan dinas belum difinalisasi penempatannya.',
+                ]);
+            }
+
+            // Pastikan kendaraan tidak sedang digunakan secara aktual pada waktu yang dipilih
+            if ($startDateTime->lessThanOrEqualTo(now()) && $endDateTime->greaterThanOrEqualTo(now()) && $kendaraan->status_penggunaan === 'Digunakan') {
+                throw ValidationException::withMessages([
+                    'id_kendaraan' => 'Kendaraan saat ini sedang digunakan secara aktual.',
+                ]);
+            }
+
+            // Pengecekan benturan jadwal terhadap pengajuan lain (Menunggu & Disetujui)
+            $bentrok = $this->cekBenturanJadwal(
+                (int) $kendaraan->id_kendaraan,
+                $startDateTime->format('Y-m-d H:i:s'),
+                $endDateTime->format('Y-m-d H:i:s')
+            );
+
+            if ($bentrok) {
+                throw ValidationException::withMessages([
+                    'id_kendaraan' => 'Kendaraan tersebut sudah memiliki jadwal peminjaman lain pada rentang waktu yang dipilih.',
+                ]);
+            }
+
+            IzinKendaraan::create([
+                'id_kendaraan' => $kendaraan->id_kendaraan,
+                'id_pegawai_pengaju' => auth()->user()?->pegawai?->id_pegawai,
+                'id_pengurus_barang' => $data['id_pengurus_barang'],
+                'nama_pengemudi' => $data['nama_pengemudi'],
+                'tujuan' => $data['tujuan'],
+                'durasi' => $durasi,
+                'tanggal_berangkat' => $data['tanggal_berangkat'],
+                'waktu_berangkat' => $timeStart,
+                'tanggal_kembali' => $data['tanggal_kembali'],
+                'waktu_kembali' => $timeEnd,
+                'status_approval' => 'Menunggu',
+            ]);
+
+            return redirect()->route('layanan.izin-kendaraan.index')
+                ->with('success', 'Pengajuan izin berhasil dikirim dan menunggu verifikasi pengurus barang.');
+        });
     }
 
     /**
@@ -153,34 +349,125 @@ class IzinKendaraanController extends Controller
 
         $data = $request->validate($rules);
 
+        return DB::transaction(function () use ($data, $izin) {
+            // Kunci baris kendaraan dengan lockForUpdate untuk mencegah race condition (approval konkuren)
+            $kendaraan = $izin->id_kendaraan ? Kendaraan::lockForUpdate()->find($izin->id_kendaraan) : null;
+            abort_unless($kendaraan, 404, 'Kendaraan tidak ditemukan.');
+
+            // Baca ulang permohonan terkini setelah lock diperoleh
+            $izin = IzinKendaraan::lockForUpdate()->find($izin->id_izin);
+            abort_unless($izin, 404, 'Permohonan izin tidak ditemukan.');
+
+            if ($data['status_approval'] === 'Disetujui') {
+                $tglBerangkat = $izin->tanggal_berangkat ? Carbon::parse($izin->tanggal_berangkat)->format('Y-m-d') : null;
+                $wktBerangkat = $izin->waktu_berangkat ? Carbon::parse($izin->waktu_berangkat)->format('H:i:s') : '00:00:00';
+                $tglKembali = $izin->tanggal_kembali ? Carbon::parse($izin->tanggal_kembali)->format('Y-m-d') : $tglBerangkat;
+                $wktKembali = $izin->waktu_kembali ? Carbon::parse($izin->waktu_kembali)->format('H:i:s') : '23:59:59';
+
+                $start = $tglBerangkat ? Carbon::parse($tglBerangkat . ' ' . $wktBerangkat) : null;
+                $end = $tglKembali ? Carbon::parse($tglKembali . ' ' . $wktKembali) : null;
+
+                $startStr = $start ? $start->format('Y-m-d H:i:s') : null;
+                $endStr = $end ? $end->format('Y-m-d H:i:s') : null;
+
+                // Periksa apakah ada permohonan LAIN untuk kendaraan ini yang sudah berstatus 'Disetujui' dan jadwalnya berbenturan
+                $adaBentrok = false;
+                if ($startStr && $endStr) {
+                    $driver = DB::connection()->getDriverName();
+                    $startExpr = $driver === 'sqlite'
+                        ? "datetime(tanggal_berangkat || ' ' || coalesce(waktu_berangkat, '00:00:00'))"
+                        : "TIMESTAMP(tanggal_berangkat, COALESCE(waktu_berangkat, '00:00:00'))";
+                    $endExpr = $driver === 'sqlite'
+                        ? "datetime(coalesce(tanggal_kembali, tanggal_berangkat) || ' ' || coalesce(waktu_kembali, '23:59:59'))"
+                        : "TIMESTAMP(COALESCE(tanggal_kembali, tanggal_berangkat), COALESCE(waktu_kembali, '23:59:59'))";
+
+                    $adaBentrok = IzinKendaraan::where('id_kendaraan', $kendaraan->id_kendaraan)
+                        ->where('id_izin', '!=', $izin->id_izin)
+                        ->where('status_approval', 'Disetujui')
+                        ->whereRaw("{$startExpr} < ?", [$endStr])
+                        ->whereRaw("{$endExpr} > ?", [$startStr])
+                        ->exists();
+                }
+
+                // Jika ditemukan benturan dengan izin yang sudah Disetujui:
+                if ($adaBentrok) {
+                    // Otomatis ubah permohonan ini menjadi Ditolak dengan alasan 'Kendaraan digunakan'
+                    $izin->update([
+                        'status_approval' => 'Ditolak',
+                        'alasan_penolakan' => 'Kendaraan digunakan',
+                    ]);
+
+                    // Jangan ubah permohonan pertama yang sudah disetujui, jangan ubah status kendaraan
+                    return redirect()->route('layanan.izin-kendaraan.index')
+                        ->with('error', 'Permohonan izin otomatis ditolak karena kendaraan digunakan.');
+                }
+
+                // Jika tidak ada benturan, setujui permohonan
+                $izin->update([
+                    'status_approval' => 'Disetujui',
+                    'alasan_penolakan' => null,
+                ]);
+
+                // Update status_penggunaan kendaraan jika jadwalnya aktif saat ini
+                if ($start && $end && $start->lessThanOrEqualTo(now()) && $end->greaterThanOrEqualTo(now())) {
+                    $kendaraan->update(['status_penggunaan' => 'Digunakan']);
+                } elseif (! $kendaraan->sedangDigunakanAktual()) {
+                    $kendaraan->update(['status_penggunaan' => 'Tersedia']);
+                }
+
+                return redirect()->route('layanan.izin-kendaraan.index')
+                    ->with('success', 'Pengajuan izin kendaraan disetujui.');
+            }
+
+            // Alur penolakan manual oleh Admin Aset
+            $izin->update([
+                'status_approval' => 'Ditolak',
+                'alasan_penolakan' => $data['alasan_penolakan'],
+            ]);
+
+            // Saat ditolak manual, bebaskan kendaraan jika tidak ada izin lain yang sedang aktif sekarang
+            if (! $kendaraan->sedangDigunakanAktual()) {
+                $kendaraan->update(['status_penggunaan' => 'Tersedia']);
+            }
+
+            return redirect()->route('layanan.izin-kendaraan.index')
+                ->with('success', 'Pengajuan izin kendaraan ditolak.');
+        });
+    }
+
+    /**
+     * Batalkan pengajuan izin kendaraan oleh pemohon (pengaju).
+     *
+     * Ketentuan:
+     * - Hanya pengaju/pemilik pengajuan yang dapat membatalkan.
+     * - Admin Aset tidak boleh membatalkan pengajuan milik orang lain.
+     * - Hanya pengajuan berstatus "Menunggu" yang dapat dibatalkan.
+     * - Status diubah menjadi "Dibatalkan" dan riwayat tetap tersimpan.
+     */
+    public function batal(IzinKendaraan $izin)
+    {
+        $userPegawaiId = auth()->user()?->pegawai?->id_pegawai;
+
+        // Validasi kepemilikan: hanya pengaju yang boleh membatalkan
+        abort_unless(
+            $userPegawaiId && (int) $izin->id_pegawai_pengaju === (int) $userPegawaiId,
+            403,
+            'Anda tidak memiliki wewenang untuk membatalkan pengajuan ini.'
+        );
+
+        // Validasi status: hanya status Menunggu yang boleh dibatalkan
+        abort_unless(
+            $izin->status_approval === 'Menunggu',
+            403,
+            'Pengajuan yang sudah diproses atau dibatalkan tidak dapat dibatalkan kembali.'
+        );
+
         $izin->update([
-            'status_approval' => $data['status_approval'],
-            'alasan_penolakan' => $data['status_approval'] === 'Ditolak' ? $data['alasan_penolakan'] : null,
+            'status_approval' => 'Dibatalkan',
         ]);
 
-        // Saat disetujui, tandai kendaraan sedang dipakai sehingga tidak bisa
-        // dipesan ulang oleh pegawai lain sampai dikembalikan.
-        if ($data['status_approval'] === 'Disetujui' && $izin->kendaraan) {
-            $izin->kendaraan->update(['status_penggunaan' => 'Digunakan']);
-        }
-
-        // Saat ditolak (mis. dari status yang sempat disetujui), bebaskan
-        // kendaraan selama tidak ada pengajuan lain yang masih disetujui.
-        if ($data['status_approval'] === 'Ditolak' && $izin->kendaraan) {
-            $masihDisetujui = IzinKendaraan::where('id_kendaraan', $izin->id_kendaraan)
-                ->where('id_izin', '!=', $izin->id_izin)
-                ->where('status_approval', 'Disetujui')
-                ->exists();
-
-            if (! $masihDisetujui) {
-                $izin->kendaraan->update(['status_penggunaan' => 'Tersedia']);
-            }
-        }
-
         return redirect()->route('layanan.izin-kendaraan.index')
-            ->with('success', $data['status_approval'] === 'Disetujui'
-                ? 'Pengajuan izin kendaraan disetujui.'
-                : 'Pengajuan izin kendaraan ditolak.');
+            ->with('success', 'Pengajuan izin kendaraan berhasil dibatalkan.');
     }
 
     /**
@@ -217,12 +504,8 @@ class IzinKendaraanController extends Controller
         ]);
 
         // Kendaraan hanya dikembalikan ke Tersedia bila tidak ada lagi
-        // pengajuan lain atas kendaraan tersebut yang masih disetujui.
-        $masihDipakai = IzinKendaraan::where('id_kendaraan', $izin->id_kendaraan)
-            ->where('status_approval', 'Disetujui')
-            ->exists();
-
-        if (! $masihDipakai && $izin->kendaraan) {
+        // pengajuan lain atas kendaraan tersebut yang sedang aktif dipakai sekarang.
+        if ($izin->kendaraan && ! $izin->kendaraan->sedangDigunakanAktual()) {
             $izin->kendaraan->update(['status_penggunaan' => 'Tersedia']);
         }
 
@@ -285,7 +568,7 @@ class IzinKendaraanController extends Controller
         $tanggal = Carbon::parse($izin->tanggal_berangkat)->locale('id');
         $hariIni = Carbon::now()->locale('id');
 
-        $namaKendaraan = $kendaraan?->aset?->barang?->nama_barang ?: ($kendaraan?->jenis_kendaraan ?? '-');
+        $namaKendaraan = $kendaraan?->namaTampil() ?? '-';
 
         $values = [
             'nomor_surat' => sprintf('%03d', $izin->id_izin).'/IZINK-DISBUN/'.$tanggal->format('Y'),
@@ -429,7 +712,7 @@ class IzinKendaraanController extends Controller
             'Kendaraan Dinas' => ($kendaraan?->jenis_kendaraan ?? '-').' ('.$plat.')',
             'Merk / Tipe' => $kendaraan?->merk && $kendaraan?->tipe
                 ? $kendaraan->merk.' / '.$kendaraan->tipe
-                : ($kendaraan?->merk ?: ($kendaraan?->aset?->barang?->nama_barang ?: '-')),
+                : ($kendaraan?->merk ?: ($kendaraan?->namaTampil() ?: '-')),
             'Tanggal Berangkat' => $tanggal->translatedFormat('d F Y'),
             'Waktu / Durasi' => $izin->durasi ?? '-',
             'Tujuan' => $izin->tujuan ?? '-',
@@ -484,85 +767,5 @@ class IzinKendaraanController extends Controller
         return response()->download($filePath, $fileName, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         ])->deleteFileAfterSend(true);
-    }
-
-    /**
-     * Simpan pengajuan izin dari halaman detail kendaraan (alur lama).
-     */
-    public function kendaraanStore(Request $request, Kendaraan $kendaraan)
-    {
-        // Object-level: kendaraan yang diajukan harus dalam cakupan user.
-        abort_unless(
-            $this->scope->bolehAksesAset($kendaraan->aset),
-            403,
-            $this->scope->pesanAkses('mengajukan izin kendaraan')
-        );
-
-        $data = $request->validate([
-            'tanggal_berangkat' => ['nullable', 'date'],
-            'waktu_berangkat' => ['nullable', 'string', 'max:5'],
-            'tanggal_kembali' => ['nullable', 'date'],
-            'waktu_kembali' => ['nullable', 'string', 'max:5'],
-            'tujuan' => ['nullable', 'string', 'max:500'],
-            'jenis_pengemudi' => ['nullable', 'string', 'max:50'],
-            'id_pegawai_pengemudi' => ['nullable', 'exists:pegawai,id_pegawai'],
-            'nama_pengemudi' => ['nullable', 'string', 'max:100'],
-            'file_surat' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:2048'],
-        ]);
-
-        $filePath = null;
-        if ($request->hasFile('file_surat')) {
-            $filePath = $request->file('file_surat')->store('izin-kendaraan', 'public');
-        }
-
-        IzinKendaraan::create([
-            'id_kendaraan' => $kendaraan->id_kendaraan,
-            // Pengaju SELALU user yang login — nilai client (mis.
-            // `id_pegawai_pengaju` lama) diabaikan agar tidak bisa
-            // mengajukan izin atas nama pegawai lain (impersonasi).
-            'id_pegawai_pengaju' => auth()->user()->pegawai?->id_pegawai,
-            'tanggal_berangkat' => $data['tanggal_berangkat'] ?? null,
-            'waktu_berangkat' => $data['waktu_berangkat'] ?? null,
-            'tanggal_kembali' => $data['tanggal_kembali'] ?? null,
-            'waktu_kembali' => $data['waktu_kembali'] ?? null,
-            'tujuan' => $data['tujuan'] ?? null,
-            'jenis_pengemudi' => $data['jenis_pengemudi'] ?? null,
-            'id_pegawai_pengemudi' => $data['id_pegawai_pengemudi'] ?? null,
-            'nama_pengemudi' => $data['nama_pengemudi'] ?? null,
-            'status_approval' => 'Menunggu',
-            'file_surat' => $filePath,
-        ]);
-
-        return response()->json(['success' => true, 'message' => 'Permohonan izin berhasil diajukan.']);
-    }
-
-    public function approve(Request $request, Kendaraan $kendaraan, IzinKendaraan $izin)
-    {
-        if ($izin->id_kendaraan !== $kendaraan->id_kendaraan) {
-            return response()->json(['success' => false, 'message' => 'Data tidak valid.'], 422);
-        }
-
-        $data = $request->validate([
-            'status_approval' => ['required', Rule::in(['Disetujui', 'Ditolak'])],
-        ]);
-
-        $izin->update(['status_approval' => $data['status_approval']]);
-
-        return response()->json([
-            'success' => true,
-            'message' => $data['status_approval'] === 'Disetujui'
-                ? 'Permohonan izin disetujui.'
-                : 'Permohonan izin ditolak.',
-        ]);
-    }
-
-    public function destroy(Kendaraan $kendaraan, IzinKendaraan $izin)
-    {
-        if ($izin->id_kendaraan !== $kendaraan->id_kendaraan) {
-            return response()->json(['success' => false, 'message' => 'Data tidak valid.'], 422);
-        }
-        $izin->delete();
-
-        return response()->json(['success' => true, 'message' => 'Permohonan izin dihapus.']);
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\AsetPenempatan;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -21,13 +22,12 @@ class Aset extends Model
 
     protected $fillable = [
         'id_barang', 'id_skpd', 'id_lokasi', 'nomor_kartu_barang', 'merk', 'tanggal_pengadaan',
-        'tanggal_perolehan', 'tanggal_habis_pakai', 'nilai_perolehan',
+        'tanggal_habis_pakai', 'nilai_perolehan',
         'kondisi', 'status_aset', 'is_kendaraan',
     ];
 
     protected $casts = [
         'tanggal_pengadaan' => 'date',
-        'tanggal_perolehan' => 'date',
         'tanggal_habis_pakai' => 'date',
         'nilai_perolehan' => 'decimal:2',
         'is_kendaraan' => 'boolean',
@@ -85,9 +85,14 @@ class Aset extends Model
         return $this->hasOne(Kendaraan::class, 'id_aset');
     }
 
-    public function tanah()
+    public function sensus()
     {
-        return $this->hasOne(Tanah::class, 'id_aset');
+        return $this->hasMany(SensusAset::class, 'id_aset');
+    }
+
+    public function sensusPeriode(string $periode)
+    {
+        return $this->hasOne(SensusAset::class, 'id_aset')->where('periode', $periode);
     }
 
     public function scopeKendaraan($query)
@@ -103,8 +108,18 @@ class Aset extends Model
     /**
      * Tempatkan aset ke ruangan tertentu (menutup penempatan aktif lama).
      * Mengembalikan id_ruangan yang aktif, atau null bila ruangan kosong/dibatalkan.
+     *
+     * Default: penempatan baru berstatus "Belum Difinalisasi"
+     * (`is_finalized = 0`) bila kolom finalisasi tersedia — bukan NULL.
+     * NULL berarti "Perlu Verifikasi" dan hanya boleh dipakai untuk data
+     * lama, jadi jalur mutasi/penempatan tidak boleh menulis NULL.
+     *
+     * `$langsungDifinalisasi = true` dipakai HANYA alur MUTASI: penempatan
+     * baru langsung berstatus "Sudah Difinalisasi" (1) beserta jejak
+     * finalisasinya, sesuai aturan "mutasi tidak memerlukan finalisasi ulang".
+     * Penempatan awal & Pasang Aset memakai default (0).
      */
-    public function placeAtRoom(?int $ruanganId): ?int
+    public function placeAtRoom(?int $ruanganId, bool $langsungDifinalisasi = false): ?int
     {
         if (!$ruanganId) {
             return null;
@@ -114,18 +129,33 @@ class Aset extends Model
             ->where('status', 'aktif')
             ->update(['status' => 'tidak aktif', 'tanggal_selesai' => now()->toDateString()]);
 
-        PenempatanAset::create([
+        $data = [
             'id_aset' => $this->id_aset,
             'id_ruangan' => $ruanganId,
             'tanggal_mulai' => now()->toDateString(),
             'status' => 'aktif',
-        ]);
+        ];
+
+        if (AsetPenempatan::kolomFinalisasiTersedia()) {
+            $data = array_merge(
+                $data,
+                $langsungDifinalisasi
+                    ? AsetPenempatan::finalisasiLangsung(AsetPenempatan::kolomJejakFinalisasiTersedia())
+                    : ['is_finalized' => 0]
+            );
+        }
+
+        PenempatanAset::create($data);
 
         return $ruanganId;
     }
 
     /**
      * Pindahkan aset ke ruangan lain sambil mencatat mutasi 'Pindah Ruangan'.
+     *
+     * Ini SELALU alur mutasi, jadi penempatan aktif barunya langsung
+     * difinalisasi (`is_finalized = 1`) — mutasi tidak memerlukan finalisasi
+     * ulang.
      *
      * @param int|null    $ruanganId  ruangan tujuan (null = tanpa ruangan)
      * @param int|null    $pegawaiId  pemegang saat ini (untuk riwayat; sama untuk ppindah ruangan)
@@ -136,7 +166,7 @@ class Aset extends Model
     {
         $ruanganLama = $this->penempatanAktif?->id_ruangan;
 
-        $this->placeAtRoom($ruanganId);
+        $this->placeAtRoom($ruanganId, true);
 
         // Lokasi fisik aset mengikuti ruang barunya. Unit penanggung jawab
         // TIDAK ikut berubah — pemindahan fisik bukan pemindahan kepemilikan.

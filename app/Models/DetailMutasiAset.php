@@ -13,13 +13,19 @@ class DetailMutasiAset extends Model
      * @var string
      */
     protected $table = 'detail_mutasi_aset';
+
     use HasFactory;
 
     protected $primaryKey = 'id_detail';
 
     protected $fillable = [
-        'id_mutasi', 'id_aset', 'pegawai_lama', 'pegawai_baru',
-        'ruangan_lama', 'ruangan_baru',
+        'id_mutasi',
+        'id_aset',
+        'id_inventaris',
+        'pegawai_lama',
+        'pegawai_baru',
+        'ruangan_lama',
+        'ruangan_baru',
     ];
 
     public function mutasi()
@@ -30,6 +36,11 @@ class DetailMutasiAset extends Model
     public function aset()
     {
         return $this->belongsTo(Aset::class, 'id_aset');
+    }
+
+    public function inventaris()
+    {
+        return $this->belongsTo(InventarisRuangan::class, 'id_inventaris');
     }
 
     public function pegawaiLama()

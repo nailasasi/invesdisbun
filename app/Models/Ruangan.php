@@ -33,4 +33,9 @@ class Ruangan extends Model
     {
         return $this->hasMany(PenempatanAset::class, 'id_ruangan');
     }
+
+    public function inventaris()
+    {
+        return $this->hasMany(InventarisRuangan::class, 'id_ruangan');
+    }
 }

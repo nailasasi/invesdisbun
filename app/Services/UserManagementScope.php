@@ -161,6 +161,31 @@ class UserManagementScope
     }
 
     /**
+     * Daftar role yang valid untuk pegawai tertentu (disesuaikan dengan SKPD pegawai).
+     *
+     * @return \Illuminate\Support\Collection<int, Role>
+     */
+    public function rolesUntukPegawai(?Pegawai $pegawai)
+    {
+        $allowed = $this->roleListBoleh();
+        if (! $pegawai) {
+            return $allowed;
+        }
+
+        $jenis = $pegawai->skpd?->jenis_skpd;
+
+        return $allowed->filter(function (Role $role) use ($jenis) {
+            return match ($role->nama_role) {
+                self::ROLE_ASET => $jenis === 'Sekretariat',
+                self::ROLE_BIDANG => $jenis === 'Bidang',
+                self::ROLE_UPT => $jenis === 'UPT',
+                self::ROLE_PEGAWAI => true,
+                default => false,
+            };
+        })->values();
+    }
+
+    /**
      * Daftar SKPD yang boleh dipilih saat menambah/mengubah pegawai.
      * Admin Aset: seluruh SKPD. Admin UPT: hanya UPT miliknya.
      *
@@ -210,6 +235,12 @@ class UserManagementScope
         }
 
         $jenisSkpd = $pegawai->skpd?->jenis_skpd;
+
+        if ($namaRole === self::ROLE_ASET && $jenisSkpd !== 'Sekretariat') {
+            throw ValidationException::withMessages([
+                'id_role' => 'Role Admin Aset hanya dapat diberikan kepada pegawai dengan penempatan SKPD Sekretariat.',
+            ]);
+        }
 
         if ($namaRole === self::ROLE_BIDANG && $jenisSkpd !== 'Bidang') {
             throw ValidationException::withMessages([

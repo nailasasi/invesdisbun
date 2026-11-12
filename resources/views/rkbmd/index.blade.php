@@ -6,6 +6,8 @@
 
 @section('content')
     <div class="space-y-4">
+    <x-alert type="error" />
+    <x-alert type="success" />
     {{-- ARSIP DOKUMEN SAH --}}
     <x-card>
         <div class="flex flex-wrap items-center justify-between gap-4">
@@ -20,7 +22,7 @@
             </div>
 
             <div class="flex items-center gap-2">
-                @if ($isAdmin)
+                @if (in_array(auth()->user()?->role?->nama_role, ['Admin Aset', 'Super Admin', 'Admin Bidang', 'Admin UPT'], true))
                     <button type="button" data-open-modal="modalArsipUpload"
                             class="inline-flex items-center justify-center gap-1.5 rounded-2xl bg-disbun-700 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-disbun-800">
                         <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8-4-4m0 0L8 8m4-4v12"/></svg>
@@ -107,35 +109,17 @@
             </form>
 
             <x-slot name="actions">
-                {{-- Dropdown Kelola Excel --}}
-                <div class="relative" id="excelMenuWrap">
-                    <button type="button" onclick="toggleExcelMenu()"
-                            class="inline-flex items-center gap-1.5 rounded-2xl border border-disbun-card-border bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50">
-                        <svg class="h-4 w-4 text-disbun-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                        <span>Opsi Excel</span>
-                        <svg class="h-3 w-3 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
-                    </button>
-                    <div id="excelMenu"
-                         class="absolute right-0 z-20 mt-1.5 hidden w-56 rounded-2xl border border-slate-100 bg-white p-1.5 text-xs shadow-xl">
-                        <a href="{{ route('rkbmd.template') }}"
-                           class="flex items-center gap-2 rounded-2xl px-2.5 py-2 text-slate-600 transition hover:bg-slate-50 hover:text-slate-900">
-                            <svg class="h-3.5 w-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                            <span>Unduh Template</span>
-                        </a>
-                        <button type="button" data-open-modal="modalImportExcel" onclick="closeExcelMenu()"
-                                class="flex w-full items-center gap-2 rounded-2xl px-2.5 py-2 text-slate-600 transition hover:bg-slate-50 hover:text-slate-900">
-                            <svg class="h-3.5 w-3.5 text-disbun-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-                            <span>Import Template Excel</span>
-                        </button>
-                        <div class="my-1 border-t border-slate-100"></div>
-                        {{-- Export dibuka via modal parameter export --}}
-                        <button type="button" data-open-modal="modalExportRKBMD" onclick="closeExcelMenu()"
-                                class="flex w-full items-center gap-2 rounded-2xl px-2.5 py-2 font-semibold text-disbun-700 transition hover:bg-disbun-50">
-                            <svg class="h-3.5 w-3.5 text-disbun-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                            <span>Export Rekap Excel</span>
-                        </button>
-                    </div>
-                </div>
+                @if ($isAdmin)
+                    {{-- Tombol Langsung Export Excel (Khusus Super Admin & Admin Aset) --}}
+                    <a href="{{ route('rkbmd.export', request()->query()) }}"
+                       class="inline-flex items-center gap-1.5 rounded-2xl border border-disbun-card-border bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                       title="Export Rekap RKBMD ke Excel">
+                        <svg class="h-4 w-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        <span>Export Excel</span>
+                    </a>
+                @endif
                 <button type="button" data-open-modal="modalUsulan"
                         class="inline-flex items-center gap-1.5 rounded-2xl bg-disbun-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-disbun-800">
                     <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
@@ -149,39 +133,92 @@
                 <thead>
                     <tr class="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold tracking-wider text-slate-400 uppercase">
                         <th class="w-12 px-3 py-2.5 text-center">#</th>
-                        <th class="px-3 py-2.5">Bidang / Unit</th>
+                        <th class="px-3 py-2.5 whitespace-nowrap">Bidang / Unit</th>
+                        <th class="px-3 py-2.5 min-w-[220px] max-w-[320px]">Program / Kegiatan</th>
                         <th class="px-3 py-2.5">Jenis</th>
-                        <th class="px-3 py-2.5">Nama Barang &amp; Kode</th>
-                        <th class="px-3 py-2.5 text-center">Jumlah/Satuan</th>
-                        <th class="px-3 py-2.5">Keterangan</th>
-                        <th class="px-3 py-2.5 text-center">Status</th>
-                        <th class="w-24 px-3 py-2.5 text-center">Aksi</th>
+                        <th class="px-3 py-2.5 min-w-[200px] max-w-[260px]">Nama Barang &amp; Kode</th>
+                        <th class="px-3 py-2.5 text-center whitespace-nowrap">Jumlah/Satuan</th>
+                        <th class="px-3 py-2.5 min-w-[180px] max-w-[240px]">Keterangan</th>
+                        <th class="px-3 py-2.5 text-center whitespace-nowrap">Status</th>
+                        <th class="px-3 py-2.5 text-center whitespace-nowrap">Aksi</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-50">
                     @forelse ($usulanList as $i => $usulan)
                         @php
-                            $isFinal = in_array($usulan->status_usulan, ['Disetujui Pengurus Barang', 'Ditolak']);
-                            $bisaEdit = !$isFinal;
-                            $bisaAjukan = $usulan->status_usulan === 'Draft'
-                                && $usulan->id_pegawai === auth()->user()?->pegawai?->id_pegawai;
+                            $isOwner = $usulan->id_pegawai && $usulan->id_pegawai === auth()->user()?->pegawai?->id_pegawai;
+                            $status = $usulan->status_usulan;
+
+                            $statusLabel = match ($status) {
+                                'Draft' => 'Draf',
+                                'Diajukan' => 'Diajukan',
+                                'Disetujui Pengurus Barang' => 'Diterima',
+                                'Ditolak' => 'Ditolak',
+                                default => $status ?: '-',
+                            };
+
                             $badgeJenis = [
                                 'Pengadaan' => 'bg-disbun-100 text-disbun-800',
                                 'Pemeliharaan' => 'bg-amber-100 text-amber-700',
                                 'Penghapusan' => 'bg-rose-100 text-rose-700',
                             ][$usulan->jenis_usulan] ?? 'bg-slate-100 text-slate-600';
-                            $badgeStatus = [
-                                'Draft' => 'bg-slate-100 text-slate-600',
-                                'Diajukan' => 'bg-amber-100 text-amber-700',
-                                'Disetujui Pengurus Barang' => 'bg-disbun-100 text-disbun-800',
-                                'Ditolak' => 'bg-rose-100 text-rose-700',
-                            ][$usulan->status_usulan] ?? 'bg-slate-100 text-slate-600';
+
+                            $badgeStatus = match ($status) {
+                                'Draft' => 'bg-slate-100 text-slate-700',
+                                'Diajukan' => 'bg-amber-100 text-amber-800',
+                                'Disetujui Pengurus Barang' => 'bg-emerald-100 text-emerald-800',
+                                'Ditolak' => 'bg-rose-100 text-rose-800',
+                                default => 'bg-slate-100 text-slate-600',
+                            };
                         @endphp
                         <tr class="align-top transition hover:bg-slate-50/80">
                             <td class="px-3 py-2.5 text-center font-mono text-[11px] text-slate-400">{{ $usulanList->firstItem() + $i }}</td>
-                            <td class="px-3 py-2.5">
-                                <p class="font-semibold text-slate-700">{{ $usulan->skpd?->nama_skpd ?? '-' }}</p>
+                            <td class="px-3 py-2.5 font-medium text-slate-700">
+                                <p class="font-semibold text-slate-800">{{ $usulan->skpd?->nama_skpd ?? '-' }}</p>
                                 <p class="text-[10px] text-slate-400">TA {{ $usulan->tahun_anggaran }}</p>
+                            </td>
+                            <td class="min-w-[240px] max-w-[340px] px-3 py-2.5">
+                                @php
+                                    $bidangText = $usulan->bidang_urusan ?: null;
+                                    $programText = $usulan->nama_program ?: null;
+                                    $subKegiatanText = $usulan->nama_sub_kegiatan ?: null;
+
+                                    if (! $bidangText && ! $programText && $usulan->program_kegiatan) {
+                                        $parts = explode(' - ', (string) $usulan->program_kegiatan);
+                                        if (count($parts) === 3) {
+                                            $bidangText = $parts[0];
+                                            $programText = $parts[1];
+                                            $subKegiatanText = $parts[2];
+                                        }
+                                    }
+                                @endphp
+
+                                @if ($bidangText || $programText || $subKegiatanText)
+                                    <div class="space-y-1.5 text-xs">
+                                        @if ($bidangText)
+                                            <div class="leading-tight">
+                                                <span class="block text-[9px] font-bold uppercase tracking-wider text-slate-400">Bidang Urusan</span>
+                                                <p class="font-medium text-slate-700 break-words">{{ $bidangText }}</p>
+                                            </div>
+                                        @endif
+                                        @if ($programText)
+                                            <div class="leading-tight">
+                                                <span class="block text-[9px] font-bold uppercase tracking-wider text-emerald-600">Program</span>
+                                                <p class="font-semibold text-slate-800 break-words">{{ $programText }}</p>
+                                            </div>
+                                        @endif
+                                        @if ($subKegiatanText)
+                                            <div class="leading-tight">
+                                                <span class="block text-[9px] font-bold uppercase tracking-wider text-slate-400">Sub Kegiatan</span>
+                                                <p class="text-slate-600 break-words">{{ $subKegiatanText }}</p>
+                                            </div>
+                                        @endif
+                                    </div>
+                                @else
+                                    <p class="text-xs text-slate-700 leading-relaxed break-words">
+                                        {{ $usulan->program_kegiatan ?: '-' }}
+                                    </p>
+                                @endif
                             </td>
                             <td class="px-3 py-2.5">
                                 <span class="inline-block rounded-lg px-2 py-0.5 text-[10px] font-bold {{ $badgeJenis }}">{{ $usulan->jenis_usulan }}</span>
@@ -205,31 +242,53 @@
                                     </p>
                                 @endif
                             </td>
-                            <td class="px-3 py-2.5 text-center">
-                                <span class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold {{ $badgeStatus }}">{{ $usulan->status_usulan }}</span>
+                            <td class="px-3 py-2.5 text-center whitespace-nowrap">
+                                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold {{ $badgeStatus }}">
+                                    <span class="mr-1 h-1.5 w-1.5 rounded-full bg-current opacity-75"></span>
+                                    {{ $statusLabel }}
+                                </span>
                                 @if ($usulan->approved_at)
                                     <p class="mt-0.5 text-[10px] text-slate-400">{{ $usulan->approved_at->format('d M Y') }}</p>
                                 @endif
                             </td>
-                            <td class="px-3 py-2.5">
-                                <div class="flex items-center justify-end gap-1">
-                                    @if ($bisaAjukan)
-                                        <form method="POST" action="{{ route('rkbmd.submit', $usulan->id_usulan) }}">
+                            <td class="px-3 py-2.5 text-center whitespace-nowrap">
+                                <div class="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+                                    {{-- 1. Detail Usulan (Ikon Mata) - Selalu tampil untuk semua status --}}
+                                    <a href="{{ route('rkbmd.show', $usulan->id_usulan) }}"
+                                       title="Detail Usulan"
+                                       aria-label="Lihat detail usulan"
+                                       class="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-slate-600 shadow-2xs transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
+                                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                        </svg>
+                                    </a>
+
+                                    {{-- A. Status Draf (Hanya untuk pengusul pemilik usulan) --}}
+                                    @if ($status === 'Draft' && $isOwner)
+                                        {{-- Ajukan Usulan (Ikon Pesawat Kertas) --}}
+                                        <form method="POST" action="{{ route('rkbmd.submit', $usulan->id_usulan) }}" class="inline">
                                             @csrf
-                                            <button type="submit" title="Ajukan ke Pengurus Barang"
-                                                    class="inline-flex items-center gap-1 rounded-xl bg-disbun-700 px-2.5 py-1.5 text-[11px] font-bold text-white shadow-sm transition hover:bg-disbun-800">
-                                                <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
-                                                Ajukan
+                                            <button type="submit"
+                                                    title="Ajukan Usulan"
+                                                    aria-label="Ajukan usulan ke Pengurus Barang"
+                                                    class="flex h-7 w-7 items-center justify-center rounded-lg bg-disbun-50 text-disbun-700 shadow-2xs transition hover:bg-disbun-100 hover:text-disbun-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-disbun-500">
+                                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                                                </svg>
                                             </button>
                                         </form>
-                                    @endif
 
-                                    @if ($bisaEdit)
+                                        {{-- Edit Usulan (Ikon Pensil) --}}
                                         <button type="button" data-open-modal="modalUsulan" data-edit-usulan
                                                 data-action="{{ route('rkbmd.update', $usulan->id_usulan) }}"
                                                 data-id-skpd="{{ $usulan->id_skpd }}"
                                                 data-tahun="{{ $usulan->tahun_anggaran }}"
                                                 data-jenis="{{ $usulan->jenis_usulan }}"
+                                                data-id-kegiatan="{{ $usulan->id_kegiatan }}"
+                                                data-bidang-urusan="{{ $usulan->bidang_urusan }}"
+                                                data-nama-program="{{ $usulan->nama_program }}"
+                                                data-nama-sub-kegiatan="{{ $usulan->nama_sub_kegiatan }}"
                                                 data-program="{{ $usulan->program_kegiatan }}"
                                                 data-kode="{{ $usulan->kode_barang }}"
                                                 data-nama="{{ $usulan->nama_barang }}"
@@ -240,39 +299,72 @@
                                                 data-kebutuhan-riil="{{ $usulan->kebutuhan_riil }}"
                                                 data-opt="@json($usulan->barang_optimalisasi)"
                                                 data-alasan="{{ $usulan->alasan_kebutuhan }}"
-                                                title="Edit usulan"
-                                                class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50">
-                                            <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                                            Edit
+                                                title="Edit Usulan"
+                                                aria-label="Edit usulan"
+                                                class="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-disbun-700 shadow-2xs transition hover:bg-disbun-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-disbun-500">
+                                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                            </svg>
                                         </button>
-                                    @endif
 
-                                    @if ($isAdmin && !$isFinal)
-                                        <form method="POST" action="{{ route('rkbmd.decide', $usulan->id_usulan) }}"
-                                              onsubmit="return confirm('Setujui usulan ini sebagai usulan resmi RKBMD?');">
-                                            @csrf
-                                            <input type="hidden" name="keputusan" value="setuju">
-                                            <button type="submit" title="Setujui"
-                                                    class="inline-flex items-center gap-1 rounded-xl bg-disbun-700 px-2.5 py-1.5 text-[11px] font-bold text-white shadow-sm transition hover:bg-disbun-800">
-                                                <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                                                Setujui
-                                            </button>
-                                        </form>
-                                        <button type="button" data-open-modal="modalTolak-{{ $usulan->id_usulan }}" title="Tolak dengan catatan"
-                                                class="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-2 py-1 text-[11px] font-semibold text-rose-600 transition hover:bg-rose-50">
-                                            <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                                            Tolak
-                                        </button>
-                                    @endif
-
-                                    @if (!$isFinal || $isAdmin)
+                                        {{-- Batalkan Usulan (Ikon Circle-X) --}}
                                         <form method="POST" action="{{ route('rkbmd.destroy', $usulan->id_usulan) }}"
-                                              onsubmit="return confirm('Hapus usulan RKBMD ini?');">
+                                              onsubmit="return confirm('Batalkan usulan draf ini? Tindakan ini akan menghapus draf usulan.');" class="inline">
                                             @csrf
                                             @method('DELETE')
-                                            <button type="submit" title="Hapus"
-                                                    class="inline-flex items-center rounded-lg p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600">
-                                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7a.87.87 0 00-1 1v11a1 1 0 01-1 1H7a1 1 0 01-1-1V8a1 1 0 00-2 0v12a3 3 0 003 3h10a3 3 0 003-3V8a1 1 0 00-1-1zM4 6h16M10 3h4a1 1 0 011 1v2h-6V4a1 1 0 011-1z"/></svg>
+                                            <button type="submit"
+                                                    title="Batalkan Usulan"
+                                                    aria-label="Batalkan usulan draf"
+                                                    class="flex h-7 w-7 items-center justify-center rounded-lg bg-rose-50 text-rose-600 shadow-2xs transition hover:bg-rose-100 hover:text-rose-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">
+                                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                                </svg>
+                                            </button>
+                                        </form>
+                                    @endif
+
+                                    {{-- B. Status Diajukan (Setujui & Tolak hanya untuk Super Admin / Admin Aset) --}}
+                                    @if ($status === 'Diajukan' && $isAdmin)
+                                        {{-- Setujui Usulan (Ikon Centang) --}}
+                                        <form method="POST" action="{{ route('rkbmd.decide', $usulan->id_usulan) }}"
+                                              onsubmit="return confirm('Setujui usulan ini sebagai usulan resmi RKBMD?');" class="inline">
+                                            @csrf
+                                            <input type="hidden" name="keputusan" value="setuju">
+                                            <button type="submit"
+                                                    title="Setujui Usulan"
+                                                    aria-label="Setujui usulan"
+                                                    class="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 shadow-2xs transition hover:bg-emerald-100 hover:text-emerald-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                                                </svg>
+                                            </button>
+                                        </form>
+
+                                        {{-- Tolak Usulan (Ikon X) --}}
+                                        <button type="button" data-open-modal="modalTolak-{{ $usulan->id_usulan }}"
+                                                title="Tolak Usulan"
+                                                aria-label="Tolak usulan dengan catatan"
+                                                class="flex h-7 w-7 items-center justify-center rounded-lg bg-rose-50 text-rose-600 shadow-2xs transition hover:bg-rose-100 hover:text-rose-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">
+                                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                                            </svg>
+                                        </button>
+                                    @endif
+
+                                    {{-- C & D. Status Diterima ('Disetujui Pengurus Barang') atau Ditolak (Hapus hanya untuk Super Admin / Admin Aset) --}}
+                                    @if (in_array($status, ['Disetujui Pengurus Barang', 'Ditolak'], true) && $isAdmin)
+                                        {{-- Hapus Usulan (Ikon Tempat Sampah) --}}
+                                        <form method="POST" action="{{ route('rkbmd.destroy', $usulan->id_usulan) }}"
+                                              onsubmit="return confirm('Hapus usulan RKBMD ini dari daftar?');" class="inline">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit"
+                                                    title="Hapus Usulan"
+                                                    aria-label="Hapus usulan"
+                                                    class="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-slate-400 shadow-2xs transition hover:bg-rose-50 hover:text-rose-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">
+                                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                                </svg>
                                             </button>
                                         </form>
                                     @endif
@@ -281,7 +373,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="px-6 py-12 text-center">
+                            <td colspan="9" class="px-6 py-12 text-center">
                                 <svg class="mx-auto h-10 w-10 text-slate-300" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                                 <p class="mt-2 text-sm font-semibold text-slate-600">Belum ada usulan</p>
                                 <p class="mt-0.5 text-[11px] text-slate-400">Klik "Buat Usulan" untuk menyusun kebutuhan BMD unit Anda.</p>
@@ -303,7 +395,7 @@
     @push('modals')
         @include('rkbmd.partials.modal-create')
 
-        @if ($isAdmin)
+        @if (in_array(auth()->user()?->role?->nama_role, ['Admin Aset', 'Super Admin', 'Admin Bidang', 'Admin UPT'], true))
             {{-- MODAL UPLOAD ARSIP --}}
             <div id="modalArsipUpload" class="fixed inset-0 z-50 hidden items-center justify-center p-4" data-modal>
                 <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" data-close></div>
@@ -325,16 +417,28 @@
 
                     <form method="POST" action="{{ route('rkbmd.arsip.store') }}" enctype="multipart/form-data" class="mt-5 space-y-4">
                         @csrf
-                        <div>
-                            <label for="arsip-skpd" class="mb-1.5 block text-sm font-semibold text-slate-700">Bidang / Dinas <span class="text-red-500">*</span></label>
-                            <select id="arsip-skpd" name="id_skpd" required
-                                    class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400">
-                                <option value="" disabled selected>-- Pilih Unit Kerja --</option>
-                                @foreach ($bidangOptions as $opt)
-                                    <option value="{{ $opt->id_skpd }}">{{ $opt->nama_skpd }}</option>
-                                @endforeach
-                            </select>
-                        </div>
+                        @if ($isAdmin)
+                            <div>
+                                <label for="arsip-skpd" class="mb-1.5 block text-sm font-semibold text-slate-700">Bidang / Unit Kerja <span class="text-red-500">*</span></label>
+                                <select id="arsip-skpd" name="id_skpd" required
+                                        class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                                    <option value="" disabled selected>-- Pilih Unit Kerja --</option>
+                                    @foreach ($bidangOptions as $opt)
+                                        <option value="{{ $opt->id_skpd }}">{{ $opt->nama_skpd }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        @else
+                            <div>
+                                <label class="mb-1.5 block text-sm font-semibold text-slate-700">Bidang / Unit Kerja</label>
+                                <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-sm font-semibold text-slate-700">
+                                    <svg class="h-4 w-4 text-disbun-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                                    <span>{{ $mySkpd?->nama_skpd ?? 'Unit Kerja Terdaftar' }}</span>
+                                </div>
+                                <input type="hidden" name="id_skpd" value="{{ $mySkpd?->id_skpd }}">
+                                <p class="mt-1 text-[11px] text-slate-400">Unit kerja ditentukan secara otomatis sesuai akun Anda.</p>
+                            </div>
+                        @endif
 
                         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div>
@@ -348,6 +452,20 @@
                                 <input type="date" id="arsip-tanggal" name="tanggal_pengesahan" value="{{ old('tanggal_pengesahan', now()->toDateString()) }}"
                                        class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400">
                             </div>
+                        </div>
+
+                        <div>
+                            <label for="arsip-jenis" class="mb-1.5 block text-sm font-semibold text-slate-700">Jenis Dokumen <span class="text-red-500">*</span></label>
+                            <select id="arsip-jenis" name="jenis_dokumen" required
+                                    class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                                <option value="" disabled {{ old('jenis_dokumen') ? '' : 'selected' }}>-- Pilih Jenis Dokumen --</option>
+                                @foreach (\App\Models\ArsipRkbmd::JENIS_DOKUMEN as $jenisDokumen)
+                                    <option value="{{ $jenisDokumen }}" @selected(old('jenis_dokumen') === $jenisDokumen)>{{ $jenisDokumen }}</option>
+                                @endforeach
+                            </select>
+                            @error('jenis_dokumen')
+                                <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
+                            @enderror
                         </div>
 
                         <div>
@@ -381,11 +499,6 @@
         {{-- MODAL LIHAT ARSIP --}}
         @include('rkbmd.partials.modal-list-arsip')
 
-        {{-- MODAL IMPORT EXCEL --}}
-        @include('rkbmd.partials.modal-import-excel')
-
-        {{-- MODAL EXPORT REKAP --}}
-        @include('rkbmd.partials.modal-export-rkbmd')
 
         {{-- MODAL TOLAK (per usulan, khusus admin) --}}
         @foreach ($usulanList as $usulan)
@@ -467,25 +580,6 @@
                         modal.classList.add('hidden');
                         modal.classList.remove('flex');
                     });
-                }
-            });
-
-            // Dropdown "Opsi Excel".
-            function toggleExcelMenu() {
-                const menu = document.getElementById('excelMenu');
-                if (menu) menu.classList.toggle('hidden');
-            }
-
-            function closeExcelMenu() {
-                const menu = document.getElementById('excelMenu');
-                if (menu) menu.classList.add('hidden');
-            }
-
-            document.addEventListener('click', function (event) {
-                const wrap = document.getElementById('excelMenuWrap');
-                const menu = document.getElementById('excelMenu');
-                if (wrap && menu && !wrap.contains(event.target)) {
-                    menu.classList.add('hidden');
                 }
             });
 

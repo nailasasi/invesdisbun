@@ -27,6 +27,14 @@
             <div id="usulan-method-holder"></div>
 
             <div class="flex-1 space-y-4 overflow-y-auto px-6 py-4 text-xs">
+                {{-- Keterangan Wajib Diisi di bagian atas form --}}
+                <div class="flex items-center justify-between gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 px-3.5 py-2">
+                    <span class="text-[11px] text-slate-500">Pastikan seluruh data usulan bertanda bintang terisi sebelum disimpan.</span>
+                    <span class="inline-flex shrink-0 items-center text-[11px] font-semibold text-slate-600">
+                        (<span class="font-bold text-rose-500">*</span>) Wajib diisi
+                    </span>
+                </div>
+
                 {{-- 1. INFORMASI UMUM --}}
                 <div>
                     <p class="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Informasi Umum</p>
@@ -39,7 +47,7 @@
                                     class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                                 <option value="" disabled selected>-- Pilih Jenis --</option>
                                 @foreach ($jenisList as $jenis)
-                                    <option value="{{ $jenis }}" @selected(old('jenis_usulan') === $jenis)>{{ $jenis === 'Pengadaan' ? 'Usulan RKBMD ' . $jenis : 'Usulan RKBMD ' . $jenis }}</option>
+                                    <option value="{{ $jenis }}" @selected(old('jenis_usulan') === $jenis)>Usulan RKBMD {{ $jenis }}</option>
                                 @endforeach
                             </select>
                         </div>
@@ -72,11 +80,37 @@
                         </div>
 
                         <div>
-                            <label for="usulan-program" class="mb-1 block font-semibold text-slate-700">Program / Kegiatan / Output</label>
-                            <input type="text" id="usulan-program" name="program_kegiatan" maxlength="500"
-                                   placeholder="Program Penunjang Urusan Pemerintahan..."
-                                   value="{{ old('program_kegiatan') }}"
-                                   class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                            <label for="usulan-bidang-urusan" class="mb-1 block font-semibold text-slate-700">
+                                Bidang Urusan <span class="text-slate-400 font-normal">(Otomatis dari Master)</span>
+                            </label>
+                            <input type="text" id="usulan-bidang-urusan" readonly
+                                   placeholder="Terisi otomatis saat Program dipilih"
+                                   class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 placeholder-slate-400 focus:outline-none">
+                        </div>
+
+                        <div class="col-span-1 md:col-span-2">
+                            <label for="usulan-program" class="mb-1 block font-semibold text-slate-700">
+                                Program RKBMD <span class="text-rose-500">*</span>
+                            </label>
+                            <select id="usulan-program"
+                                    class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                <option value="">-- Cari atau pilih Program --</option>
+                                @foreach ($programList ?? [] as $prog)
+                                    <option value="{{ $prog }}">{{ $prog }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="col-span-1 md:col-span-2">
+                            <label for="usulan-sub-kegiatan" class="mb-1 block font-semibold text-slate-700">
+                                Sub Kegiatan RKBMD <span class="text-rose-500">*</span>
+                            </label>
+                            <select id="usulan-sub-kegiatan" disabled name="id_kegiatan"
+                                    class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                <option value="">-- Pilih Program terlebih dahulu --</option>
+                            </select>
+                            {{-- Field snapshot teks untuk kompatibilitas data dan fallback --}}
+                            <input type="hidden" id="usulan-program-kegiatan" name="program_kegiatan" value="{{ old('program_kegiatan') }}">
                         </div>
                     </div>
                 </div>
@@ -95,8 +129,8 @@
                         </div>
                         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
                             <div>
-                                <label for="kode_barang" class="mb-1 block font-semibold text-slate-700">Kode Barang</label>
-                                <input type="text" id="kode_barang" name="kode_barang" maxlength="50" readonly
+                                <label for="kode_barang" class="mb-1 block font-semibold text-slate-700">Kode Barang <span class="text-rose-500">*</span></label>
+                                <input type="text" id="kode_barang" name="kode_barang" maxlength="50" readonly required
                                        placeholder="Terisi otomatis dari master barang"
                                        value="{{ old('kode_barang') }}"
                                        class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 placeholder-slate-400 placeholder:font-normal focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
@@ -139,9 +173,11 @@
                     <p class="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Optimalisasi &amp; Kebutuhan Riil</p>
                     <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
                         <div class="rounded-2xl border border-slate-100 bg-slate-50/60 p-3">
-                            <span class="mb-2 block text-[11px] font-bold text-slate-600">Kebutuhan Maksimum</span>
+                            <span class="mb-2 block text-[11px] font-bold text-slate-600">
+                                Kebutuhan Maksimum <span class="text-rose-500">*</span>
+                            </span>
                             <div class="flex gap-2">
-                                <input type="number" id="usulan-kebutuhan-maks" name="kebutuhan_maksimum" min="0"
+                                <input type="number" id="usulan-kebutuhan-maks" name="kebutuhan_maksimum" min="0" required
                                        value="{{ old('kebutuhan_maksimum') }}" placeholder="Jumlah"
                                        class="w-2/3 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                                 <input type="text" id="usulan-satuan-maks" value="Unit" readonly
@@ -149,9 +185,11 @@
                             </div>
                         </div>
                         <div class="rounded-2xl border border-slate-100 bg-slate-50/60 p-3">
-                            <span class="mb-2 block text-[11px] font-bold text-slate-600">Kebutuhan Riil</span>
+                            <span class="mb-2 block text-[11px] font-bold text-slate-600">
+                                Kebutuhan Riil <span class="text-rose-500">*</span>
+                            </span>
                             <div class="flex gap-2">
-                                <input type="number" id="usulan-kebutuhan-riil" name="kebutuhan_riil" min="0"
+                                <input type="number" id="usulan-kebutuhan-riil" name="kebutuhan_riil" min="0" required
                                        value="{{ old('kebutuhan_riil') }}" placeholder="Jumlah"
                                        class="w-2/3 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                                 <input type="text" id="usulan-satuan-riil" value="Unit" readonly
@@ -161,7 +199,7 @@
                     </div>
 
                     <div class="mt-3 space-y-2 rounded-2xl border border-slate-100 bg-slate-50/60 p-3">
-                        <span class="block text-[11px] font-bold text-slate-600">Barang yang Dapat Dioptimalkan</span>
+                        <span class="block text-[11px] font-bold text-slate-600">Barang yang Dapat Dioptimalkan <span class="font-normal text-slate-400">(opsional)</span></span>
                         <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
                             <input type="text" id="usulan-opt-kode" name="opt_kode" maxlength="50"
                                    placeholder="Kode Barang" value="{{ old('opt_kode') }}"
@@ -212,44 +250,233 @@
 </div>
 
 @push('scripts')
-    {{-- Select2 (butuh jQuery) untuk pencarian master kode barang --}}
+    {{-- Select2 (butuh jQuery) untuk pencarian master kode barang dan kegiatan --}}
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
+    <style>
+        .select2-container--default .select2-selection--single {
+            border-radius: 0.75rem !important;
+            border-color: #e2e8f0 !important;
+            height: 38px !important;
+            padding: 4px 8px !important;
+            display: flex !important;
+            align-items: center !important;
+            font-size: 0.75rem !important;
+            background-color: #ffffff !important;
+        }
+        .select2-container--default.select2-container--disabled .select2-selection--single {
+            background-color: #f8fafc !important;
+            cursor: not-allowed !important;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            color: #1e293b !important;
+            padding-left: 2px !important;
+            line-height: normal !important;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__placeholder {
+            color: #94a3b8 !important;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 36px !important;
+            right: 8px !important;
+        }
+        .select2-dropdown {
+            border-radius: 0.75rem !important;
+            border-color: #e2e8f0 !important;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+            font-size: 0.75rem !important;
+            overflow: hidden !important;
+            z-index: 99999 !important;
+        }
+        .select2-container--default .select2-search--dropdown {
+            padding: 6px 8px !important;
+        }
+        .select2-container--default .select2-search--dropdown .select2-search__field {
+            border-radius: 0.5rem !important;
+            border-color: #cbd5e1 !important;
+            font-size: 0.75rem !important;
+            padding: 6px 10px !important;
+            outline: none !important;
+        }
+        .select2-container--default .select2-search--dropdown .select2-search__field:focus {
+            border-color: #059669 !important;
+            box-shadow: 0 0 0 1px #059669 !important;
+        }
+        .select2-container--default .select2-results__option--highlighted[aria-selected] {
+            background-color: #047857 !important;
+        }
+        .select2-container--default .select2-results__option[aria-selected="true"] {
+            background-color: #ecfdf5 !important;
+            color: #065f46 !important;
+            font-weight: 600 !important;
+        }
+    </style>
+
     <script>
-        // --- Pencarian Master Kode Barang (Select2 AJAX) ---
+        // Data Master Kegiatan yang dikirim dari controller
+        window.masterKegiatanData = @json($kegiatanMaster ?? []);
+
+        // Helper untuk bahasa pesan pencarian Select2
+        const select2Language = function (notFoundMsg) {
+            return {
+                noResults: function () {
+                    return notFoundMsg;
+                },
+                searching: function () {
+                    return 'Mencari data...';
+                }
+            };
+        };
+
+        // --- 1. Dropdown Program RKBMD (Select2 Search) ---
+        const $programSelect = $('#usulan-program');
+        if ($programSelect.length && $.fn.select2) {
+            $programSelect.select2({
+                placeholder: 'Cari atau pilih Program',
+                width: '100%',
+                allowClear: true,
+                dropdownParent: $('#modalUsulan'),
+                language: select2Language('Program tidak ditemukan')
+            });
+        }
+
+        // --- 2. Dropdown Sub Kegiatan RKBMD (Select2 Search, Dependent) ---
+        const $subKegiatanSelect = $('#usulan-sub-kegiatan');
+        if ($subKegiatanSelect.length && $.fn.select2) {
+            $subKegiatanSelect.select2({
+                placeholder: 'Pilih Program terlebih dahulu',
+                width: '100%',
+                allowClear: true,
+                dropdownParent: $('#modalUsulan'),
+                language: select2Language('Sub Kegiatan tidak ditemukan')
+            });
+        }
+
+        // Event saat Program berubah
+        $programSelect.on('change select2:select', function () {
+            const selectedProg = $(this).val();
+            const $bidangInput = $('#usulan-bidang-urusan');
+            const $hiddenInput = $('#usulan-program-kegiatan');
+
+            // Kosongkan dan reset Sub Kegiatan
+            $subKegiatanSelect.empty().append('<option value="">-- Cari atau pilih Sub Kegiatan --</option>');
+            $hiddenInput.val('');
+
+            if (!selectedProg) {
+                $subKegiatanSelect.prop('disabled', true);
+                $subKegiatanSelect.select2({
+                    placeholder: 'Pilih Program terlebih dahulu',
+                    width: '100%',
+                    allowClear: true,
+                    dropdownParent: $('#modalUsulan'),
+                    language: select2Language('Sub Kegiatan tidak ditemukan')
+                });
+                $bidangInput.val('');
+                return;
+            }
+
+            // Filter Sub Kegiatan berdasarkan Program yang dipilih
+            const subs = window.masterKegiatanData.filter(function (item) {
+                return item.nama_program === selectedProg;
+            });
+
+            if (subs.length > 0) {
+                // Bidang Urusan otomatis terisi dari master dan bersifat readonly
+                $bidangInput.val(subs[0].bidang_urusan || 'URUSAN PEMERINTAHAN BIDANG PERTANIAN');
+
+                subs.forEach(function (sub) {
+                    $subKegiatanSelect.append(new Option(sub.nama_sub_kegiatan, sub.id_kegiatan, false, false));
+                });
+
+                $subKegiatanSelect.prop('disabled', false);
+                $subKegiatanSelect.select2({
+                    placeholder: 'Cari atau pilih Sub Kegiatan',
+                    width: '100%',
+                    allowClear: true,
+                    dropdownParent: $('#modalUsulan'),
+                    language: select2Language('Sub Kegiatan tidak ditemukan')
+                });
+            } else {
+                $subKegiatanSelect.prop('disabled', true);
+                $bidangInput.val('');
+            }
+        });
+
+        // Event saat Program dibersihkan (clear)
+        $programSelect.on('select2:clear', function () {
+            $subKegiatanSelect.empty().append('<option value="">-- Pilih Program terlebih dahulu --</option>').prop('disabled', true).trigger('change');
+            $('#usulan-bidang-urusan').val('');
+            $('#usulan-program-kegiatan').val('');
+        });
+
+        // Event saat Sub Kegiatan dipilih
+        $subKegiatanSelect.on('change select2:select', function () {
+            const selectedId = $(this).val();
+            if (selectedId) {
+                const item = window.masterKegiatanData.find(function (k) {
+                    return String(k.id_kegiatan) === String(selectedId);
+                });
+                if (item) {
+                    $('#usulan-bidang-urusan').val(item.bidang_urusan);
+                    $('#usulan-program-kegiatan').val(item.bidang_urusan + ' - ' + item.nama_program + ' - ' + item.nama_sub_kegiatan);
+                }
+            } else {
+                $('#usulan-program-kegiatan').val('');
+            }
+        });
+
+        $subKegiatanSelect.on('select2:clear', function () {
+            $('#usulan-program-kegiatan').val('');
+        });
+
+        // --- 3. Pencarian Master Kode Barang (Select2 AJAX Server-Side Pagination) ---
         const $masterSearch = $('#search_master_barang');
 
         if ($masterSearch.length && $.fn.select2) {
             $masterSearch.select2({
-                placeholder: 'Ketik nomor kartu / nama / merk aset...',
+                placeholder: 'Ketik kode barang atau nama barang...',
                 width: '100%',
                 allowClear: true,
+                dropdownParent: $('#modalUsulan'),
                 ajax: {
                     url: @json(route('rkbmd.master.search')),
                     dataType: 'json',
                     delay: 250,
                     data: function (params) {
-                        return { q: params.term || '' };
+                        return {
+                            q: params.term || '',
+                            page: params.page || 1
+                        };
                     },
-                    processResults: function (data) {
-                        return { results: data };
+                    processResults: function (data, params) {
+                        params.page = params.page || 1;
+                        return {
+                            results: data.results || [],
+                            pagination: {
+                                more: Boolean(data.pagination && data.pagination.more)
+                            }
+                        };
                     },
                     cache: true
                 },
+                language: select2Language('Kode atau nama barang tidak ditemukan'),
                 templateResult: function (item) {
                     if (!item.id) {
-                        return '<span class="block px-2 py-1 text-xs text-slate-400">Aset tidak ditemukan</span>';
+                        return '<span class="block px-2 py-1 text-xs text-slate-400">Kode atau nama barang tidak ditemukan</span>';
                     }
+
+                    const kodeStr = String(item.kode_barang || item.id || '');
+                    const namaStr = String(item.nama_barang || item.text || '-');
 
                     return $(
                         '<div class="flex flex-col gap-0.5 py-0.5">' +
                         '<span class="text-xs font-semibold text-slate-800">' +
-                        $('<div>').text(item.nama_barang || item.text || '-').html() +
+                        $('<div>').text(namaStr).html() +
                         '</span>' +
-                        '<span class="font-mono text-[11px] text-emerald-600">' +
-                        (item.kode_barang ? 'Kode: ' + $('<div>').text(item.kode_barang).html() : '') +
+                        '<span class="font-mono text-[11px] font-bold text-emerald-600">' +
+                        'Kode: ' + $('<div>').text(kodeStr).html() +
                         '</span>' +
                         '</div>'
                     );
@@ -258,17 +485,20 @@
                     if (!item.id) {
                         return item.text;
                     }
-
-                    return item.kode_barang ? item.kode_barang + ' - ' + (item.nama_barang || item.text) : (item.nama_barang || item.text);
+                    const kodeStr = String(item.kode_barang || item.id || '');
+                    const namaStr = String(item.nama_barang || item.text || '');
+                    return kodeStr && namaStr && kodeStr !== namaStr ? kodeStr + ' - ' + namaStr : (namaStr || kodeStr);
                 }
             });
 
-            // Auto-fill Kode Barang & Nama Barang (readonly) saat item dipilih.
+            // Auto-fill Kode Barang & Nama Barang (readonly) saat item dipilih
             $masterSearch.on('select2:select', function (e) {
                 const data = e.params.data;
+                const kodeStr = String(data.kode_barang || data.id || '');
+                const namaStr = String(data.nama_barang || data.text || '');
 
-                $('#kode_barang').val(data.kode_barang || '');
-                $('#nama_barang').val(data.nama_barang || data.text || '');
+                $('#kode_barang').val(kodeStr);
+                $('#nama_barang').val(namaStr);
 
                 if (data.satuan) {
                     const satEl = document.getElementById('usulan-satuan');
@@ -283,17 +513,17 @@
                 }
             });
 
-            // Bersihkan pencarian saat pengguna mengosongkan pilihan.
+            // Bersihkan pencarian saat pengguna mengosongkan pilihan
             $masterSearch.on('select2:clear', function () {
                 $('#kode_barang').val('');
                 $('#nama_barang').val('');
             });
         }
 
-        // Dipakai saat form di-reset (mode create/edit) agar label Select2 ikut kosong.
+        // Dipakai saat form di-reset (mode create/edit) agar label Select2 ikut kosong
         window.resetMasterBarangSearch = function () {
-            if (window.jQuery) {
-                $('#search_master_barang').val(null).trigger('change.select2');
+            if (window.jQuery && $masterSearch.length) {
+                $masterSearch.val(null).trigger('change.select2');
             }
         };
 
@@ -329,9 +559,79 @@
                 setVal('usulan-jenis', btn.getAttribute('data-jenis'));
                 setVal('usulan-id-skpd', btn.getAttribute('data-id-skpd'));
                 setVal('usulan-tahun', btn.getAttribute('data-tahun'));
-                setVal('usulan-program', btn.getAttribute('data-program'));
-                setVal('kode_barang', btn.getAttribute('data-kode'));
-                setVal('nama_barang', btn.getAttribute('data-nama'));
+
+                // Penanganan Program / Sub Kegiatan & Kompatibilitas Data Lama (mis. ID 10)
+                const idKegiatan = btn.getAttribute('data-id-kegiatan') || '';
+                const bidangUrusan = btn.getAttribute('data-bidang-urusan') || '';
+                const namaProg = btn.getAttribute('data-nama-program') || '';
+                const namaSub = btn.getAttribute('data-nama-sub-kegiatan') || '';
+                const rawProgram = btn.getAttribute('data-program') || '';
+                setVal('usulan-program-kegiatan', rawProgram);
+
+                let matchedItem = null;
+                if (idKegiatan) {
+                    matchedItem = window.masterKegiatanData.find(function (item) {
+                        return String(item.id_kegiatan) === String(idKegiatan);
+                    });
+                }
+
+                if (!matchedItem && (namaProg || namaSub)) {
+                    matchedItem = window.masterKegiatanData.find(function (item) {
+                        return item.nama_program === namaProg && item.nama_sub_kegiatan === namaSub;
+                    });
+                }
+
+                if (!matchedItem && rawProgram) {
+                    matchedItem = window.masterKegiatanData.find(function (item) {
+                        return item.nama_sub_kegiatan.toLowerCase() === rawProgram.toLowerCase();
+                    });
+                    if (!matchedItem) {
+                        matchedItem = window.masterKegiatanData.find(function (item) {
+                            return item.nama_program.toLowerCase() === rawProgram.toLowerCase();
+                        });
+                    }
+                }
+
+                if (matchedItem) {
+                    $subKegiatanSelect.prop('required', true);
+                    $programSelect.val(matchedItem.nama_program).trigger('change');
+                    $subKegiatanSelect.val(matchedItem.id_kegiatan).trigger('change');
+                    $('#usulan-bidang-urusan').val(matchedItem.bidang_urusan);
+                    $('#usulan-program-kegiatan').val(matchedItem.bidang_urusan + ' - ' + matchedItem.nama_program + ' - ' + matchedItem.nama_sub_kegiatan);
+                } else if (rawProgram) {
+                    // Data lama tidak standar (seperti Record ID 10: "Program Penunjang Pemerintah")
+                    // Buat fallback option agar modal edit tetap terbuka sempurna tanpa memaksakan FK baru
+                    $subKegiatanSelect.prop('required', false);
+                    if (!$programSelect.find('option[value="' + rawProgram + '"]').length) {
+                        $programSelect.append(new Option('(Data Lama) ' + rawProgram, rawProgram, true, true));
+                    }
+                    $programSelect.val(rawProgram).trigger('change.select2');
+
+                    $subKegiatanSelect.empty().prop('disabled', false);
+                    $subKegiatanSelect.append(new Option('(Data Lama) ' + rawProgram, '', true, true));
+                    $subKegiatanSelect.val('').trigger('change.select2');
+
+                    $('#usulan-bidang-urusan').val(bidangUrusan || 'URUSAN PEMERINTAHAN BIDANG PERTANIAN');
+                    $('#usulan-program-kegiatan').val(rawProgram);
+                } else {
+                    $subKegiatanSelect.prop('required', true);
+                    $programSelect.val(null).trigger('change');
+                }
+
+                const kodeVal = btn.getAttribute('data-kode') || '';
+                const namaVal = btn.getAttribute('data-nama') || '';
+                setVal('kode_barang', kodeVal);
+                setVal('nama_barang', namaVal);
+
+                // Set pilihan visual Select2 master barang jika ada data kode & nama
+                if (kodeVal && namaVal) {
+                    const displayText = kodeVal + ' - ' + namaVal;
+                    const newOpt = new Option(displayText, kodeVal, true, true);
+                    $masterSearch.empty().append(newOpt).trigger('change.select2');
+                } else {
+                    if (window.resetMasterBarangSearch) window.resetMasterBarangSearch();
+                }
+
                 setVal('usulan-jumlah', btn.getAttribute('data-jumlah'));
                 setVal('usulan-satuan', btn.getAttribute('data-satuan'));
                 setVal('usulan-kebutuhan-maks', btn.getAttribute('data-kebutuhan-maks'));
@@ -346,14 +646,12 @@
                 setVal('usulan-opt-jumlah', opt ? opt.jumlah : '');
                 setVal('usulan-opt-satuan', opt ? opt.satuan : '');
 
-                // Sinkronkan satuan maksimum/riil.
+                // Sinkronkan satuan maksimum/riil
                 const s = document.getElementById('usulan-satuan').value;
                 const ma = document.getElementById('usulan-satuan-maks');
                 const ri = document.getElementById('usulan-satuan-riil');
                 if (ma) ma.value = s;
                 if (ri) ri.value = s;
-
-                if (window.resetMasterBarangSearch) window.resetMasterBarangSearch();
             });
         });
 
@@ -365,6 +663,13 @@
                 document.getElementById('usulan-method-holder').innerHTML = '';
                 document.getElementById('usulan-modal-title').textContent = 'Input Usulan RKBMD';
                 usulanForm.reset();
+
+                // Reset cascading kegiatan & bidang urusan
+                $subKegiatanSelect.prop('required', true);
+                $programSelect.val(null).trigger('change');
+                $('#usulan-bidang-urusan').val('');
+                $('#usulan-program-kegiatan').val('');
+
                 document.getElementById('usulan-tahun').value = {{ now()->year + 1 }};
                 document.getElementById('usulan-jumlah').value = 1;
                 const s = document.getElementById('usulan-satuan').value;

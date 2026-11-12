@@ -2,62 +2,51 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\DokumenSppbi;
+use App\Models\Aset;
 use App\Models\Pegawai;
-use App\Models\PemegangAset;
 use App\Models\TemplateDokumen;
+use App\Services\AsetPenempatan;
+use App\Services\AsetScope;
+use App\Support\Word\SppbiTemplate;
 use App\Support\Word\WordTemplateFiller;
 use Carbon\Carbon;
-use Illuminate\Http\Request;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class DokumenSppbiController extends Controller
 {
-    /**
-     * Upload berkas hasil scan tanda tangan basah SPPBI (khusus Admin Aset).
-     * Satu dokumen aktif per pegawai; berkas lama dihapus lalu record diperbarui.
-     */
-    public function uploadTtd(Request $request, Pegawai $pegawai)
-    {
-        $this->authorizeAdminAset();
-
-        $request->validate([
-            'file_ttd' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
-        ]);
-
-        $dokumen = $pegawai->dokumenSppbi;
-
-        if ($dokumen?->file_path) {
-            Storage::disk('public')->delete($dokumen->file_path);
-        }
-
-        $pathBaru = $request->file('file_ttd')->store('dokumen_sppbi', 'public');
-
-        if ($pathBaru === false) {
-            return back()->with('error', 'Berkas gagal disimpan di server. Silakan coba lagi.');
-        }
-
-        DokumenSppbi::updateOrCreate(
-            ['id_pegawai' => $pegawai->id_pegawai],
-            [
-                'nomor_surat' => $this->nomorSuratOtomatis($pegawai),
-                'tanggal_surat' => Carbon::now()->toDateString(),
-                'file_path' => $pathBaru,
-                'status' => 'aktif',
-                'id_user_penginput' => auth()->id(),
-            ]
-        );
-
-        return back()->with('success', 'Berkas tanda tangan SPPBI berhasil diunggah.');
-    }
+    public function __construct(private readonly AsetScope $scope) {}
 
     /**
      * Unduh SPPBI (.docx) dari template master (khusus Admin Aset).
+     *
+     * SPPBI hanya boleh dibuat untuk aset yang penempatannya sudah final:
+     * penempatan aktif + `is_finalized = 1` (Sudah Difinalisasi) + ruangan
+     * aktif. Validasi ini diulang di server (bukan hanya menyembunyikan
+     * tombol), sehingga akses langsung ke URL SPPBI tetap ditolak.
+     *
+     * Aset yang penempatannya belum final TIDAK ikut masuk ke dokumen; bila
+     * tidak ada satu pun aset yang memenuhi syarat, permintaan ditolak.
+     *
+     * Template aktif memakai placeholder SPPBI baru (NAMA ASN, NIP ASN,
+     * Jabatan ASN, Tanggal/Bulan/Tahun, Jenis Barang, Merk Barang,
+     * Type Barang, Kode Barang, Tahun Pengadaan, Jumlah, Nomor Register,
+     * Harga Satuan) plus tanggal surat & Pakta Integritas. Generator mengisi
+     * seluruh placeholder tersebut termasuk terbilang harga satuan dan
+     * pengulangan blok spesifikasi per barang.
      */
     public function downloadWord(Pegawai $pegawai)
     {
         $this->authorizeAdminAset();
+
+        // Kolom finalisasi belum ada di database aktif sampai migration
+        // dijalankan. Tanpa kolom itu, SPPBI belum boleh dibuat.
+        abort_unless(
+            AsetPenempatan::kolomFinalisasiTersedia(),
+            422,
+            'SPPBI belum dapat dibuat: kolom finalisasi penempatan belum tersedia di database.'
+        );
 
         $template = TemplateDokumen::where('kode_template', 'sppbi')->first();
         if (! $template || ! $template->file_path || ! Storage::disk('public')->exists($template->file_path)) {
@@ -66,59 +55,71 @@ class DokumenSppbiController extends Controller
 
         $pegawai->load(['skpd', 'ruangan']);
 
-        $asetList = PemegangAset::with(['aset.barang'])
-            ->where('id_pegawai', $pegawai->id_pegawai)
-            ->where('status', 'aktif')
-            ->whereHas('aset', fn ($q) => $q->where('is_kendaraan', false))
-            ->get();
+        $asetList = $this->asetSppbiPemegang($pegawai);
+
+        abort_if(
+            $asetList->isEmpty(),
+            422,
+            'SPPBI hanya tersedia setelah penempatan aset difinalisasi (status Sudah Difinalisasi).'
+        );
 
         $tanggal = Carbon::now()->locale('id');
+
+        // Baris spesifikasi barang: satu blok per aset yang memenuhi syarat.
+        $rows = $asetList->map(function (Aset $aset) {
+            $tanggalTercatat = $this->tanggalTercatat($aset);
+
+            return [
+                'jenis'  => $aset?->barang?->nama_barang ?? '-',
+                'merk'   => $aset?->merk ?? '-',
+                'type'   => $aset?->barang?->kode_barang ?: '-',
+                'tanggal' => $tanggalTercatat ? $tanggalTercatat->format('d') : '-',
+                'bulan'   => $tanggalTercatat ? $tanggalTercatat->locale('id')->translatedFormat('F') : '-',
+                'tahun'   => $tanggalTercatat ? $tanggalTercatat->format('Y') : '-',
+                'kode'   => $aset?->nomor_kartu_barang ?? '-',
+                'tahun_pengadaan' => $this->tahunPengadaan($aset),
+                'jumlah' => 1,
+                'register' => $aset?->nomor_kartu_barang ?? '-',
+                'harga'  => $this->hargaSatuan($aset),
+                'nominal' => $aset?->nilai_perolehan ?? null,
+            ];
+        })->all();
+
         $nomorSurat = $this->nomorSuratOtomatis($pegawai);
-        $pengurus = auth()->user()?->pegawai;
 
-        $rows = $asetList->map(fn (PemegangAset $item) => [
-            'nama' => $item->aset?->barang?->nama_barang ?? '-',
-            'merk' => $item->aset?->merk ?? '-',
-            'tahun' => $item->aset?->tanggal_perolehan
-                ? Carbon::parse($item->aset->tanggal_perolehan)->format('Y')
-                : '-',
-            'kode' => $item->aset?->nomor_kartu_barang ?? '-',
-        ])->all();
+        // Nilai identitas ASN & tanggal surat, dipetakan lewat kontrak
+        // placeholder template (App\Support\Word\SppbiTemplate) supaya token
+        // dan sumber data tidak pernah terpisah.
+        $data = [
+            'nama_asn' => $pegawai->nama_pegawai,
+            'nip_asn' => $pegawai->nip ?? '-',
+            'jabatan_asn' => $pegawai->jabatan ?? '-',
+            'tanggal_surat' => $tanggal->translatedFormat('d F Y'),
+        ];
 
-        if ($rows === []) {
-            $rows = [['nama' => '-', 'merk' => '-', 'tahun' => '-', 'kode' => '-']];
+        $values = [];
+        foreach (SppbiTemplate::VALUE_TOKENS as $token => $key) {
+            $values[$token] = $data[$key];
         }
 
         $filePath = WordTemplateFiller::make(storage_path('app/public/'.$template->file_path))->render(
-            values: [
-                'hari' => $tanggal->translatedFormat('l'),
-                'tanggal_terbilang' => WordTemplateFiller::terbilang((int) $tanggal->format('d')),
-                'bulan' => $tanggal->translatedFormat('F'),
-                'tahun_terbilang' => WordTemplateFiller::terbilang((int) $tanggal->format('Y')),
-                'tanggal_surat' => $tanggal->translatedFormat('d F Y'),
-                'nomor_surat' => $nomorSurat,
-                'nama_pihak_pertama' => $pengurus?->nama_pegawai ?? '-',
-                'nip_pihak_pertama' => $pengurus?->nip ?? '-',
-                'jabatan_pihak_pertama' => $pengurus?->jabatan ?? 'Pengurus Barang',
-                'alamat_pihak_pertama' => $pengurus?->ruangan?->nama_ruangan ?? '-',
-                'nama_pihak_kedua' => $pegawai->nama_pegawai,
-                'nip_pihak_kedua' => $pegawai->nip ?? '-',
-                'jabatan_pihak_kedua' => $pegawai->jabatan ?? '-',
-                'alamat_pihak_kedua' => $pegawai->ruangan?->nama_ruangan ?? '-',
-                'unit' => $pegawai->ruangan?->nama_ruangan ?? '-',
-                'skpd' => $pegawai->skpd?->nama_skpd ?? '-',
-            ],
-            rows: $rows,
+            values: $values,
+            rows: [],
             options: [
-                'row_macro' => 'barang',
-                'row_tokens' => [
-                    'nama_barang' => 'nama',
-                    'merk_barang' => 'merk',
-                    'tahun_pengadaan' => 'tahun',
-                    'kode_barang' => 'kode',
+                'blocks' => [
+                    [
+                        'start_marker' => SppbiTemplate::BLOCK_START,
+                        'end_marker' => SppbiTemplate::BLOCK_END,
+                        'currency_token' => SppbiTemplate::CURRENCY_TOKEN,
+                        'tokens' => SppbiTemplate::BLOCK_TOKENS,
+                        'rows' => $rows,
+                    ],
                 ],
                 'patterns' => [
-                    '~Nomor:\s*[0-9][0-9A-Za-z./\-]*~' => 'Nomor: '.$nomorSurat,
+                    // Nomor surat tertanam langsung di template (tanpa placeholder),
+                    // mis. "Nomor : 000.1.4/00000/121.1/2026". Pola mengizinkan
+                    // spasi opsional di sekitar titik dua.
+                    '~Nomor\s*:\s*[0-9][0-9A-Za-z./\-]*~' => 'Nomor : '.$nomorSurat,
                 ],
             ],
         );
@@ -128,6 +129,85 @@ class DokumenSppbiController extends Controller
         return response()->download($filePath, $fileName, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         ])->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Tanggal "Tgl tercatat" untuk satu aset: pakai tanggal pengadaan, lalu
+     * tanggal penempatan aktif.
+     */
+    private function tanggalTercatat(?Aset $aset): ?Carbon
+    {
+        foreach ([
+            $aset?->tanggal_pengadaan,
+            $aset?->penempatanAktif?->tanggal_mulai,
+        ] as $tanggal) {
+            if ($tanggal) {
+                return Carbon::parse($tanggal);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Daftar aset yang layak masuk SPPBI seorang pegawai.
+     *
+     * SUMBER DATA: aset yang PEMEGANG AKTIFNYA saat dokumen dibuat adalah
+     * pegawai tersebut. Relasi `pemegangSaatIni` (Aset -> PemegangAset status
+     * 'aktif') adalah sumber kebenaran satu-satunya, sehingga:
+     *   1. aset yang sudah berpindah pemegang (mutasi Ganti Pemegang)
+     *      otomatis keluar dari SPPBI pemegang lama,
+     *   2. aset masuk ke SPPBI pemegang baru begitu mutasi selesai,
+     *   3. satu aset hanya bisa muncul satu kali (relasi hasOne), sehingga
+     *      riwayat pemegang yang menumpuk tidak membuat aset dobel.
+     *
+     * SYARAT KELAYAKAN (tidak berubah): bukan kendaraan, berada dalam
+     * AsetScope user, penempatan aktif SUDAH DIFINALISASI, dan ruangannya
+     * berstatus Aktif.
+     *
+     * @return \Illuminate\Support\Collection<int, Aset>
+     */
+    public function asetSppbiPemegang(Pegawai $pegawai): Collection
+    {
+        return Aset::with(['barang', 'penempatanAktif.ruangan'])
+            ->where('is_kendaraan', false)
+            ->whereHas('pemegangSaatIni', fn ($q) => $q->where('id_pegawai', $pegawai->id_pegawai))
+            ->get()
+            ->filter(function (Aset $aset) {
+                if (! $this->scope->bolehAksesAset($aset)) {
+                    return false;
+                }
+
+                return AsetPenempatan::penempatanFinalValid($aset->penempatanAktif);
+            })
+            ->values();
+    }
+
+    /**
+     * Tahun anggaran/pengadaan: tahun dari tanggal pengadaan.
+     */
+    private function tahunPengadaan(?Aset $aset): string
+    {
+        $tanggal = $aset?->tanggal_pengadaan;
+
+        return $tanggal ? Carbon::parse($tanggal)->format('Y') : '-';
+    }
+
+    /**
+     * Harga satuan sebagai angka tanpa pemisah ribuan (mis. 17300993700).
+     *
+     * Aset tanpa nilai perolehan memakai '-' agar tidak dibaca sebagai
+     * aset bernilai nol.
+     */
+    private function hargaSatuan(?Aset $aset): string
+    {
+        $nilai = $aset?->nilai_perolehan;
+
+        if ($nilai === null || $nilai === '') {
+            return '-';
+        }
+
+        return number_format((float) $nilai, 0, '', '');
     }
 
     /**

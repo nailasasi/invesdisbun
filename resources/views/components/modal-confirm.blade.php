@@ -18,7 +18,7 @@
             </div>
             <div class="min-w-0">
                 <h3 class="text-lg font-semibold text-slate-900">{{ $title }}</h3>
-                <p class="mt-1 text-sm text-slate-500">{{ $message }}</p>
+                <p class="mt-1 text-sm text-slate-500" data-confirm-message>{{ $message }}</p>
             </div>
         </div>
         <div class="mt-6 flex justify-end gap-2">

@@ -4,8 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\RetribusiTanah;
 use App\Models\Tanah;
+use App\Rules\FotoKameraValid;
+use App\Services\BuktiOtorisasi;
+use App\Services\RiwayatTanah;
 use App\Services\TanahScope;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 
 class RetribusiTanahController extends Controller
 {
@@ -13,8 +18,11 @@ class RetribusiTanahController extends Controller
      * Gerbang modul Tanah: Admin Aset atau Admin UPT P2BTP saja
      * (deny by default untuk seluruh method).
      */
-    public function __construct(private readonly TanahScope $tanahScope)
-    {
+    public function __construct(
+        private readonly TanahScope $tanahScope,
+        private readonly BuktiOtorisasi $bukti,
+        private readonly RiwayatTanah $riwayat,
+    ) {
         // Guard auth()->check() — lihat TanahController (CLI/route:list).
         if (auth()->check()) {
             abort_unless(
@@ -30,7 +38,7 @@ class RetribusiTanahController extends Controller
      */
     public function create(Tanah $tanah)
     {
-        return view('retribusi_tanah.create', compact('tanah'));
+        return view('tanah.retribusi.create', compact('tanah'));
     }
 
     /**
@@ -57,9 +65,20 @@ class RetribusiTanahController extends Controller
 
         $validated['id_tanah'] = $tanah->id_tanah;
 
-        RetribusiTanah::create($validated);
+        DB::transaction(function () use ($validated, $tanah) {
+            $retribusi = RetribusiTanah::create($validated);
+            $this->syncPenerimaanPad($tanah);
 
-        $this->syncPenerimaanPad($tanah);
+            $this->riwayat->catat(
+                $tanah,
+                'CREATE',
+                'retribusi',
+                $retribusi->id_retribusi,
+                null,
+                $retribusi->fresh()->toArray(),
+                null
+            );
+        });
 
         return redirect()
             ->route('tanah.show', $tanah)
@@ -83,7 +102,7 @@ class RetribusiTanahController extends Controller
     {
         $tanah = $retribusi->tanah;
 
-        return view('retribusi_tanah.edit', compact(
+        return view('tanah.retribusi.edit', compact(
             'retribusi',
             'tanah'
         ));
@@ -111,30 +130,57 @@ class RetribusiTanahController extends Controller
             'total_tarif_sewa' => ['nullable', 'numeric', 'min:0'],
             'satuan' => ['nullable', 'string', 'max:100'],
             'keterangan' => ['nullable', 'string'],
+
+            // Konfirmasi ulang password akun yang sedang login (step-up
+            // otorisasi). Diverifikasi server-side, tidak pernah disimpan.
+            'password_otorisasi' => ['required', 'current_password:web'],
+
+            // Foto bukti kamera langsung (data URL). Wajib; validasi isi file.
+            'foto_bukti_otentikasi' => ['required', 'string', new FotoKameraValid],
+        ], [
+            'password_otorisasi.required' => 'Password otorisasi wajib diisi.',
+            'password_otorisasi.current_password' => 'Password otorisasi tidak cocok dengan akun Anda.',
+            'foto_bukti_otentikasi.required' => 'Silakan ambil foto konfirmasi terlebih dahulu sebelum menyimpan.',
         ]);
 
-        $retribusi->update($validated);
+        unset($validated['password_otorisasi'], $validated['foto_bukti_otentikasi']);
 
-        $this->syncPenerimaanPad($retribusi->tanah);
-
-        return redirect()
-            ->route('tanah.show', $retribusi->tanah)
-            ->with('success', 'Data retribusi berhasil diperbarui.');
-    }
-
-    /**
-     * Menghapus data retribusi.
-     */
-    public function destroy(RetribusiTanah $retribusi)
-    {
         $tanah = $retribusi->tanah;
+        $dataLama = $retribusi->toArray();
 
-        $retribusi->delete();
+        try {
+            $fotoBukti = $this->bukti->simpan($request->input('foto_bukti_otentikasi'));
+        } catch (\Throwable $e) {
+            return back()
+                ->withInput($request->except(['password_otorisasi', 'foto_bukti_otentikasi']))
+                ->withErrors(['foto_bukti_otentikasi' => 'Foto bukti gagal disimpan. Silakan ambil foto ulang.']);
+        }
 
-        $this->syncPenerimaanPad($tanah);
+        try {
+            DB::transaction(function () use ($retribusi, $validated, $tanah, $dataLama, $fotoBukti) {
+                $retribusi->update($validated);
+                $this->syncPenerimaanPad($tanah);
+
+                $this->riwayat->catat(
+                    $tanah,
+                    'UPDATE',
+                    'retribusi',
+                    $retribusi->id_retribusi,
+                    $dataLama,
+                    $retribusi->fresh()->toArray(),
+                    $fotoBukti
+                );
+            });
+        } catch (\Throwable $e) {
+            $this->bukti->hapus($fotoBukti);
+
+            return back()
+                ->withInput($request->except(['password_otorisasi', 'foto_bukti_otentikasi']))
+                ->withErrors(['foto_bukti_otentikasi' => 'Data gagal disimpan sehingga foto bukti dibatalkan. Silakan coba lagi.']);
+        }
 
         return redirect()
             ->route('tanah.show', $tanah)
-            ->with('success', 'Data retribusi berhasil dihapus.');
+            ->with('success', 'Data retribusi berhasil diperbarui.');
     }
 }

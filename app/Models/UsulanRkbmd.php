@@ -20,6 +20,7 @@ class UsulanRkbmd extends Model
 
     protected $fillable = [
         'id_pegawai', 'id_skpd', 'tahun_anggaran', 'jenis_usulan', 'program_kegiatan',
+        'id_kegiatan', 'bidang_urusan', 'nama_program', 'nama_sub_kegiatan',
         'nama_barang', 'kode_barang', 'spesifikasi', 'jumlah', 'satuan',
         'kebutuhan_maksimum', 'kebutuhan_riil', 'barang_optimalisasi',
         'alasan_kebutuhan', 'status_usulan', 'tanggal_usulan', 'catatan_pengurus',
@@ -27,6 +28,7 @@ class UsulanRkbmd extends Model
     ];
 
     protected $casts = [
+        'id_kegiatan' => 'integer',
         'tahun_anggaran' => 'integer',
         'tanggal_usulan' => 'date',
         'jumlah' => 'integer',
@@ -49,5 +51,10 @@ class UsulanRkbmd extends Model
     public function approver()
     {
         return $this->belongsTo(User::class, 'approved_by', 'id_user');
+    }
+
+    public function kegiatan()
+    {
+        return $this->belongsTo(MasterKegiatanRkbmd::class, 'id_kegiatan', 'id_kegiatan');
     }
 }

@@ -7,54 +7,233 @@ use App\Models\Kendaraan;
 use App\Models\DetailMutasiAset;
 use App\Models\Pegawai;
 use App\Models\TemplateDokumen;
+use App\Services\AsetScope;
+use App\Support\Word\WordTemplateFiller;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Illuminate\Support\ViewErrorBag;
 use PhpOffice\PhpWord\TemplateProcessor;
 
 class MutasiAsetController extends Controller
 {
+    public function __construct(
+        private readonly ?AsetScope $scope = null,
+    ) {
+    }
+
+    private function scope(): AsetScope
+    {
+        return $this->scope ?? app(AsetScope::class);
+    }
+
     /**
-     * Riwayat mutasi aset (read-only) untuk Admin Aset.
+     * Riwayat mutasi aset (read-only) untuk Admin Aset dan Admin UPT.
+     * Admin Aset memiliki akses global; Admin UPT dibatasi mutasi historis yang melibatkan lokasi UPT miliknya.
      */
     public function index(Request $request)
     {
-        $kategori = in_array($request->query('kategori'), ['barang', 'kendaraan'], true)
-            ? $request->query('kategori')
-            : 'barang';
-        $search = $request->query('search');
+        $scope = $this->scope();
+
+        // Kategori: Admin UPT secara mutlak hanya memiliki akses aset barang.
+        // Kendaraan dinas dikelola terpusat di Dinas dan eksklusif untuk Admin Aset.
+        if ($scope->isAdminUpt()) {
+            $kategori = 'barang';
+        } else {
+            $kategori = in_array($request->query('kategori'), ['barang', 'kendaraan'], true)
+                ? $request->query('kategori')
+                : 'barang';
+        }
+
+        // Validasi input filter & pencarian
+        $validator = Validator::make($request->all(), [
+            'tanggal_mulai' => ['nullable', 'date_format:Y-m-d'],
+            'tanggal_akhir' => ['nullable', 'date_format:Y-m-d'],
+            'jenis_mutasi' => ['nullable', 'string', 'in:Pindah Ruangan,Ganti Pemegang'],
+        ], [
+            'tanggal_mulai.date_format' => 'Format tanggal mulai tidak valid (harus YYYY-MM-DD).',
+            'tanggal_akhir.date_format' => 'Format tanggal akhir tidak valid (harus YYYY-MM-DD).',
+            'jenis_mutasi.in' => 'Pilihan jenis mutasi tidak valid.',
+        ]);
+
+        $validator->after(function ($v) use ($request) {
+            $mulai = $request->query('tanggal_mulai');
+            $akhir = $request->query('tanggal_akhir');
+            if ($mulai && $akhir && $mulai > $akhir) {
+                $v->errors()->add('tanggal_akhir', 'Tanggal akhir tidak boleh lebih awal daripada tanggal mulai.');
+            }
+        });
+
+        $hasDateErrors = false;
+        if ($validator->fails()) {
+            $errs = $validator->errors();
+            view()->share('errors', (new ViewErrorBag)->put('default', $errs));
+            session()->flash('errors', (new ViewErrorBag)->put('default', $errs));
+            if ($errs->has('tanggal_mulai') || $errs->has('tanggal_akhir')) {
+                $hasDateErrors = true;
+            }
+        }
+
+        $search = trim((string) $request->query('search'));
+        $jenisMutasi = in_array($request->query('jenis_mutasi'), ['Pindah Ruangan', 'Ganti Pemegang'], true)
+            ? $request->query('jenis_mutasi')
+            : null;
 
         $query = MutasiAset::with([
             'details.aset.barang',
-            'details.aset.kendaraan',
+            'details.aset.kendaraan.platAktif',
+            'details.inventaris',
             'details.pegawaiLama',
             'details.pegawaiBaru',
-            'details.ruanganLama',
-            'details.ruanganBaru',
+            'details.ruanganLama.lokasi',
+            'details.ruanganBaru.lokasi',
             'userPenginput.pegawai',
         ]);
 
         // Tab kategori: seluruh mutasi dinas (aset barang & kendaraan) terpusat di sini.
+        // Inventaris lokal ruangan masuk dalam kategori aset barang (non-kendaraan).
         if ($kategori === 'kendaraan') {
             $query->whereHas('details.aset', fn ($a) => $a->where('is_kendaraan', true));
         } else {
-            $query->whereHas('details.aset', fn ($a) => $a->where('is_kendaraan', false));
+            $query->whereHas('details', function ($dq) {
+                $dq->whereHas('aset', fn ($a) => $a->where('is_kendaraan', false))
+                   ->orWhereNotNull('id_inventaris');
+            });
         }
 
-        $query->when($search, function ($query, $search) {
-            $query->where(function ($q) use ($search) {
-                $q->where('jenis_mutasi', 'like', "%{$search}%")
-                    ->orWhere('keterangan', 'like', "%{$search}%")
-                    ->orWhereHas('details.aset.barang', fn ($b) => $b->where('nama_barang', 'like', "%{$search}%"))
-                    ->orWhereHas('details.aset.kendaraan', fn ($k) => $k->where('pemegang', 'like', "%{$search}%")
-                        ->orWhere('jenis_kendaraan', 'like', "%{$search}%"))
-                    ->orWhereHas('details.pegawaiBaru', fn ($p) => $p->where('nama_pegawai', 'like', "%{$search}%"));
+        // Pembatasan cakupan Admin UPT: hanya mutasi yang secara historis pernah
+        // melibatkan lokasi fisik UPT miliknya (ruanganLama ATAU ruanganBaru).
+        $idLokasiUpt = $scope->isAdminUpt() ? ($scope->idLokasi() ?: []) : null;
+        if ($scope->isAdminUpt()) {
+            // Fail-closed: Jika identitas UPT atau lokasi fisik tidak sah, hasilkan 0 data.
+            if (empty($idLokasiUpt)) {
+                $query->whereRaw('1 = 0');
+            } else {
+                $query->whereHas('details', function ($dq) use ($idLokasiUpt) {
+                    $dq->where(function ($w) use ($idLokasiUpt) {
+                        $w->whereHas('ruanganLama', fn ($r) => $r->whereIn('id_lokasi', $idLokasiUpt))
+                          ->orWhereHas('ruanganBaru', fn ($r) => $r->whereIn('id_lokasi', $idLokasiUpt));
+                    });
+                });
+            }
+        }
+
+        // Filter Jenis Mutasi
+        if ($jenisMutasi) {
+            $query->where('jenis_mutasi', $jenisMutasi);
+        }
+
+        // Filter Rentang Tanggal (hanya diterapkan jika tanggal valid)
+        if (! $hasDateErrors) {
+            $tanggalMulai = $request->query('tanggal_mulai');
+            $tanggalAkhir = $request->query('tanggal_akhir');
+
+            if ($tanggalMulai && $tanggalAkhir) {
+                $query->whereBetween('tanggal_mutasi', [$tanggalMulai, $tanggalAkhir]);
+            } elseif ($tanggalMulai) {
+                $query->where('tanggal_mutasi', '>=', $tanggalMulai);
+            } elseif ($tanggalAkhir) {
+                $query->where('tanggal_mutasi', '<=', $tanggalAkhir);
+            }
+        }
+
+        // Filter Pencarian Teks Terpadu
+        if ($search !== '') {
+            $query->where(function ($q) use ($search, $scope, $idLokasiUpt, $kategori) {
+                $cleanNumeric = ltrim($search, '#');
+                if (is_numeric($cleanNumeric)) {
+                    $q->where('id_mutasi', (int) $cleanNumeric)
+                      ->orWhere('keterangan', 'like', "%{$search}%");
+                } else {
+                    $q->where('keterangan', 'like', "%{$search}%");
+                }
+
+                $q->orWhereHas('details', function ($dq) use ($search, $scope, $idLokasiUpt, $kategori) {
+                    // Prioritas Keamanan: Admin UPT wajib terikat pada lokasi fisik UPT-nya pada detail yang sama
+                    if ($scope->isAdminUpt()) {
+                        $dq->where(function ($scopeCheck) use ($idLokasiUpt) {
+                            $scopeCheck->whereHas('ruanganLama', fn ($r) => $r->whereIn('id_lokasi', $idLokasiUpt))
+                                       ->orWhereHas('ruanganBaru', fn ($r) => $r->whereIn('id_lokasi', $idLokasiUpt));
+                        });
+                    }
+
+                    $dq->where(function ($sub) use ($search, $kategori) {
+                        if ($kategori === 'kendaraan') {
+                            $sub->whereHas('aset.kendaraan', function ($k) use ($search) {
+                                $k->where('pemegang', 'like', "%{$search}%")
+                                  ->orWhere('jenis_kendaraan', 'like', "%{$search}%");
+                            })->orWhereHas('pegawaiBaru', fn ($p) => $p->where('nama_pegawai', 'like', "%{$search}%"))
+                              ->orWhereHas('pegawaiLama', fn ($p) => $p->where('nama_pegawai', 'like', "%{$search}%"));
+                        } else {
+                            $sub->whereHas('aset.barang', fn ($b) => $b->where('nama_barang', 'like', "%{$search}%"))
+                                ->orWhereHas('aset', fn ($a) => $a->where('nomor_kartu_barang', 'like', "%{$search}%"))
+                                ->orWhereHas('inventaris', fn ($inv) => $inv->where('nama_barang', 'like', "%{$search}%")
+                                    ->orWhere('kode_inventaris', 'like', "%{$search}%"))
+                                ->orWhereHas('pegawaiLama', fn ($p) => $p->where('nama_pegawai', 'like', "%{$search}%"))
+                                ->orWhereHas('pegawaiBaru', fn ($p) => $p->where('nama_pegawai', 'like', "%{$search}%"))
+                                ->orWhereHas('ruanganLama', fn ($r) => $r->where('nama_ruangan', 'like', "%{$search}%"))
+                                ->orWhereHas('ruanganBaru', fn ($r) => $r->where('nama_ruangan', 'like', "%{$search}%"));
+                        }
+                    });
+                });
             });
-        });
+        }
 
         $mutasiList = $query->orderByDesc('id_mutasi')
             ->paginate(10)
             ->withQueryString();
+
+        $idLokasiUpt = $scope->isAdminUpt() ? ($scope->idLokasi() ?: []) : null;
+
+        // Siapkan detail yang diizinkan untuk setiap mutasi (Anti-Leakage untuk Admin UPT)
+        // dan tentukan kelayakan unduh BAST historis tanpa N+1 query.
+        $mutasiList->getCollection()->transform(function ($mutasi) use ($scope, $idLokasiUpt) {
+            if ($scope->isAdminUpt()) {
+                // Filter detail yang melibatkan lokasi fisik UPT pengguna
+                $visible = $mutasi->details->filter(function ($d) use ($idLokasiUpt) {
+                    $asal = $d->ruanganLama?->id_lokasi ? (int) $d->ruanganLama->id_lokasi : null;
+                    $tujuan = $d->ruanganBaru?->id_lokasi ? (int) $d->ruanganBaru->id_lokasi : null;
+
+                    $cocokAsal = $asal !== null && in_array($asal, $idLokasiUpt, true);
+                    $cocokTujuan = $tujuan !== null && in_array($tujuan, $idLokasiUpt, true);
+
+                    return $cocokAsal || $cocokTujuan;
+                })->values();
+
+                // Evaluasi hak unduh BAST: seluruh detail dalam transaksi mutasi
+                // wajib memenuhi syarat lokasi historis UPT (sama persis dengan downloadBAST).
+                $bisaUnduh = true;
+                if ($mutasi->details->isEmpty()) {
+                    $bisaUnduh = false;
+                } else {
+                    foreach ($mutasi->details as $d) {
+                        if (! $d->aset) {
+                            $bisaUnduh = false;
+                            break;
+                        }
+                        $asal = $d->ruanganLama?->id_lokasi ? (int) $d->ruanganLama->id_lokasi : null;
+                        $tujuan = $d->ruanganBaru?->id_lokasi ? (int) $d->ruanganBaru->id_lokasi : null;
+                        $cocokAsal = $asal !== null && in_array($asal, $idLokasiUpt, true);
+                        $cocokTujuan = $tujuan !== null && in_array($tujuan, $idLokasiUpt, true);
+                        if (! $cocokAsal && ! $cocokTujuan) {
+                            $bisaUnduh = false;
+                            break;
+                        }
+                    }
+                }
+
+                $mutasi->setRelation('visible_details', $visible);
+                $mutasi->bisa_unduh_bast = $bisaUnduh;
+            } else {
+                // Admin Aset memiliki akses global ke seluruh detail dan dokumen BAST
+                $mutasi->setRelation('visible_details', $mutasi->details);
+                $mutasi->bisa_unduh_bast = true;
+            }
+
+            return $mutasi;
+        });
 
         return view('mutasi-aset.index', compact('mutasiList', 'kategori'));
     }
@@ -66,8 +245,20 @@ class MutasiAsetController extends Controller
      */
     public function downloadBAST($id_mutasi)
     {
-        $mutasi = MutasiAset::with(['details.aset.barang', 'details.pegawaiLama', 'details.pegawaiBaru'])
-            ->findOrFail($id_mutasi);
+        $scope = $this->scope();
+        abort_unless(
+            $scope->isAdminAset() || $scope->isAdminUpt(),
+            403,
+            'Anda tidak memiliki hak akses untuk mengunduh BAST.'
+        );
+
+        $mutasi = MutasiAset::with([
+            'details.aset.barang',
+            'details.pegawaiLama',
+            'details.pegawaiBaru',
+            'details.ruanganLama',
+            'details.ruanganBaru',
+        ])->findOrFail($id_mutasi);
 
         // BAST hanya untuk serah terima tanggung jawab perorangan.
         // Pindah ruangan merupakan penataan lokasi internal yang tercatat di KIR.
@@ -75,13 +266,41 @@ class MutasiAsetController extends Controller
             return back()->with('error', 'Dokumen BAST hanya tersedia untuk mutasi Ganti Pemegang.');
         }
 
-        $detail = $mutasi->details->first();
-        if (!$detail || !$detail->aset) {
+        $details = $mutasi->details;
+        if ($details->isEmpty()) {
             return back()->with('error', 'Detail mutasi tidak ditemukan.');
         }
 
+        // Verifikasi cakupan hak akses aset historis (Opsi B)
+        // Admin Aset memiliki akses global; Admin UPT diverifikasi berdasarkan keterkaitan lokasi fisik
+        // asal (ruangan_lama) dan/atau tujuan (ruangan_baru) pada saat mutasi terjadi.
+        if ($scope->isAdminUpt()) {
+            $idLokasiUpt = $scope->idLokasi() ?: [];
+            if (empty($idLokasiUpt)) {
+                abort(403, 'Aset berada di luar cakupan kewenangan Anda.');
+            }
+
+            foreach ($details as $detail) {
+                if (! $detail->aset) {
+                    abort(403, 'Aset berada di luar cakupan kewenangan Anda.');
+                }
+
+                $lokasiAsal = $detail->ruanganLama?->id_lokasi ? (int) $detail->ruanganLama->id_lokasi : null;
+                $lokasiTujuan = $detail->ruanganBaru?->id_lokasi ? (int) $detail->ruanganBaru->id_lokasi : null;
+
+                $asalCocok = $lokasiAsal !== null && in_array($lokasiAsal, $idLokasiUpt, true);
+                $tujuanCocok = $lokasiTujuan !== null && in_array($lokasiTujuan, $idLokasiUpt, true);
+
+                // Fail-closed: Jika asal DAN tujuan tidak berada dalam cakupan UPT, tolak akses.
+                // Seluruh aset dalam BAST harus berada dalam cakupan historis UPT.
+                if (! $asalCocok && ! $tujuanCocok) {
+                    abort(403, 'Aset berada di luar cakupan kewenangan Anda.');
+                }
+            }
+        }
+
         $template = TemplateDokumen::where('kode_template', 'bast_barang')->first();
-        if (!$template || !$template->file_path || !Storage::disk('public')->exists($template->file_path)) {
+        if (! $template || ! $template->file_path || ! Storage::disk('public')->exists($template->file_path)) {
             return back()->with('error', 'Template BAST Barang belum diunggah di Pengaturan Dokumen.');
         }
 
@@ -90,13 +309,27 @@ class MutasiAsetController extends Controller
         // Waktu dalam Bahasa Indonesia
         $tgl = \Carbon\Carbon::parse($mutasi->tanggal_mutasi ?? now())->locale('id');
 
-        $p1 = $detail->pegawaiLama;
-        $p2 = $detail->pegawaiBaru;
-        $aset = $detail->aset;
+        $firstDetail = $details->first();
+        $p1 = $firstDetail->pegawaiLama;
+        $p2 = $firstDetail->pegawaiBaru;
         $pihak1 = $this->resolvePihak($p1, $this->namaPemegangLamaDariKeterangan($mutasi->keterangan));
         $pihak2 = $this->resolvePihak($p2);
 
-        // 1. Cara standar PhpWord: placeholder ${...}
+        // Susun daftar seluruh aset untuk tabel BAST multi-detail
+        $items = [];
+        $nomor = 1;
+        foreach ($details as $d) {
+            $asetModel = $d->aset;
+            $items[] = [
+                'nomor' => (string) $nomor++,
+                'nama_barang' => (string) ($asetModel?->barang?->nama_barang ?? '-'),
+                'merk_barang' => (string) ($asetModel?->merk ?? '-'),
+                'tahun_pengadaan' => (string) ($asetModel?->tanggal_pengadaan ? \Carbon\Carbon::parse($asetModel->tanggal_pengadaan)->format('Y') : '-'),
+                'kode_barang' => (string) ($asetModel?->nomor_kartu_barang ?? '-'),
+            ];
+        }
+
+        // 1. Placeholder umum (header & para pihak) via PhpWord standar
         $phpWord->setValue('hari', $tgl->translatedFormat('l'));
         $phpWord->setValue('tanggal_terbilang', $this->terbilang((int) $tgl->format('d')));
         $phpWord->setValue('bulan', $tgl->translatedFormat('F'));
@@ -112,16 +345,10 @@ class MutasiAsetController extends Controller
         $phpWord->setValue('jabatan_pihak_kedua', $pihak2['jabatan']);
         $phpWord->setValue('alamat_pihak_kedua', $pihak2['alamat']);
 
-        $phpWord->setValue('nomor', '1');
-        $phpWord->setValue('nama_barang', $aset->barang->nama_barang ?? '-');
-        $phpWord->setValue('merk_barang', $aset->merk ?? '-');
-        $phpWord->setValue('tahun_pengadaan', $aset->tanggal_perolehan ? \Carbon\Carbon::parse($aset->tanggal_perolehan)->format('Y') : '-');
-        $phpWord->setValue('kode_barang', $aset->nomor_kartu_barang ?? '-');
+        // 2. Render baris tabel barang dinamis (multi-detail)
+        $this->renderTableRows($phpWord, $items);
 
-        // 2. Patch kurung kurawal tunggal {placeholder} langsung di XML.
-        // Word sering memecah placeholder lintas beberapa <w:r>/<w:t> (mis. karena
-        // proofErr), sehingga setValue + str_replace polos tidak cukup. Gunakan
-        // penggantian lintas-run agar tak ada placeholder yang terlewat.
+        // 3. Patch kurung kurawal tunggal {placeholder} langsung di XML
         $swap = [
             '{hari}'              => $tgl->translatedFormat('l'),
             '{tanggal_terbilang}' => $this->terbilang((int) $tgl->format('d')),
@@ -135,18 +362,20 @@ class MutasiAsetController extends Controller
             '{nip_pihak_kedua}'     => $pihak2['nip'],
             '{jabatan_pihak_kedua}' => $pihak2['jabatan'],
             '{alamat_pihak_kedua}' => $pihak2['alamat'],
-            '{nomor}'           => '1',
-            '{nama_barang}'     => $aset->barang->nama_barang ?? '-',
-            '{merk_barang}'     => $aset->merk ?? '-',
-            '{tahun_pengadaan}' => $aset->tanggal_perolehan ? \Carbon\Carbon::parse($aset->tanggal_perolehan)->format('Y') : '-',
-            '{kode_barang}'     => $aset->nomor_kartu_barang ?? '-',
             '{#barang}'         => '',
             '{/barang}'         => '',
         ];
 
         $this->applyReplacements($phpWord, $swap);
 
-        $namaFile = 'BAST_' . Str::slug($aset->barang->nama_barang ?? 'Aset', '_') . '_' . $tgl->format('Ymd') . '.docx';
+        $jumlahAset = count($items);
+        if ($jumlahAset > 1) {
+            $namaFile = 'BAST_' . $jumlahAset . '_Aset_' . $tgl->format('Ymd') . '.docx';
+        } else {
+            $namaBarangFirst = $items[0]['nama_barang'] ?? 'Aset';
+            $namaFile = 'BAST_' . Str::slug($namaBarangFirst !== '-' ? $namaBarangFirst : 'Aset', '_') . '_' . $tgl->format('Ymd') . '.docx';
+        }
+
         $tempPath = tempnam(sys_get_temp_dir(), 'BAST_');
         $phpWord->saveAs($tempPath);
 
@@ -159,6 +388,8 @@ class MutasiAsetController extends Controller
      */
     public function downloadBASTKendaraan(Kendaraan $kendaraan, $id_mutasi)
     {
+        abort_unless($this->scope()->isAdminAset(), 403, 'Hanya Admin Aset yang berwenang mengunduh dokumen mutasi kendaraan.');
+
         $mutasi = MutasiAset::with(['details', 'details.aset.barang', 'details.pegawaiLama', 'details.pegawaiBaru'])
             ->findOrFail($id_mutasi);
 
@@ -185,7 +416,7 @@ class MutasiAsetController extends Controller
         $aset = $detail->aset;
         $knd = Kendaraan::where('id_aset', $aset->id_aset)->first();
         $platAktif = $knd?->platAktif;
-        $namaKendaraan = $aset?->barang?->nama_barang ?? $knd?->merk ?? '-';
+        $namaKendaraan = $knd?->namaTampil() ?? '-';
         $pihak1 = $this->resolvePihak($p1, $this->namaPemegangLamaDariKeterangan($mutasi->keterangan));
         $pihak2 = $this->resolvePihak($p2, $knd?->pemegang);
 
@@ -223,7 +454,7 @@ class MutasiAsetController extends Controller
 
         $this->applyReplacements($phpWord, $swap);
 
-        $namaFile = 'BAST_Kendaraan_' . Str::slug($aset->barang->nama_barang ?? 'Kendaraan', '_') . '_' . $tgl->format('Ymd') . '.docx';
+        $namaFile = 'BAST_Kendaraan_' . Str::slug($namaKendaraan !== '-' ? $namaKendaraan : 'Kendaraan', '_') . '_' . $tgl->format('Ymd') . '.docx';
         $tempPath = tempnam(sys_get_temp_dir(), 'BAST_');
         $phpWord->saveAs($tempPath);
 
@@ -236,6 +467,8 @@ class MutasiAsetController extends Controller
      */
     public function downloadSPPKD(Kendaraan $kendaraan, $id_mutasi)
     {
+        abort_unless($this->scope()->isAdminAset(), 403, 'Hanya Admin Aset yang berwenang mengunduh dokumen mutasi kendaraan.');
+
         $mutasi = MutasiAset::with(['details', 'details.aset.barang', 'details.pegawaiBaru'])
             ->findOrFail($id_mutasi);
 
@@ -261,7 +494,7 @@ class MutasiAsetController extends Controller
         $aset = $detail->aset;
         $knd = Kendaraan::where('id_aset', $aset->id_aset)->first();
         $platAktif = $knd?->platAktif;
-        $namaKendaraan = $aset?->barang?->nama_barang ?? $knd?->merk ?? '-';
+        $namaKendaraan = $knd?->namaTampil() ?? '-';
         $pihak2 = $this->resolvePihak($p2, $knd?->pemegang);
 
         // Ambil nomor surat dari keterangan jika dicatat saat mutasi.
@@ -307,11 +540,121 @@ class MutasiAsetController extends Controller
     }
 
     /**
+     * Unduh SPPKD untuk pemegang yang sedang tercantum pada kendaraan
+     * (kolom Pemegang tabel utama Kendaraan), tanpa record mutasi.
+     *
+     * Mengambil seluruh kendaraan aktif yang saat ini dipegang oleh pegawai
+     * tersebut dan penempatannya sudah difinalisasi.
+     */
+    public function downloadSPPKDPemegang(Kendaraan $kendaraan)
+    {
+        abort_unless($this->scope()->isAdminAset(), 403, 'Hanya Admin Aset yang berwenang mengunduh dokumen mutasi kendaraan.');
+
+        $aset = $kendaraan->aset;
+
+        // 1. Identifikasi pemegang berdasarkan relasi resmi aset.pemegangSaatIni.pegawai.
+        $pegawai = $aset?->pemegangSaatIni?->pegawai;
+
+        // 2. Jika relasi pemegang aktif tidak tersedia pada data lama, gunakan fallback nama
+        //    dari kendaraan.pemegang hanya apabila nama tersebut cocok dengan tepat satu data Pegawai.
+        if (! $pegawai) {
+            $namaPemegang = trim((string) $kendaraan->pemegang);
+            if ($namaPemegang === '') {
+                return back()->with('error', 'Kendaraan belum memiliki pemegang, SPPKD tidak dapat dibuat.');
+            }
+
+            $kandidat = Pegawai::where('nama_pegawai', $namaPemegang)->get();
+            if ($kandidat->count() !== 1) {
+                return back()->with('error', 'Identitas pemegang tidak ditemukan atau ambigu (nama tidak unik). SPPKD tidak dapat dibuat.');
+            }
+
+            $pegawai = $kandidat->first();
+        }
+
+        $pihak = $this->resolvePihak($pegawai);
+
+        // 3. Ambil seluruh kendaraan yang saat ini dipegang oleh pegawai tersebut
+        //    yang memenuhi seluruh syarat (aset aktif, penempatan aktif difinalisasi, pemegang saat ini sesuai id_pegawai).
+        $kendaraanList = Kendaraan::with(['aset.penempatanAktif', 'platAktif'])
+            ->whereHas('aset', function ($q) use ($pegawai) {
+                $q->where('status_aset', 'aktif')
+                    ->whereHas('pemegangSaatIni', function ($p) use ($pegawai) {
+                        $p->where('id_pegawai', $pegawai->id_pegawai);
+                    })
+                    ->whereHas('penempatanAktif', function ($pen) {
+                        $pen->where('is_finalized', 1);
+                    });
+            })
+            ->orderBy('id_kendaraan')
+            ->get()
+            ->filter(function (Kendaraan $k) {
+                return $k->aset && $this->scope()->bolehAksesAset($k->aset);
+            })
+            ->values();
+
+        if ($kendaraanList->isEmpty()) {
+            return back()->with('error', 'Tidak ada kendaraan aktif dengan status penempatan yang sudah difinalisasi untuk pemegang ini.');
+        }
+
+        $template = TemplateDokumen::where('kode_template', 'sppkd')->first();
+        if (! $template || ! $template->file_path || ! Storage::disk('public')->exists($template->file_path)) {
+            return back()->with('error', 'Template SPPKD belum diunggah di Pengaturan Dokumen.');
+        }
+
+        $tgl = Carbon::now()->locale('id');
+
+        $values = [
+            'nama_asn'    => (string) $pihak['nama'],
+            'nip_asn'     => (string) $pihak['nip'],
+            'jabatan_asn' => (string) $pihak['jabatan'],
+            'alamat_asn'  => (string) $pihak['alamat'],
+            'tanggal'     => (string) ((int) $tgl->format('d')),
+            'bulan'       => (string) $tgl->translatedFormat('F'),
+            'tahun'       => (string) $tgl->format('Y'),
+        ];
+
+        $rows = $kendaraanList->map(function (Kendaraan $k, int $index) {
+            return [
+                'nomor'           => (string) ($index + 1),
+                'no_plat'         => (string) ($k->platAktif?->nomor_plat ?? '-'),
+                'jenis_kendaraan' => (string) ($k->namaTampil() ?: '-'),
+                'no_rangka'       => (string) ($k->nomor_rangka ?: '-'),
+                'no_mesin'        => (string) ($k->nomor_mesin ?: '-'),
+            ];
+        })->all();
+
+        $rowTokens = [
+            'nomor'           => 'nomor',
+            'no_plat'         => 'no_plat',
+            'jenis_kendaraan' => 'jenis_kendaraan',
+            'no_rangka'       => 'no_rangka',
+            'no_mesin'        => 'no_mesin',
+        ];
+
+        $filePath = WordTemplateFiller::make(storage_path('app/public/' . $template->file_path))->render(
+            values: $values,
+            rows: $rows,
+            options: [
+                'row_macro'  => 'kendaraan',
+                'row_tokens' => $rowTokens,
+            ],
+        );
+
+        $namaFile = 'SPPKD_' . ($pihak['nama'] !== '-' ? Str::slug($pihak['nama'], '_') : 'Kendaraan') . '_' . $tgl->format('Ymd') . '.docx';
+
+        return response()->download($filePath, $namaFile, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ])->deleteFileAfterSend(true);
+    }
+
+    /**
      * Unduh SPPKD kendaraan cukup dengan id_mutasi (tanpa mengirim id kendaraan).
      * Digunakan modal sukses mutasi di index kendaraan & menu Mutasi Aset.
      */
     public function downloadSPPKDById($id_mutasi)
     {
+        abort_unless($this->scope()->isAdminAset(), 403, 'Hanya Admin Aset yang berwenang mengunduh dokumen mutasi kendaraan.');
+
         $detail = DetailMutasiAset::where('id_mutasi', $id_mutasi)->first();
         if (!$detail) {
             return back()->with('error', 'Detail mutasi tidak ditemukan.');
@@ -330,6 +673,8 @@ class MutasiAsetController extends Controller
      */
     public function downloadBASTKendaraanById($id_mutasi)
     {
+        abort_unless($this->scope()->isAdminAset(), 403, 'Hanya Admin Aset yang berwenang mengunduh dokumen mutasi kendaraan.');
+
         $detail = DetailMutasiAset::where('id_mutasi', $id_mutasi)->first();
         if (!$detail) {
             return back()->with('error', 'Detail mutasi tidak ditemukan.');
@@ -341,6 +686,61 @@ class MutasiAsetController extends Controller
         }
 
         return $this->downloadBASTKendaraan($kendaraan, $id_mutasi);
+    }
+
+    /**
+     * Duplikasi dan isi baris tabel barang pada dokumen BAST Word
+     * untuk mendukung transaksi mutasi multi-detail.
+     */
+    private function renderTableRows(TemplateProcessor $phpWord, array $items): void
+    {
+        try {
+            $reflection = new \ReflectionClass($phpWord);
+            if (! $reflection->hasProperty('tempDocumentMainPart')) {
+                return;
+            }
+            $property = $reflection->getProperty('tempDocumentMainPart');
+            $property->setAccessible(true);
+            $xml = $property->getValue($phpWord);
+
+            if (! is_string($xml) || $xml === '') {
+                return;
+            }
+
+            // Temukan baris tabel <w:tr> yang memuat kolom tabel barang
+            $newXml = preg_replace_callback('/<w:tr\b[^>]*>.*?<\/w:tr>/s', function ($m) use ($items) {
+                $rowXml = $m[0];
+                if (str_contains($rowXml, 'nama_barang') || str_contains($rowXml, '{#barang}')) {
+                    $out = '';
+                    foreach ($items as $item) {
+                        $row = $rowXml;
+                        $swap = [
+                            '{#barang}'         => '',
+                            '{/barang}'         => '',
+                            '{nomor}'           => (string) $item['nomor'],
+                            '{nama_barang}'     => (string) $item['nama_barang'],
+                            '{merk_barang}'     => (string) $item['merk_barang'],
+                            '{tahun_pengadaan}' => (string) $item['tahun_pengadaan'],
+                            '{kode_barang}'     => (string) $item['kode_barang'],
+                        ];
+                        $row = preg_replace_callback('/<w:p\b[^>]*>.*?<\/w:p>/s', function ($pm) use ($swap) {
+                            return $this->replaceInParagraph($pm[0], $swap);
+                        }, $row);
+                        $out .= $row;
+                    }
+
+                    return $out;
+                }
+
+                return $rowXml;
+            }, $xml);
+
+            if (is_string($newXml) && $newXml !== '') {
+                $property->setValue($phpWord, $newXml);
+            }
+        } catch (\Throwable $th) {
+            // Abaikan kegagalan manipulasi low-level XML, lanjutkan dengan fallback
+        }
     }
 
     /**

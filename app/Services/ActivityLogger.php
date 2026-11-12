@@ -28,6 +28,7 @@ class ActivityLogger
         'password_baru',
         'password_lama',
         'password_confirmation',
+        'password_otorisasi',
         'current_password',
         'remember_token',
         'api_token',

@@ -19,14 +19,22 @@
                     Dashboard Unit Kerja
                 </p>
                 <h1 class="mt-1 text-2xl font-extrabold tracking-tight sm:text-3xl">{{ $unit->nama_skpd }}</h1>
-                <p class="mt-2 max-w-xl text-sm text-white/70">
+                @php
+                    $pegawaiLogin = $pegawai ?? auth()->user()?->pegawai;
+                @endphp
+                @if ($pegawaiLogin?->nama_pegawai)
+                    <p class="mt-1 text-base font-semibold text-white/90">
+                        {{ $pegawaiLogin->nama_pegawai }}
+                    </p>
+                @endif
+                <p class="mt-1.5 max-w-xl text-sm text-white/70">
                     Ringkasan aset yang dipegang pegawai di lingkungan unit kerja ini.
                 </p>
             </div>
-            <a href="{{ route('aset-barang.index') }}"
+            <a href="{{ $pegawaiLogin ? route('aset-barang.show', ['pegawai' => $pegawaiLogin->id_pegawai, 'from' => 'dashboard']) : '#' }}"
                class="inline-flex w-fit items-center gap-1.5 rounded-xl bg-gradient-to-r from-disbun-amber to-disbun-amber-glow px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-black/10 transition hover:brightness-105">
-                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                Lihat Data Aset
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                Lihat Aset Saya
             </a>
         </div>
     </div>
@@ -106,7 +114,7 @@
                 @forelse ($pemegangUnit->take(8) as $pemegang)
                     <div class="flex items-center justify-between gap-3 rounded-2xl bg-slate-50/70 px-4 py-3">
                         <div class="min-w-0">
-                            <p class="truncate text-sm font-semibold text-slate-800">{{ $pemegang->aset?->barang?->nama_barang ?? $pemegang->aset?->merk ?? 'Aset' }}</p>
+                            <p class="truncate text-sm font-semibold text-slate-800">{{ $pemegang->aset?->kendaraan?->namaTampil() ?? $pemegang->aset?->barang?->nama_barang ?? $pemegang->aset?->merk ?? 'Aset' }}</p>
                             <p class="truncate text-[11px] text-slate-400">{{ $pemegang->aset?->nomor_kartu_barang ?? '-' }} · {{ $pemegang->pegawai?->nama_pegawai ?? '-' }}</p>
                         </div>
                         <span @class([

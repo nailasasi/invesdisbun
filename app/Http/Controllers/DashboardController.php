@@ -20,11 +20,13 @@ class DashboardController extends Controller
     {
     }
 
-    const ROLE_ADMIN_ASET = 'Admin Aset';
+    public const ROLE_ADMIN_ASET = 'Admin Aset';
 
-    const ROLE_ADMIN_UPT = 'Admin UPT';
+    public const ROLE_ADMIN_BIDANG = 'Admin Bidang';
 
-    const ROLE_PEGAWAI = 'Pegawai';
+    public const ROLE_ADMIN_UPT = 'Admin UPT';
+
+    public const ROLE_PEGAWAI = 'Pegawai';
 
     /**
      * Display the application dashboard.
@@ -35,14 +37,16 @@ class DashboardController extends Controller
 
         return match ($role) {
             self::ROLE_ADMIN_ASET => $this->adminAsetDashboard(),
+            self::ROLE_ADMIN_BIDANG => $this->adminBidangDashboard(),
             self::ROLE_PEGAWAI => $this->pegawaiDashboard(),
-            default => $this->unitDashboard(),
+            self::ROLE_ADMIN_UPT => $this->unitDashboard(),
+            default => abort(403, 'Peran pengguna tidak valid atau Anda belum memiliki hak akses ke Dashboard.'),
         };
     }
 
     /**
      * Dashboard Admin Aset: statistik seluruh dinas +
-     * peringatan SPPBI, pajak kendaraan, dan RKBMD pending.
+     * pajak kendaraan, dan RKBMD pending.
      */
     private function adminAsetDashboard(): View
     {
@@ -65,14 +69,6 @@ class DashboardController extends Controller
             ->with(['kendaraan.aset.barang', 'kendaraan.platAktif', 'pengaju'])
             ->orderByDesc('created_at')
             ->limit(5)
-            ->get();
-
-        $pegawaiTanpaSppbi = Pegawai::query()
-            ->whereHas('pemegangAset', fn ($q) => $q->where('status', 'aktif'))
-            ->whereDoesntHave('dokumenSppbi', fn ($q) => $q->where('status', 'aktif')->whereNotNull('file_path'))
-            ->with('skpd')
-            ->withCount(['pemegangAset as jumlah_aset' => fn ($q) => $q->where('status', 'aktif')])
-            ->orderBy('nama_pegawai')
             ->get();
 
         $kendaraanPajakCount = Kendaraan::whereHas('pajakAktif', fn ($q) => $q->where('tanggal_berakhir', '<=', now()->addDays(30)))->count();
@@ -111,7 +107,6 @@ class DashboardController extends Controller
             'asetRusakBerat' => $asetRusakBerat,
             'izinMenungguCount' => $izinMenungguCount,
             'izinMenungguTerbaru' => $izinMenungguTerbaru,
-            'pegawaiTanpaSppbi' => $pegawaiTanpaSppbi,
             'totalPemegang' => $totalPemegang,
             'kendaraanPajakCount' => $kendaraanPajakCount,
             'kendaraanPajak' => $kendaraanPajak,
@@ -122,18 +117,108 @@ class DashboardController extends Controller
     }
 
     /**
+     * Dashboard Admin Bidang:
+     * 1. Informasi aset Bidang (dibatasi strictly id_skpd pegawai Bidang).
+     * 2. Informasi pribadi Admin Bidang (identitas & aset personal, tanpa SPPBI).
+     * 3. Pekerjaan & Pemantauan RKBMD Bidang (4 status aktual & pengingat draft).
+     */
+    private function adminBidangDashboard(): View
+    {
+        $user = auth()->user();
+        abort_unless($user?->role?->nama_role === self::ROLE_ADMIN_BIDANG, 403, 'Akses khusus Admin Bidang.');
+
+        $diri = $user?->pegawai;
+        $skpd = $diri?->skpd;
+
+        abort_unless($diri && $skpd && $skpd->isBidang(), 403, 'Akun Admin Bidang Anda belum terhubung ke data pegawai dan unit Bidang yang valid.');
+
+        $skpdId = (int) $skpd->id_skpd;
+
+        // KELOMPOK 1: INFORMASI ASET BIDANG (Scope id_skpd, bukan lokasi dinas)
+        $asetStats = Aset::where('id_skpd', $skpdId)
+            ->whereIn('status_aset', ['aktif', 'Aktif'])
+            ->selectRaw("
+                COUNT(*) as total_aset,
+                COALESCE(SUM(nilai_perolehan), 0) as total_nilai,
+                COALESCE(SUM(CASE WHEN kondisi = 'Baik' THEN 1 ELSE 0 END), 0) as kondisi_baik,
+                COALESCE(SUM(CASE WHEN kondisi = 'Rusak Ringan' THEN 1 ELSE 0 END), 0) as kondisi_rusak_ringan,
+                COALESCE(SUM(CASE WHEN kondisi = 'Rusak Berat' THEN 1 ELSE 0 END), 0) as kondisi_rusak_berat
+            ")
+            ->first();
+
+        $idAsetBidang = Aset::where('id_skpd', $skpdId)
+            ->whereIn('status_aset', ['aktif', 'Aktif'])
+            ->pluck('id_aset');
+
+        $kendaraanStats = Kendaraan::whereIn('id_aset', $idAsetBidang)
+            ->selectRaw("
+                COALESCE(SUM(CASE WHEN status_penggunaan = 'Tersedia' THEN 1 ELSE 0 END), 0) as tersedia,
+                COALESCE(SUM(CASE WHEN status_penggunaan = 'Dipakai' THEN 1 ELSE 0 END), 0) as dipakai
+            ")
+            ->first();
+
+        $pemegangBidang = PemegangAset::with(['pegawai', 'aset.barang', 'aset.kendaraan'])
+            ->where('status', 'aktif')
+            ->whereHas('pegawai', fn ($q) => $q->where('id_skpd', $skpdId))
+            ->get();
+
+        // KELOMPOK 2: INFORMASI PRIBADI ADMIN BIDANG (Tanpa SPPBI)
+        $asetPribadi = PemegangAset::with(['aset.barang', 'aset.kendaraan.platAktif'])
+            ->where('id_pegawai', $diri->id_pegawai)
+            ->where('status', 'aktif')
+            ->get();
+
+        // KELOMPOK 3: PEKERJAAN & PEMANTAUAN RKBMD BIDANG (Scope usulan_rkbmd.id_skpd)
+        $rkbmdStats = UsulanRkbmd::where('id_skpd', $skpdId)
+            ->selectRaw("
+                COUNT(*) as total,
+                COALESCE(SUM(CASE WHEN status_usulan = 'Draft' THEN 1 ELSE 0 END), 0) as draft,
+                COALESCE(SUM(CASE WHEN status_usulan = 'Diajukan' THEN 1 ELSE 0 END), 0) as diajukan,
+                COALESCE(SUM(CASE WHEN status_usulan = 'Disetujui Pengurus Barang' THEN 1 ELSE 0 END), 0) as disetujui,
+                COALESCE(SUM(CASE WHEN status_usulan = 'Ditolak' THEN 1 ELSE 0 END), 0) as ditolak
+            ")
+            ->first();
+
+        $rkbmdTerbaru = UsulanRkbmd::where('id_skpd', $skpdId)
+            ->orderByDesc('id_usulan')
+            ->take(5)
+            ->get();
+
+        return view('dashboard.index', [
+            'role' => self::ROLE_ADMIN_BIDANG,
+            'skpd' => $skpd,
+            'diri' => $diri,
+            'totalAsetBidang' => (int) ($asetStats->total_aset ?? 0),
+            'nilaiAsetBidang' => (float) ($asetStats->total_nilai ?? 0),
+            'asetBaikBidang' => (int) ($asetStats->kondisi_baik ?? 0),
+            'asetRusakRinganBidang' => (int) ($asetStats->kondisi_rusak_ringan ?? 0),
+            'asetRusakBeratBidang' => (int) ($asetStats->kondisi_rusak_berat ?? 0),
+            'kendaraanTersedia' => (int) ($kendaraanStats->tersedia ?? 0),
+            'kendaraanDipakai' => (int) ($kendaraanStats->dipakai ?? 0),
+            'pemegangBidang' => $pemegangBidang,
+            'totalPegawaiPemegang' => $pemegangBidang->pluck('id_pegawai')->unique()->count(),
+            'asetPribadi' => $asetPribadi,
+            'rkbmdStats' => $rkbmdStats,
+            'rkbmdDraftCount' => (int) ($rkbmdStats->draft ?? 0),
+            'rkbmdTerbaru' => $rkbmdTerbaru,
+        ]);
+    }
+
+    /**
      * Dashboard Admin Unit / Bidang / UPT: aset di lingkungan unit
      * (via pemegang aset aktif pegawai unit) + status RKBMD unit.
      */
     private function unitDashboard(): View
     {
         // Unit = skpd pegawai (Sekretariat / Bidang / UPT).
-        $skpd = auth()->user()?->pegawai?->skpd;
+        $pegawai = auth()->user()?->pegawai;
+        $skpd = $pegawai?->skpd;
 
         if (! $skpd) {
             return view('dashboard.index', [
                 'role' => 'unit',
                 'unit' => null,
+                'pegawai' => null,
             ]);
         }
 
@@ -159,7 +244,7 @@ class DashboardController extends Controller
         $kendaraanUnitDipakai = Kendaraan::where('status_penggunaan', 'Dipakai')->whereIn('id_aset', $idAsetUnit)->count();
 
         $rkbmdUnit = UsulanRkbmd::with(['pegawai'])
-            ->whereHas('pegawai', fn ($q) => $q->where('id_skpd', $skpd->id_skpd))
+            ->where('id_skpd', $skpd->id_skpd)
             ->orderByDesc('id_usulan')
             ->get();
         $rkbmdUnitStatuses = $rkbmdUnit->groupBy('status_usulan')->map->count();
@@ -168,6 +253,7 @@ class DashboardController extends Controller
         return view('dashboard.index', [
             'role' => 'unit',
             'unit' => $skpd,
+            'pegawai' => $pegawai,
             'pemegangUnit' => $pemegangUnit,
             'totalAsetUnit' => $idAsetUnit->count(),
             'nilaiAsetUnit' => $asetUnit->sum('nilai_perolehan'),
@@ -182,7 +268,7 @@ class DashboardController extends Controller
     }
 
     /**
-     * Dashboard Pegawai: aset yang dipegang sendiri, status SPPBI,
+     * Dashboard Pegawai: aset yang dipegang sendiri
      * dan status pengajuan izin kendaraan miliknya.
      */
     private function pegawaiDashboard(): View
@@ -190,14 +276,11 @@ class DashboardController extends Controller
         $diri = auth()->user()?->pegawai;
 
         $asetSaya = collect();
-        $sppbiSaya = null;
 
         if ($diri) {
-            $asetSaya = PemegangAset::with(['aset.barang', 'aset.kendaraan.platAktif'])
-                ->where('id_pegawai', $diri->id_pegawai)
+            $asetSaya = PemegangAset::where('id_pegawai', $diri->id_pegawai)
                 ->where('status', 'aktif')
                 ->get();
-            $sppbiSaya = $diri->dokumenSppbi;
         }
 
         $izinTracking = IzinKendaraan::where('id_pegawai_pengaju', $diri?->id_pegawai)
@@ -213,7 +296,6 @@ class DashboardController extends Controller
             'role' => self::ROLE_PEGAWAI,
             'diri' => $diri,
             'asetSaya' => $asetSaya,
-            'sppbiSaya' => $sppbiSaya,
             'izinTracking' => $izinTracking,
         ]);
     }

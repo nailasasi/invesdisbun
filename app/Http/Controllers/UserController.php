@@ -3,12 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
-use App\Models\DokumenSppbi;
 use App\Models\Lokasi;
 use App\Models\Pegawai;
-use App\Models\PemegangAset;
 use App\Models\Role;
-use App\Models\UsulanRkbmd;
 use App\Models\User;
 use App\Services\ActivityLogger;
 use App\Services\UserManagementScope;
@@ -61,83 +58,23 @@ class UserController extends Controller
     }
 
     /**
-     * Daftar AKUN login (bukan master pegawai).
+     * Daftar AKUN login (dialihkan ke modul Manajemen Pegawai).
      */
     public function index(Request $request)
     {
         abort_unless($this->scope->bolehKelolaModul(), 403, 'Anda tidak memiliki hak akses untuk menu ini.');
 
-        $search = trim((string) $request->query('search'));
-        $search = $search === '' ? null : $search;
-
-        $idRole = $request->query('role');
-        $idRole = $idRole !== null && $idRole !== '' && ctype_digit((string) $idRole) ? (int) $idRole : null;
-
-        $status = $request->query('status');
-        $status = in_array($status, ['aktif', 'nonaktif'], true) ? $status : null;
-
-        $idSkpd = $request->query('skpd');
-        $idSkpd = $idSkpd !== null && $idSkpd !== '' && ctype_digit((string) $idSkpd) ? (int) $idSkpd : null;
-
-        $jenisSkpd = $request->query('jenis_skpd');
-        $jenisSkpd = in_array($jenisSkpd, ['Sekretariat', 'Bidang', 'UPT'], true) ? $jenisSkpd : null;
-
-        $userList = User::query()
-            ->with(['pegawai.skpd', 'role'])
-            ->whereHas('pegawai', fn ($q) => $this->scope->batasiQuery($q))
-            ->when($search, function ($query, $search) {
-                $query->where(function ($q) use ($search) {
-                    $q->where('username', 'like', "%{$search}%")
-                        ->orWhereHas('pegawai', function ($qp) use ($search) {
-                            $qp->where('nip', 'like', "%{$search}%")
-                                ->orWhere('nama_pegawai', 'like', "%{$search}%");
-                        });
-                });
-            })
-            ->when($idRole, fn ($query, $idRole) => $query->where('id_role', $idRole))
-            ->when($status, fn ($query, $status) => $query->where('status_user', $status))
-            ->when($idSkpd, fn ($query, $idSkpd) => $query->whereHas('pegawai', fn ($q) => $q->where('id_skpd', $idSkpd)))
-            ->when($jenisSkpd, fn ($query, $jenisSkpd) => $query->whereHas('pegawai.skpd', fn ($q) => $q->where('jenis_skpd', $jenisSkpd)))
-            ->orderBy('id_user')
-            ->paginate(10)
-            ->withQueryString();
-
-        // Pegawai yang BELUM punya akun — dipakai modal "Buat Akun".
-        $pegawaiTanpaAkun = $this->scope->batasiQuery(Pegawai::query())
-            ->whereDoesntHave('user')
-            ->with('skpd')
-            ->orderBy('nama_pegawai')
-            ->get(['id_pegawai', 'nip', 'nama_pegawai', 'jabatan', 'id_skpd']);
-
-        $roleList = $this->scope->roleListBoleh();
-        $skpdList = $this->scope->skpdBolehDipilih();
-
-        return view('user.index', compact('userList', 'pegawaiTanpaAkun', 'roleList', 'skpdList'));
+        return redirect()->route('master-data.pegawai.index', $request->query());
     }
 
     /**
-     * Halaman detail akun: DATA PEGAWAI (read-only) + AKUN PENGGUNA.
+     * Halaman detail akun (dialihkan ke detail Manajemen Pegawai tab Informasi Akun).
      */
     public function show(Pegawai $pegawai)
     {
         abort_unless($this->scope->bolehLihatPegawai($pegawai), 403, 'Anda tidak memiliki hak akses untuk pegawai ini.');
 
-        $pegawai->load('skpd', 'ruangan', 'user.role');
-
-        $riwayatLogs = ActivityLog::query()
-            ->where('subject_type', Pegawai::class)
-            ->where('subject_id', $pegawai->id_pegawai)
-            ->orderByDesc('created_at')
-            ->orderByDesc('id_activity_log')
-            ->get();
-
-        $roleList = $this->scope->roleListBoleh();
-        $fieldLabels = self::FIELD_LABELS;
-        $jumlahAsetAktif = PemegangAset::where('id_pegawai', $pegawai->id_pegawai)
-            ->where('status', 'aktif')
-            ->count();
-
-        return view('user.show', compact('pegawai', 'riwayatLogs', 'roleList', 'fieldLabels', 'jumlahAsetAktif'));
+        return redirect()->route('master-data.pegawai.show', ['pegawai' => $pegawai, 'tab' => 'tab-akun']);
     }
 
     /**
@@ -153,10 +90,19 @@ class UserController extends Controller
     {
         abort_unless($this->scope->bolehLihatPegawai($pegawai), 403, 'Anda tidak memiliki hak akses untuk pegawai ini.');
 
+        $nipLength = strlen(trim((string) $pegawai->nip));
+        $passwordRules = ['nullable', 'string', 'min:8'];
+        if ($nipLength < 8) {
+            $passwordRules = ['required', 'string', 'min:8'];
+        }
+
         $data = $request->validate([
             'id_role' => ['required', 'exists:role,id_role'],
             'username' => ['nullable', 'string', 'max:255', 'unique:users,username'],
-            'password' => ['nullable', 'string', 'min:8'],
+            'password' => $passwordRules,
+        ], [
+            'password.required' => 'NIP pegawai kurang dari 8 karakter. Anda wajib memasukkan password manual minimal 8 karakter.',
+            'password.min' => 'Password minimal harus 8 karakter.',
         ]);
 
         $role = Role::find($data['id_role']);
@@ -233,7 +179,7 @@ class UserController extends Controller
             )
         );
 
-        return $this->berhasil('Akun pengguna berhasil dibuat.', route('user.show', $pegawai->id_pegawai));
+        return $this->berhasil('Akun pengguna berhasil dibuat.', route('master-data.pegawai.show', ['pegawai' => $pegawai, 'tab' => 'tab-akun']));
     }
 
     /**
@@ -288,7 +234,7 @@ class UserController extends Controller
             );
         }
 
-        return $this->berhasil('Akun berhasil diperbarui.');
+        return $this->berhasil('Akun berhasil diperbarui.', route('master-data.pegawai.show', ['pegawai' => $pegawai, 'tab' => 'tab-akun']));
     }
 
     /**
@@ -330,7 +276,7 @@ class UserController extends Controller
         $roleBaru = $role->nama_role;
 
         if ((string) $user->id_role === (string) $data['id_role']) {
-            return $this->berhasil('Role sudah tidak berubah.');
+            return $this->berhasil('Role sudah tidak berubah.', route('master-data.pegawai.show', ['pegawai' => $pegawai, 'tab' => 'tab-akun']));
         }
 
         $user->update(['id_role' => $role->id_role]);
@@ -343,7 +289,7 @@ class UserController extends Controller
             sprintf('Mengubah role %s dari "%s" menjadi "%s".', $pegawai->nama_pegawai, $roleLama ?? '-', $roleBaru ?? '-')
         );
 
-        return $this->berhasil('Role berhasil diperbarui.');
+        return $this->berhasil('Role berhasil diperbarui.', route('master-data.pegawai.show', ['pegawai' => $pegawai, 'tab' => 'tab-akun']));
     }
 
     /**
@@ -371,7 +317,7 @@ class UserController extends Controller
         $sesudah = $data['status_user'];
 
         if ($sebelum === $sesudah) {
-            return $this->berhasil('Status akun sudah '.$sesudah.'.');
+            return $this->berhasil('Status akun sudah '.$sesudah.'.', route('master-data.pegawai.show', ['pegawai' => $pegawai, 'tab' => 'tab-akun']));
         }
 
         $user->update(['status_user' => $sesudah]);
@@ -393,55 +339,9 @@ class UserController extends Controller
         return $this->berhasil(
             $sesudah === 'aktif'
                 ? 'Akun berhasil diaktifkan.'
-                : 'Akun berhasil dinonaktifkan.'
+                : 'Akun berhasil dinonaktifkan.',
+            route('master-data.pegawai.show', ['pegawai' => $pegawai, 'tab' => 'tab-akun'])
         );
-    }
-
-    /**
-     * Hapus pegawai beserta akun loginnya (permanen) — hanya Admin Aset.
-     *
-     * Ditolak bila masih terikat dengan aset, dokumen SPPBI, atau usulan
-     * RKBMD — karena `pegawai` ber-cascade pada tabel-tabel tersebut.
-     * Gunakan Nonaktifkan bila hanya ingin menutup akses login.
-     */
-    public function destroy(Pegawai $pegawai)
-    {
-        abort_unless($this->scope->isAdminAset(), 403, 'Anda tidak memiliki hak akses untuk menu ini.');
-
-        if ($pegawai->user && $pegawai->user->id_user === Auth::id()) {
-            return $this->gagal('Anda tidak dapat menghapus akun Anda sendiri.');
-        }
-
-        $terikat = array_filter([
-            'aset yang masih dipegang' => PemegangAset::where('id_pegawai', $pegawai->id_pegawai)->where('status', 'aktif')->count(),
-            'dokumen SPPBI' => DokumenSppbi::where('id_pegawai', $pegawai->id_pegawai)->count(),
-            'usulan RKBMD' => UsulanRkbmd::where('id_pegawai', $pegawai->id_pegawai)->count(),
-        ]);
-
-        if (! empty($terikat)) {
-            $catatan = [];
-            foreach ($terikat as $label => $jumlah) {
-                $catatan[] = $jumlah.' '.$label;
-            }
-
-            return $this->gagal(
-                'Tidak dapat menghapus permanen karena masih ada '.implode(', ', $catatan)
-                .'. Gunakan tombol Nonaktifkan agar riwayat dan aset tetap terjaga.'
-            );
-        }
-
-        $this->logger->log(
-            'user.deleted',
-            $pegawai,
-            $this->snapshot($pegawai),
-            [],
-            'Menghapus permanen user '.$pegawai->nama_pegawai.' beserta akun loginnya.'
-        );
-
-        $pegawai->user?->delete();
-        $pegawai->delete();
-
-        return $this->berhasil('User berhasil dihapus.', route('user.index'));
     }
 
     /**
@@ -457,7 +357,7 @@ class UserController extends Controller
             ]);
         }
 
-        return redirect($redirectTo ?? route('user.index'))
+        return redirect($redirectTo ?? route('master-data.pegawai.index'))
             ->with('success', $message);
     }
 
@@ -473,7 +373,11 @@ class UserController extends Controller
             ], $status);
         }
 
-        return redirect($redirectTo ?? route('user.show', request()->route('pegawai')))
+        $fallbackRoute = request()->route('pegawai')
+            ? route('master-data.pegawai.show', ['pegawai' => request()->route('pegawai'), 'tab' => 'tab-akun'])
+            : route('master-data.pegawai.index');
+
+        return redirect($redirectTo ?? $fallbackRoute)
             ->with('error', $message);
     }
 

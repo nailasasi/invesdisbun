@@ -68,56 +68,260 @@
     {{-- ================================================================== --}}
     <x-card :padding="false">
         <x-action-bar>
-            <h2 class="text-sm font-extrabold tracking-tight text-slate-800">Formulir Pengajuan
-            <p class="mt-0.5 text-sm text-slate-500">Ajukan pemakaian kendaraan dinas untuk keperluan tugas / perjalanan dinas.</p>
+            <div class="flex items-center gap-3">
+                <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                </span>
+                <div>
+                    <h2 class="text-sm font-extrabold tracking-tight text-slate-800">Formulir Pengajuan Surat Izin Kendaraan</h2>
+                    <p class="mt-0.5 text-xs text-slate-500">Ajukan pemakaian kendaraan dinas untuk keperluan tugas / perjalanan dinas.</p>
+                </div>
+            </div>
         </x-action-bar>
 
-        <form method="POST" action="{{ route('layanan.izin-kendaraan.store') }}" class="p-6">
+        <form method="POST" action="{{ route('layanan.izin-kendaraan.store') }}" class="p-5 sm:p-6 space-y-4">
             @csrf
 
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div class="sm:col-span-2">
-                    <x-select
-                        name="id_kendaraan"
-                        label="Pilih Kendaraan Dinas"
-                        :options="$kendaraanOptions"
-                        placeholder="-- Pilih kendaraan --"
-                        required
-                        help="Hanya kendaraan dinas berstatus aktif yang ditampilkan."
-                    />
+            {{-- ------------------------------------------------------------------ --}}
+            {{-- KELOMPOK A · JADWAL PEMAKAIAN KENDARAAN                            --}}
+            {{-- ------------------------------------------------------------------ --}}
+            <div class="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 sm:p-4">
+                <div class="mb-3 flex items-center justify-between border-b border-slate-200 pb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="flex h-5 w-5 items-center justify-center rounded-md bg-emerald-600 text-[10px] font-bold text-white">A</span>
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-800">Jadwal Pemakaian Kendaraan</h3>
+                    </div>
+                    <span class="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">Langkah 1</span>
                 </div>
 
-                <x-input name="nama_pengemudi" label="Nama Pengemudi" placeholder="Nama pengemudi kendaraan" required />
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {{-- 1. Tanggal Mulai Pemakaian --}}
+                    <div>
+                        <label for="tanggal_berangkat" class="mb-1 block text-xs font-semibold text-slate-700">
+                            Tanggal Mulai Pemakaian <span class="text-red-500">*</span>
+                        </label>
+                        <input
+                            type="date"
+                            id="tanggal_berangkat"
+                            name="tanggal_berangkat"
+                            value="{{ old('tanggal_berangkat') }}"
+                            required
+                            class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm transition hover:border-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                        />
+                        @error('tanggal_berangkat')
+                            <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
 
-                <x-select
-                    name="id_pengurus_barang"
-                    label="Pengurus Barang (Penyerah)"
-                    :options="$pengurusOptions"
-                    placeholder="-- Pilih pengurus barang --"
-                    required
-                />
+                    {{-- 2. Jam Mulai Pemakaian --}}
+                    <div>
+                        <label for="waktu_berangkat" class="mb-1 block text-xs font-semibold text-slate-700">
+                            Jam Mulai Pemakaian <span class="text-red-500">*</span>
+                        </label>
+                        <input
+                            type="time"
+                            id="waktu_berangkat"
+                            name="waktu_berangkat"
+                            value="{{ old('waktu_berangkat') }}"
+                            required
+                            class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm transition hover:border-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                        />
+                        @error('waktu_berangkat')
+                            <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
 
-                <div class="sm:col-span-2">
-                    <x-input name="tujuan" label="Tujuan Perjalanan Dinas" placeholder="contoh: Dinas ke Dinas Perkebunan Provinsi" required />
+                    {{-- 3. Tanggal Selesai Pemakaian --}}
+                    <div>
+                        <label for="tanggal_kembali" class="mb-1 block text-xs font-semibold text-slate-700">
+                            Tanggal Selesai Pemakaian <span class="text-red-500">*</span>
+                        </label>
+                        <input
+                            type="date"
+                            id="tanggal_kembali"
+                            name="tanggal_kembali"
+                            value="{{ old('tanggal_kembali') }}"
+                            required
+                            class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm transition hover:border-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                        />
+                        @error('tanggal_kembali')
+                            <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    {{-- 4. Jam Selesai Pemakaian --}}
+                    <div>
+                        <label for="waktu_kembali" class="mb-1 block text-xs font-semibold text-slate-700">
+                            Jam Selesai Pemakaian <span class="text-red-500">*</span>
+                        </label>
+                        <input
+                            type="time"
+                            id="waktu_kembali"
+                            name="waktu_kembali"
+                            value="{{ old('waktu_kembali') }}"
+                            required
+                            class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm transition hover:border-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                        />
+                        @error('waktu_kembali')
+                            <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
                 </div>
-
-                <x-select
-                    name="durasi"
-                    label="Waktu / Durasi"
-                    :options="[
-                        'Setengah Hari' => 'Setengah Hari',
-                        '1 Hari' => '1 Hari',
-                        '2 Hari' => '2 Hari',
-                        '3 Hari' => '3 Hari',
-                        '1 Minggu' => '1 Minggu',
-                    ]"
-                    placeholder="-- Pilih durasi --"
-                    required
-                />
-
-                <x-input name="tanggal_berangkat" type="date" label="Tanggal Berangkat" required />
             </div>
 
+            {{-- ------------------------------------------------------------------ --}}
+            {{-- KELOMPOK B · KENDARAAN DAN PENGURUS BARANG                         --}}
+            {{-- ------------------------------------------------------------------ --}}
+            <div class="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 sm:p-4">
+                <div class="mb-3 flex items-center justify-between border-b border-slate-200 pb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="flex h-5 w-5 items-center justify-center rounded-md bg-emerald-600 text-[10px] font-bold text-white">B</span>
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-800">Kendaraan dan Pengurus Barang</h3>
+                    </div>
+                    <span class="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">Langkah 2</span>
+                </div>
+
+                <div class="space-y-3">
+                    {{-- 5. Pilih Kendaraan Dinas (Lebar Penuh) --}}
+                    <div>
+                        <label for="id_kendaraan" class="mb-1 block text-xs font-semibold text-slate-700">
+                            Pilih Kendaraan Dinas <span class="text-red-500">*</span>
+                        </label>
+                        <select
+                            id="id_kendaraan"
+                            name="id_kendaraan"
+                            required
+                            {{ empty($kendaraanOptions) ? 'disabled' : '' }}
+                            class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm transition hover:border-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                            <option value="" disabled {{ old('id_kendaraan') === null ? 'selected' : '' }}>
+                                {{ empty($kendaraanOptions) ? '-- Isi tanggal & jam pemakaian terlebih dahulu --' : '-- Pilih kendaraan dinas --' }}
+                            </option>
+                            @foreach ($kendaraanOptions as $val => $lbl)
+                                <option value="{{ $val }}" @selected((string)old('id_kendaraan') === (string)$val)>
+                                    {{ $lbl }}
+                                </option>
+                            @endforeach
+                        </select>
+
+                        {{-- Dynamic Status Message --}}
+                        <div class="mt-1 flex items-center gap-1.5">
+                            <span id="status-indicator-dot" class="inline-flex h-2 w-2 shrink-0 rounded-full {{ empty($kendaraanOptions) ? 'bg-slate-300' : 'bg-emerald-500' }}"></span>
+                            <p id="kendaraan-status-msg" class="text-xs text-slate-500">
+                                {{ empty($kendaraanOptions) ? 'Pilih tanggal dan jam pemakaian untuk memuat kendaraan yang tersedia.' : count($kendaraanOptions) . ' kendaraan dinas siap digunakan pada jadwal ini.' }}
+                            </p>
+                        </div>
+                        @error('id_kendaraan')
+                            <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    {{-- 6. Pengurus Barang (Penyerahan) (Lebar Penuh) --}}
+                    <div>
+                        <label for="id_pengurus_barang" class="mb-1 block text-xs font-semibold text-slate-700">
+                            Pengurus Barang (Penyerahan) <span class="text-red-500">*</span>
+                        </label>
+                        <select
+                            id="id_pengurus_barang"
+                            name="id_pengurus_barang"
+                            required
+                            class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm transition hover:border-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400 cursor-pointer"
+                        >
+                            <option value="" disabled {{ old('id_pengurus_barang') === null ? 'selected' : '' }}>-- Pilih pengurus barang --</option>
+                            @foreach ($pengurusOptions as $val => $lbl)
+                                <option value="{{ $val }}" @selected((string)old('id_pengurus_barang') === (string)$val)>
+                                    {{ $lbl }}
+                                </option>
+                            @endforeach
+                        </select>
+                        <p class="mt-1 text-[11px] text-slate-400">Daftar pegawai yang bertugas di Ruang Aset.</p>
+                        @error('id_pengurus_barang')
+                            <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+                </div>
+            </div>
+
+            {{-- ------------------------------------------------------------------ --}}
+            {{-- KELOMPOK C · INFORMASI PERJALANAN                                  --}}
+            {{-- ------------------------------------------------------------------ --}}
+            <div class="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 sm:p-4">
+                <div class="mb-3 flex items-center justify-between border-b border-slate-200 pb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="flex h-5 w-5 items-center justify-center rounded-md bg-emerald-600 text-[10px] font-bold text-white">C</span>
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-800">Informasi Perjalanan</h3>
+                    </div>
+                    <span class="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">Langkah 3</span>
+                </div>
+
+                <div class="space-y-3">
+                    {{-- Baris 1: Nama Pengemudi & Estimasi Durasi --}}
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        {{-- 7. Nama Pengemudi --}}
+                        <div>
+                            <label for="nama_pengemudi" class="mb-1 block text-xs font-semibold text-slate-700">
+                                Nama Pengemudi <span class="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="text"
+                                id="nama_pengemudi"
+                                name="nama_pengemudi"
+                                value="{{ old('nama_pengemudi') }}"
+                                placeholder="Nama pengemudi kendaraan"
+                                required
+                                maxlength="100"
+                                class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 transition hover:border-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                            />
+                            @error('nama_pengemudi')
+                                <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
+                            @enderror
+                        </div>
+
+                        {{-- 8. Estimasi Durasi Pemakaian (Readonly) --}}
+                        <div>
+                            <div class="mb-1 flex items-center justify-between">
+                                <label for="durasi_display" class="block text-xs font-semibold text-slate-700">
+                                    Estimasi Durasi
+                                </label>
+                                <span class="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.2">Otomatis</span>
+                            </div>
+                            <input
+                                type="text"
+                                id="durasi_display"
+                                name="durasi"
+                                value="{{ old('durasi', '-') }}"
+                                readonly
+                                placeholder="Dihitung otomatis dari jadwal"
+                                class="block w-full rounded-xl border border-slate-200 bg-slate-100 px-3.5 py-2 text-sm font-semibold text-slate-600 shadow-sm cursor-default select-none focus:outline-none"
+                            />
+                        </div>
+                    </div>
+
+                    {{-- Baris 2: 9. Tujuan Perjalanan Dinas (Lebar Penuh) --}}
+                    <div>
+                        <label for="tujuan" class="mb-1 block text-xs font-semibold text-slate-700">
+                            Tujuan Perjalanan Dinas <span class="text-red-500">*</span>
+                        </label>
+                        <input
+                            type="text"
+                            id="tujuan"
+                            name="tujuan"
+                            value="{{ old('tujuan') }}"
+                            placeholder="contoh: Dinas ke Dinas Perkebunan Provinsi"
+                            required
+                            maxlength="500"
+                            class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 transition hover:border-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                        />
+                        @error('tujuan')
+                            <p class="mt-1 text-xs font-medium text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+                </div>
+            </div>
+
+            {{-- Tombol Aksi (Posisi & Style Asli) --}}
             <div class="mt-6 flex items-center justify-end gap-2">
                 <button type="reset"
                     class="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-6 py-2.5 text-sm font-bold text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:ring-offset-2">
@@ -164,18 +368,20 @@
                         @forelse ($izinList as $izin)
                             @php
                                 $badge = match ($izin->status_approval) {
-                                    'Disetujui' => 'bg-disbun-50 text-disbun-700 ring-disbun-100',
-                                    'Selesai' => 'bg-disbun-50 text-disbun-700 ring-disbun-100',
+                                    'Disetujui', 'Selesai' => 'bg-disbun-50 text-disbun-700 ring-disbun-100',
                                     'Ditolak' => 'bg-red-50 text-red-700 ring-red-200',
+                                    'Dibatalkan' => 'bg-slate-100 text-slate-600 ring-slate-200',
                                     default => 'bg-amber-50 text-amber-700 ring-amber-200',
                                 };
-                                $namaKendaraan = $izin->kendaraan?->aset?->barang?->nama_barang ?: 'Kendaraan';
+                                $namaKendaraan = $izin->kendaraan?->namaTampil() ?: 'Kendaraan';
                                 $plat = $izin->kendaraan?->platAktif?->nomor_plat ?: '-';
                                 $pengemudiSesuaiPengaju = $izin->nama_pengemudi
                                     && mb_strtolower(trim((string) $izin->nama_pengemudi)) === mb_strtolower(trim((string) $izin->pengaju?->nama_pegawai));
+                                $isPengaju = $izin->id_pegawai_pengaju && (int) $izin->id_pegawai_pengaju === (int) auth()->user()?->pegawai?->id_pegawai;
                                 $bisaKembalikan = $izin->status_approval === 'Disetujui'
-                                    && ($isAdminAset || $izin->id_pegawai_pengaju === auth()->user()?->pegawai?->id_pegawai);
+                                    && ($isAdminAset || $isPengaju);
                                 $bisaLihatBukti = $isAdminAset && $izin->status_approval === 'Selesai';
+                                $bisaBatal = ($izin->status_approval ?? 'Menunggu') === 'Menunggu' && $isPengaju;
                             @endphp
                             <tr class="transition hover:bg-slate-50/60">
                                 <td class="px-4 py-4 text-slate-500">{{ $loop->iteration }}</td>
@@ -279,12 +485,24 @@
                                                     Setujui
                                                 </button>
                                             </form>
-<button type="button"
-                                                                    data-open-modal="modalTolak-{{ $izin->id_izin }}"
-                                                                    class="inline-flex items-center rounded-xl bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100"
-                                                                    title="Tolak pengajuan (isi alasan)">
-                                                                Tolak
-                                                            </button>
+                                            <button type="button"
+                                                data-open-modal="modalTolak-{{ $izin->id_izin }}"
+                                                class="inline-flex items-center rounded-xl bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100"
+                                                title="Tolak pengajuan (isi alasan)">
+                                                Tolak
+                                            </button>
+                                        @endif
+
+                                        @if ($bisaBatal)
+                                            <form method="POST" action="{{ route('layanan.izin-kendaraan.batal', $izin->id_izin) }}" class="inline-flex" onsubmit="return confirm('Apakah Anda yakin ingin membatalkan pengajuan izin ini?')">
+                                                @csrf
+                                                <button type="submit"
+                                                    class="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50/70 px-2.5 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 hover:text-rose-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/30"
+                                                    title="Batalkan pengajuan ini">
+                                                    <svg class="h-3.5 w-3.5 text-rose-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                                                    Batalkan Ajuan
+                                                </button>
+                                            </form>
                                         @endif
                                     </div>
                                 </td>
@@ -325,7 +543,7 @@
                                 <div>
                                     <h3 class="text-base font-bold text-slate-900">Konfirmasi Pengembalian Kendaraan</h3>
                                     <p class="mt-0.5 text-xs text-slate-400">
-                                        {{ $izin->kendaraan?->aset?->barang?->nama_barang ?: 'Kendaraan' }}
+                                        {{ $izin->kendaraan?->namaTampil() ?: 'Kendaraan' }}
                                         @if ($izin->kendaraan?->platAktif?->nomor_plat)
                                             · {{ $izin->kendaraan->platAktif->nomor_plat }}
                                         @endif
@@ -398,7 +616,7 @@
                                 <div>
                                     <h3 class="text-base font-bold text-slate-900">Detail Pengembalian</h3>
                                     <p class="mt-0.5 text-xs text-slate-400">
-                                        {{ $izin->kendaraan?->aset?->barang?->nama_barang ?: 'Kendaraan' }}
+                                        {{ $izin->kendaraan?->namaTampil() ?: 'Kendaraan' }}
                                         @if ($izin->kendaraan?->platAktif?->nomor_plat)
                                             · {{ $izin->kendaraan->platAktif->nomor_plat }}
                                         @endif
@@ -487,7 +705,7 @@
                                 <div>
                                     <h3 class="text-base font-bold text-slate-900">Tolak Pengajuan</h3>
                                     <p class="mt-0.5 text-xs text-slate-400">
-                                        {{ $izin->kendaraan?->aset?->barang?->nama_barang ?: 'Kendaraan' }}
+                                        {{ $izin->kendaraan?->namaTampil() ?: 'Kendaraan' }}
                                         @if ($izin->kendaraan?->platAktif?->nomor_plat)
                                             · {{ $izin->kendaraan->platAktif->nomor_plat }}
                                         @endif
@@ -562,6 +780,152 @@
                     });
                 }
             });
+
+            // =========================================================================
+            // Dynamic Kendaraan Availability Checker
+            // =========================================================================
+            (function () {
+                const tglMulai = document.querySelector('input[name="tanggal_berangkat"]');
+                const jamMulai = document.querySelector('input[name="waktu_berangkat"]');
+                const tglSelesai = document.querySelector('input[name="tanggal_kembali"]');
+                const jamSelesai = document.querySelector('input[name="waktu_kembali"]');
+                const selectKendaraan = document.querySelector('select[name="id_kendaraan"]');
+                const inputDurasi = document.getElementById('durasi_display');
+                const statusMsg = document.getElementById('kendaraan-status-msg');
+                const statusDot = document.getElementById('status-indicator-dot');
+
+                if (!tglMulai || !jamMulai || !tglSelesai || !jamSelesai || !selectKendaraan) {
+                    return;
+                }
+
+                const endpointUrl = '{{ route('layanan.izin-kendaraan.ketersediaan') }}';
+                let currentVal = selectKendaraan.value;
+
+                function setStatus(state, msg) {
+                    if (statusMsg) {
+                        statusMsg.textContent = msg;
+                        if (state === 'idle') {
+                            statusMsg.className = 'text-xs text-slate-500';
+                            if (statusDot) statusDot.className = 'inline-flex h-2 w-2 shrink-0 rounded-full bg-slate-300';
+                        } else if (state === 'loading') {
+                            statusMsg.className = 'text-xs font-medium text-emerald-600';
+                            if (statusDot) statusDot.className = 'inline-flex h-2 w-2 shrink-0 rounded-full bg-emerald-500 animate-pulse';
+                        } else if (state === 'error') {
+                            statusMsg.className = 'text-xs font-semibold text-rose-600';
+                            if (statusDot) statusDot.className = 'inline-flex h-2 w-2 shrink-0 rounded-full bg-rose-500';
+                        } else if (state === 'warning') {
+                            statusMsg.className = 'text-xs font-medium text-amber-600';
+                            if (statusDot) statusDot.className = 'inline-flex h-2 w-2 shrink-0 rounded-full bg-amber-500';
+                        } else if (state === 'success') {
+                            statusMsg.className = 'text-xs font-medium text-emerald-600';
+                            if (statusDot) statusDot.className = 'inline-flex h-2 w-2 shrink-0 rounded-full bg-emerald-500';
+                        }
+                    }
+                }
+
+                function checkJadwalAndLoad() {
+                    const tm = tglMulai.value;
+                    const jm = jamMulai.value;
+                    const ts = tglSelesai.value;
+                    const js = jamSelesai.value;
+
+                    if (!tm || !jm || !ts || !js) {
+                        selectKendaraan.innerHTML = '<option value="">-- Isi tanggal & jam pemakaian terlebih dahulu --</option>';
+                        selectKendaraan.disabled = true;
+                        setStatus('idle', 'Pilih tanggal dan jam pemakaian untuk memuat kendaraan yang tersedia.');
+                        if (inputDurasi) inputDurasi.value = '-';
+                        return;
+                    }
+
+                    const startDt = new Date(tm + 'T' + (jm.length === 5 ? jm + ':00' : jm));
+                    const endDt = new Date(ts + 'T' + (js.length === 5 ? js + ':00' : js));
+
+                    if (endDt <= startDt) {
+                        selectKendaraan.innerHTML = '<option value="">-- Waktu selesai harus lebih besar dari waktu mulai --</option>';
+                        selectKendaraan.disabled = true;
+                        setStatus('error', 'Perhatian: Tanggal dan jam selesai pemakaian harus lebih besar daripada waktu mulai.');
+                        if (inputDurasi) inputDurasi.value = 'Jadwal tidak valid';
+                        return;
+                    }
+
+                    selectKendaraan.disabled = true;
+                    selectKendaraan.innerHTML = '<option value="">Memeriksa ketersediaan kendaraan dinas...</option>';
+                    setStatus('loading', 'Sedang mencari kendaraan dinas yang bebas jadwal...');
+
+                    const params = new URLSearchParams({
+                        tanggal_berangkat: tm,
+                        waktu_berangkat: jm,
+                        tanggal_kembali: ts,
+                        waktu_kembali: js
+                    });
+
+                    fetch(endpointUrl + '?' + params.toString(), {
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        selectKendaraan.innerHTML = '';
+                        if (data.durasi && inputDurasi) {
+                            inputDurasi.value = data.durasi;
+                        }
+
+                        if (!data.success || !data.kendaraan || data.kendaraan.length === 0) {
+                            selectKendaraan.innerHTML = '<option value="">-- Tidak ada kendaraan dinas yang tersedia pada jadwal ini --</option>';
+                            selectKendaraan.disabled = true;
+                            setStatus('warning', data.message || 'Semua kendaraan sedang digunakan atau memiliki jadwal pada rentang ini.');
+                        } else {
+                            selectKendaraan.disabled = false;
+                            const defaultOpt = document.createElement('option');
+                            defaultOpt.value = '';
+                            defaultOpt.textContent = '-- Pilih kendaraan dinas (' + data.kendaraan.length + ' unit tersedia) --';
+                            selectKendaraan.appendChild(defaultOpt);
+
+                            let matched = false;
+                            data.kendaraan.forEach(k => {
+                                const opt = document.createElement('option');
+                                opt.value = k.id;
+                                opt.textContent = k.text;
+                                if (currentVal && String(k.id) === String(currentVal)) {
+                                    opt.selected = true;
+                                    matched = true;
+                                }
+                                selectKendaraan.appendChild(opt);
+                            });
+
+                            if (!matched) {
+                                currentVal = '';
+                            }
+
+                            setStatus('success', data.kendaraan.length + ' kendaraan dinas siap digunakan pada jadwal ini.');
+                        }
+                    })
+                    .catch(err => {
+                        selectKendaraan.innerHTML = '<option value="">-- Gagal memeriksa ketersediaan --</option>';
+                        selectKendaraan.disabled = true;
+                        setStatus('error', 'Terjadi kesalahan saat memuat ketersediaan kendaraan.');
+                    });
+                }
+
+                selectKendaraan.addEventListener('change', function () {
+                    currentVal = selectKendaraan.value;
+                });
+
+                [tglMulai, jamMulai, tglSelesai, jamSelesai].forEach(input => {
+                    input.addEventListener('change', checkJadwalAndLoad);
+                    input.addEventListener('input', checkJadwalAndLoad);
+                });
+
+                // Inisialisasi awal
+                if (tglMulai.value && jamMulai.value && tglSelesai.value && jamSelesai.value) {
+                    checkJadwalAndLoad();
+                } else if (!selectKendaraan.options.length || selectKendaraan.value === '') {
+                    selectKendaraan.innerHTML = '<option value="">-- Isi tanggal & jam pemakaian terlebih dahulu --</option>';
+                    selectKendaraan.disabled = true;
+                }
+            })();
         </script>
     @endpush
 </div>

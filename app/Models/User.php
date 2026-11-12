@@ -74,4 +74,12 @@ class User extends Authenticatable
     {
         return $this->status_user === 'aktif';
     }
+
+    /**
+     * Nama lengkap pegawai yang terhubung dengan akun pengguna.
+     */
+    public function namaLengkap(): ?string
+    {
+        return $this->pegawai?->nama_pegawai;
+    }
 }

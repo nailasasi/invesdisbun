@@ -107,34 +107,7 @@
                 @endif
             </div>
 
-            @if (in_array(auth()->user()?->role?->nama_role, ['Admin Aset', 'Admin UPT']))
-                {{-- MASTER DATA --}}
-                <div>
-                    <p class="mb-1 px-3 text-[10px] font-extrabold uppercase tracking-widest text-emerald-400/60">Master Data</p>
-
-                    <a href="{{ route('master-data.pegawai.index') }}"
-                       @class([
-                           'flex items-center gap-3 rounded-xl border-l-4 px-3 py-2.5 font-medium transition',
-                           'border-emerald-500 bg-gradient-to-r from-emerald-500/25 to-emerald-600/10 font-bold text-white' => request()->routeIs('master-data.pegawai.*'),
-                           'border-transparent text-slate-300 hover:bg-white/5 hover:text-white' => ! request()->routeIs('master-data.pegawai.*'),
-                       ])>
-                        <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                        Data Pegawai
-                    </a>
-
-                    <a href="{{ route('user.index') }}"
-                       @class([
-                           'flex items-center gap-3 rounded-xl border-l-4 px-3 py-2.5 font-medium transition',
-                           'border-emerald-500 bg-gradient-to-r from-emerald-500/25 to-emerald-600/10 font-bold text-white' => request()->routeIs('user.*') && ! request()->routeIs('master-data.pegawai.*'),
-                           'border-transparent text-slate-300 hover:bg-white/5 hover:text-white' => ! (request()->routeIs('user.*') && ! request()->routeIs('master-data.pegawai.*')),
-                       ])>
-                        <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-                        User Management
-                    </a>
-                </div>
-            @endif
-
-            @if (auth()->user()?->role?->nama_role === 'Admin Aset')
+            @if (in_array(auth()->user()?->role?->nama_role, ['Admin Aset', 'Admin UPT'], true))
                 {{-- PENGELOLAAN ASET --}}
                 <div>
                     <p class="mb-1 px-3 text-[10px] font-extrabold uppercase tracking-widest text-emerald-400/60">Pengelolaan Aset</p>
@@ -166,22 +139,24 @@
                            'border-transparent text-slate-300 hover:bg-white/5 hover:text-white' => ! request()->routeIs('penghapusan.*'),
                        ])>
                         <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14zM10 11v6m4-6v6"/></svg>
-                        Penghapusan Aset
+                        Usulan Penghapusan
                     </a>
                 </div>
+            @endif
 
+            @if (auth()->user()?->role?->nama_role === 'Admin Aset')
                 {{-- DOKUMEN --}}
                 <div>
                     <p class="mb-1 px-3 text-[10px] font-extrabold uppercase tracking-widest text-emerald-400/60">Dokumen</p>
 
-                    <a href="{{ route('laporan.bulanan') }}"
+                    <a href="{{ route('laporan.index') }}"
                        @class([
                            'flex items-center gap-3 rounded-xl border-l-4 px-3 py-2.5 font-medium transition',
                            'border-emerald-500 bg-gradient-to-r from-emerald-500/25 to-emerald-600/10 font-bold text-white' => request()->routeIs('laporan.*'),
                            'border-transparent text-slate-300 hover:bg-white/5 hover:text-white' => ! request()->routeIs('laporan.*'),
                        ])>
                         <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                        Laporan Bulanan
+                        Laporan
                     </a>
 
                     <a href="{{ route('template-dokumen.index') }}"
@@ -194,14 +169,21 @@
                         Template Dokumen
                     </a>
                 </div>
+            @endif
 
-                {{-- ADMINISTRASI --}}
+            @if (in_array(auth()->user()?->role?->nama_role, ['Admin Aset', 'Admin UPT']))
+                {{-- MASTER DATA --}}
                 <div>
-                    <p class="mb-1 px-3 text-[10px] font-extrabold uppercase tracking-widest text-emerald-400/60">Administrasi</p>
+                    <p class="mb-1 px-3 text-[10px] font-extrabold uppercase tracking-widest text-emerald-400/60">Master Data</p>
 
-                    <a href="#" class="flex items-center gap-3 rounded-xl border-l-4 border-transparent px-3 py-2.5 font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
-                        <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                        Pengaturan
+                    <a href="{{ route('master-data.pegawai.index') }}"
+                       @class([
+                           'flex items-center gap-3 rounded-xl border-l-4 px-3 py-2.5 font-medium transition',
+                           'border-emerald-500 bg-gradient-to-r from-emerald-500/25 to-emerald-600/10 font-bold text-white' => request()->routeIs('master-data.pegawai.*') || request()->routeIs('user.*'),
+                           'border-transparent text-slate-300 hover:bg-white/5 hover:text-white' => ! (request()->routeIs('master-data.pegawai.*') || request()->routeIs('user.*')),
+                       ])>
+                        <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        Manajemen Pegawai
                     </a>
                 </div>
             @endif

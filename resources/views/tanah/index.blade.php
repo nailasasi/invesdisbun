@@ -5,7 +5,43 @@
 @section('page-title', 'Tanah KIB A')
 
 @section('content')
+@php
+    // Parameter filter tahun yang aktif, untuk diteruskan ke tautan detail.
+    $filterParams = array_filter([
+        'tahun' => request('tahun'),
+    ], fn ($v) => $v !== null && $v !== '');
+@endphp
 <div class="p-6">
+
+    {{-- =========================================================
+         LAPORAN HASIL IMPORT
+    ========================================================== --}}
+    @if(session('success') || session('error') || session('import_errors'))
+        <div class="mb-5 space-y-3">
+            @if(session('success'))
+                <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800">
+                    {{ session('success') }}
+                </div>
+            @endif
+
+            @if(session('error'))
+                <div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-800">
+                    {{ session('error') }}
+                </div>
+            @endif
+
+            @if(session('import_errors'))
+                <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+                    <p class="mb-1 font-bold">Baris yang tidak dapat diproses:</p>
+                    <ul class="list-disc space-y-0.5 pl-5">
+                        @foreach(session('import_errors') as $err)
+                            <li>Baris {{ $err['row'] }}: {{ implode(' ', $err['messages']) }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+        </div>
+    @endif
 
     {{-- =========================================================
          CARD BENTO + ACTION BAR
@@ -35,6 +71,19 @@
                     >
                 </div>
 
+                <div class="flex items-center gap-2">
+                    <select name="tahun" onchange="this.form.submit()"
+                            title="Filter tahun"
+                            class="rounded-2xl border border-slate-200 bg-white py-2.5 pl-4 pr-9
+                                   text-sm font-medium text-slate-700 shadow-sm transition
+                                   focus:border-disbun-600 focus:outline-none focus:ring-2
+                                   focus:ring-disbun-400/40">
+                        @foreach ($tahunOptions as $optionTahun)
+                            <option value="{{ $optionTahun }}" @selected((int) $tahun === (int) $optionTahun)>{{ $optionTahun }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
                 <button type="submit"
                         class="inline-flex items-center gap-2 rounded-2xl
                                bg-disbun-700 px-5 py-2.5
@@ -43,20 +92,32 @@
                     Cari
                 </button>
 
-                @if(request('search'))
+                @if(request('search') || request('tahun') !== null)
                     <a href="{{ route('tanah.index') }}"
                        class="inline-flex items-center rounded-2xl border border-disbun-card-border
                               bg-white px-4 py-2.5
                               text-sm font-semibold text-slate-600 shadow-sm
                               transition hover:bg-slate-50">
-                        Reset
+                        Reset ke Tahun Berjalan
                     </a>
                 @endif
 
             </form>
 
             <x-slot name="actions">
-                @if(in_array(auth()->user()?->role?->nama_role, ['Admin Aset', 'Admin UPT P2DP']))
+                @if(in_array(auth()->user()?->role?->nama_role, ['Admin Aset', 'Admin UPT']))
+                    <a href="{{ route('tanah.export', request()->query()) }}"
+                       class="inline-flex items-center gap-1.5 rounded-2xl border border-disbun-card-border
+                              bg-white px-4 py-2.5 text-xs font-bold
+                              text-slate-700 shadow-sm transition hover:bg-slate-50">
+
+                        <svg class="h-4 w-4 text-disbun-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+
+                        Export Excel
+                    </a>
+
                     <button type="button" onclick="openModalImportTanah()"
                             class="inline-flex items-center gap-1.5 rounded-2xl border border-disbun-card-border
                                    bg-white px-4 py-2.5 text-xs font-bold
@@ -191,7 +252,7 @@
 
 
                 <th class="px-4 py-3 text-right font-bold">
-                    Target Retribusi
+                    Tarif Retribusi
                 </th>
 
 
@@ -227,6 +288,20 @@
 
 
                         <tr class="group hover:bg-slate-50">
+
+                        @php
+                            // Ringkasan per objek tanah (bukan akumulasi lintas tahun).
+                            // Bila tahun dipilih: ambil baris pada tahun itu.
+                            // Bila "Semua Tahun": ambil baris dari tahun TERBARU
+                            // (tie-break id terbesar) pada masing-masing kolom.
+                            $retribusiRingkas = $tanah->retribusi->where('tahun', $tahun)
+                                ->sortBy([['tahun', 'desc'], ['id_retribusi', 'desc']])
+                                ->first();
+
+                            $pbbRingkas = $tanah->dokumenPbb->where('tahun_pbb', $tahun)
+                                ->sortBy([['tahun_pbb', 'desc'], ['id_pbb', 'desc']])
+                                ->first();
+                        @endphp
 
 
                             <td class="px-4 py-4">
@@ -295,13 +370,11 @@
 
                             <td class="px-4 py-4 text-right">
 
-                            @php
-                                $padJumlah = $tanah->retribusi?->sum(fn ($r) => (float) ($r->PAD ?? 0)) ?? 0;
-                                if ($padJumlah <= 0) {
-                                    $padJumlah = (float) ($tanah->penerimaan_pad ?? $tanah->pad ?? 0);
-                                }
-                            @endphp
-                            Rp {{ number_format($padJumlah, 0, ',', '.') }}
+                            @if ($retribusiRingkas && $retribusiRingkas->PAD !== null)
+                                Rp {{ number_format((float) $retribusiRingkas->PAD, 0, ',', '.') }}
+                            @else
+                                -
+                            @endif
 
                             </td>
 
@@ -309,10 +382,11 @@
 
                             <td class="px-4 py-4 text-right">
 
-                            @php
-                                $targetRetribusi = $tanah->retribusi?->sum(fn ($r) => (float) ($r->total_tarif_sewa ?? 0)) ?? 0;
-                            @endphp
-                            Rp {{ number_format($targetRetribusi, 0, ',', '.') }}
+                            @if ($retribusiRingkas && $retribusiRingkas->tarif_retribusi !== null)
+                                Rp {{ number_format((float) $retribusiRingkas->tarif_retribusi, 0, ',', '.') }}
+                            @else
+                                -
+                            @endif
 
                             </td>
 
@@ -341,22 +415,16 @@
 
 
                             <td class="px-3 py-2.5 text-xs">
-                            @php
-                                $latestPbb = $tanah->dokumenPbb->sortByDesc('tahun_pbb')->first();
-                            @endphp
-
-                            @if ($latestPbb)
-                                <a href="{{ asset('storage/' . $latestPbb->file_pbb) }}" target="_blank"
+                            @if ($pbbRingkas)
+                                <a href="{{ asset('storage/' . $pbbRingkas->file_pbb) }}" target="_blank"
                                    class="inline-flex items-center gap-1 rounded-lg bg-disbun-50 px-2 py-1 text-[11px] font-semibold text-disbun-800 transition hover:bg-disbun-100">
                                     <svg class="h-3.5 w-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                                     </svg>
-                                    <span>PBB {{ $latestPbb->tahun_pbb ?? '' }}</span>
+                                    <span>PBB {{ $pbbRingkas->tahun_pbb ?? '' }}</span>
                                 </a>
                             @else
-                                <span class="inline-flex items-center rounded-lg bg-slate-50 px-2 py-0.5 text-[11px] text-slate-400">
-                                    Belum Ada
-                                </span>
+                                -
                             @endif
                         </td>
 
@@ -391,7 +459,7 @@
 
                             <div class="inline-flex items-center gap-1 rounded-2xl border border-slate-200/70 bg-slate-50/60 p-1 shadow-2xs">
 
-                            <a href="{{ route('tanah.show',$tanah) }}"
+                            <a href="{{ route('tanah.show', ['tanah' => $tanah] + $filterParams) }}"
                                title="Detail Tanah"
                                class="flex h-7 w-7 items-center justify-center rounded-xl
                                       bg-white text-slate-600 transition
@@ -414,7 +482,7 @@
 
                             </a>
 
-                            @if(in_array(auth()->user()?->role?->nama_role, ['Admin Aset', 'Admin UPT P2DP']))
+                            @if(in_array(auth()->user()?->role?->nama_role, ['Admin Aset', 'Admin UPT']))
 
                             <a href="{{ route('tanah.edit',$tanah) }}"
                                title="Edit Tanah"
@@ -447,7 +515,7 @@
 
                         <tr>
 
-                            <td colspan="26"
+                            <td colspan="11"
                                 class="px-6 py-16 text-center">
 
                                 <div class="flex flex-col items-center">

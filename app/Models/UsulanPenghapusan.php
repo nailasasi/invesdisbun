@@ -13,13 +13,21 @@ class UsulanPenghapusan extends Model
      * @var string
      */
     protected $table = 'usulan_penghapusan';
+
     use HasFactory;
 
     protected $primaryKey = 'id_usulan_hapus';
 
     protected $fillable = [
-        'id_pegawai_penghapus', 'tanggal_usulan', 'alasan_penghapusan',
-        'status_usulan', 'keterangan', 'id_aset', 'no_sk', 'tanggal_sk',
+        'id_pegawai_penghapus',
+        'tanggal_usulan',
+        'alasan_penghapusan',
+        'status_usulan',
+        'keterangan',
+        'id_aset',
+        'id_inventaris',
+        'no_sk',
+        'tanggal_sk',
     ];
 
     protected $casts = [
@@ -35,5 +43,10 @@ class UsulanPenghapusan extends Model
     public function aset()
     {
         return $this->belongsTo(Aset::class, 'id_aset');
+    }
+
+    public function inventaris()
+    {
+        return $this->belongsTo(InventarisRuangan::class, 'id_inventaris');
     }
 }

@@ -47,6 +47,23 @@ return [
             'report' => false,
         ],
 
+        /*
+         * Arsip dokumen RKBMD: PRIVAT.
+         *
+         * Disimpan di `storage/app/private/arsip-rkbmd` sehingga TIDAK dapat
+         * diakses lewat web server / symlink `public/storage`. Akses hanya
+         * melalui RkbmdController (preview/download) setelah otorisasi role +
+         * cakupan SKPD.
+         */
+        'arsip_rkbmd' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private'),
+            'serve' => false,
+            'visibility' => 'private',
+            'throw' => false,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

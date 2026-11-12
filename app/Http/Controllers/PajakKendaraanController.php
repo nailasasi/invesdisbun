@@ -75,6 +75,7 @@ class PajakKendaraanController extends Controller
             DB::transaction(function () use ($kendaraan, $data, $status, $limaTahunan, $berakhir, $buktiPath, $buktiNama) {
                 if ($status === 'Aktif') {
                     PajakKendaraan::where('id_kendaraan', $kendaraan->id_kendaraan)
+                        ->where('pajak_5_tahunan', $limaTahunan)
                         ->where('status', 'Aktif')
                         ->update(['status' => 'Tidak Aktif']);
                 }
@@ -260,34 +261,62 @@ class PajakKendaraanController extends Controller
 
         $this->authorizeKendaraan($kendaraan);
 
-        DB::transaction(function () use ($kendaraan, $pajak) {
-            $platDibuat = $pajak->pajak_5_tahunan
-                ? RiwayatPlat::where('id_kendaraan', $kendaraan->id_kendaraan)
-                    ->where('ganti_plat', true)
-                    ->where('tanggal_berlaku', $pajak->tanggal_berakhir->format('Y-m-d'))
-                    ->where('status', 'Aktif')
-                    ->first()
-                : null;
+        $isLimaTahunan = (bool) $pajak->pajak_5_tahunan;
+        $isAktif = strcasecmp((string) $pajak->status, 'Aktif') === 0;
 
+        $platDibuat = null;
+        $platSebelumnya = null;
+
+        // A. Hanya Pajak 5 Tahunan berstatus AKTIF yang dapat memicu pemulihan plat lama.
+        // Pajak 5 Tahunan historis/tidak aktif dan Pajak Tahunan TIDAK boleh memengaruhi Riwayat Plat.
+        if ($isLimaTahunan && $isAktif) {
+            $tgl = $pajak->tanggal_berakhir ? $pajak->tanggal_berakhir->format('Y-m-d') : null;
+
+            if ($tgl) {
+                $platDibuat = RiwayatPlat::where('id_kendaraan', $kendaraan->id_kendaraan)
+                    ->where('ganti_plat', true)
+                    ->where('status', 'Aktif')
+                    ->whereDate('tanggal_berlaku', $tgl)
+                    ->first();
+            }
+
+            // Jika relasi plat aktif tidak dapat ditentukan dengan pasti, jangan gunakan fallback berisiko!
+            // Batalkan proses penghapusan secara aman agar tidak merusak plat aktif kendaraan.
+            if (! $platDibuat) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Penghapusan pajak dibatalkan: Relasi riwayat plat aktif terkait tidak dapat ditentukan secara pasti.',
+                ], 422);
+            }
+
+            // Cari plat yang sebelumnya aktif (didemosi oleh transaksi pajak ini)
+            $platSebelumnya = RiwayatPlat::where('id_kendaraan', $kendaraan->id_kendaraan)
+                ->where('status', 'Tidak Aktif')
+                ->where('id_plat', '<', $platDibuat->id_plat)
+                ->orderByDesc('id_plat')
+                ->first();
+        }
+
+        $buktiLama = $pajak->bukti_pajak_path;
+
+        DB::transaction(function () use ($pajak, $platDibuat, $platSebelumnya) {
+            // Hapus data pajak
             $pajak->delete();
 
+            // Jika ada plat aktif terkait yang sah: hapus plat tersebut dan aktifkan kembali plat sebelumnya
             if ($platDibuat) {
                 $platDibuat->delete();
-
-                // Plat yang didemosi oleh transaksi ini adalah satu-satunya
-                // plat Tidak Aktif dengan id_plat terbesar: sebelum transaksi
-                // ia adalah plat Aktif (paling baru), sementara plat history
-                // lain lebih lama darinya.
-                $platSebelumnya = RiwayatPlat::where('id_kendaraan', $kendaraan->id_kendaraan)
-                    ->where('status', 'Tidak Aktif')
-                    ->orderByDesc('id_plat')
-                    ->first();
 
                 if ($platSebelumnya) {
                     $platSebelumnya->update(['status' => 'Aktif']);
                 }
             }
         });
+
+        // Bersihkan berkas bukti fisik setelah transaksi database berhasil commit
+        if ($buktiLama && Storage::disk('public')->exists($buktiLama)) {
+            Storage::disk('public')->delete($buktiLama);
+        }
 
         return response()->json(['success' => true, 'message' => 'Data pajak berhasil dihapus.']);
     }

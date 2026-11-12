@@ -36,7 +36,7 @@ class LoginController extends Controller
             'status_user' => 'aktif',
         ], $remember)) {
             throw ValidationException::withMessages([
-                'username' => __('Kredensial yang Anda masukkan salah.'),
+                'username' => __('Username atau Password yang Anda masukkan salah.'),
             ]);
         }
 

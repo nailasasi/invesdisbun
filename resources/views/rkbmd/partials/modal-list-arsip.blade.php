@@ -30,7 +30,7 @@
 
         {{-- Toolbar Filter & Search (sticky di atas list) --}}
         <div class="shrink-0 border-b border-slate-100 bg-slate-50/70 px-6 py-3">
-            <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div class="relative">
                     <input type="text" id="searchArsipInput" onkeyup="filterArsipItems()"
                            placeholder="Cari nama SK / dokumen..."
@@ -44,6 +44,16 @@
                         <option value="">Semua Tahun</option>
                         @foreach ($arsipTahunList as $tahunArsip)
                             <option value="{{ $tahunArsip }}">TA {{ $tahunArsip }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div>
+                    <select id="filterJenisArsip" onchange="filterArsipItems()"
+                            class="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                        <option value="">Semua Jenis Dokumen</option>
+                        @foreach (\App\Models\ArsipRkbmd::JENIS_DOKUMEN as $jenisDokumen)
+                            <option value="{{ $jenisDokumen }}">{{ $jenisDokumen }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -63,17 +73,18 @@
         {{-- Daftar Berkas (scrollable) --}}
         <div class="flex-1 space-y-2.5 overflow-y-auto px-6 py-4 text-xs" id="arsipListContainer">
             @forelse ($arsipList as $arsip)
-                @php
-                    $fileUrl = \Illuminate\Support\Facades\Storage::disk('public')->url($arsip->file_path);
-                @endphp
                 <div class="arsip-item flex flex-col justify-between gap-3 rounded-2xl border border-slate-100 bg-white p-3.5 shadow-2xs transition hover:border-slate-200 sm:flex-row sm:items-center"
                      data-title="{{ strtolower(($arsip->nama_dokumen ?: 'Dokumen RKBMD')) }}"
                      data-tahun="{{ $arsip->tahun_anggaran }}"
+                     data-jenis="{{ strtolower($arsip->jenis_dokumen ?? '') }}"
                      data-bidang="{{ strtolower($arsip->skpd?->nama_skpd ?? '-') }}">
                     <div class="min-w-0">
                         <h4 class="truncate font-bold text-slate-800">{{ $arsip->nama_dokumen ?: 'Dokumen RKBMD' }}</h4>
                         <p class="mt-0.5 text-[11px] text-slate-400">
                             {{ $arsip->skpd?->nama_skpd ?? '-' }} • TA {{ $arsip->tahun_anggaran }}
+                            @if ($arsip->jenis_dokumen)
+                                • <span class="font-semibold text-slate-600">{{ $arsip->jenis_dokumen }}</span>
+                            @endif
                             @if ($arsip->tanggal_pengesahan)
                                 • Sah {{ $arsip->tanggal_pengesahan->format('d M Y') }}
                             @endif
@@ -81,27 +92,17 @@
                     </div>
 
                     <div class="flex shrink-0 items-center gap-1.5">
-                        <a href="{{ $fileUrl }}" target="_blank" rel="noopener" title="Pratinjau PDF"
+                        {{-- Endpoint terproteksi: otorisasi role + SKPD di backend. --}}
+                        <a href="{{ route('rkbmd.arsip.preview', $arsip->id_arsip) }}" target="_blank" rel="noopener" title="Pratinjau PDF"
                            class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50">
                             <svg class="h-3.5 w-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM21 12c0 4.42-4.03 8-9 8s-9-3.58-9-8 4.03-8 9-8 9 3.58 9 8z"/></svg>
                             <span>Pratinjau</span>
                         </a>
-                        <a href="{{ $fileUrl }}" download title="Unduh PDF"
+                        <a href="{{ route('rkbmd.arsip.download', $arsip->id_arsip) }}" download title="Unduh PDF"
                            class="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-1.5 text-[11px] font-bold text-white transition hover:bg-slate-800">
                             <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                             <span>Unduh</span>
                         </a>
-                        @if ($isAdmin)
-                            <form method="POST" action="{{ route('rkbmd.arsip.destroy', $arsip->id_arsip) }}"
-                                  onsubmit="return confirm('Hapus arsip dokumen ini?');">
-                                @csrf
-                                @method('DELETE')
-                                <button type="submit" title="Hapus"
-                                        class="inline-flex items-center rounded-lg p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-500">
-                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                                </button>
-                            </form>
-                        @endif
                     </div>
                 </div>
             @empty
@@ -119,6 +120,7 @@
         function filterArsipItems() {
             const searchVal = document.getElementById('searchArsipInput').value.toLowerCase();
             const tahunVal = document.getElementById('filterTahunArsip').value;
+            const jenisVal = document.getElementById('filterJenisArsip').value.toLowerCase();
             const bidangVal = document.getElementById('filterBidangArsip').value.toLowerCase();
 
             const items = document.querySelectorAll('.arsip-item');
@@ -127,13 +129,15 @@
             items.forEach(function (item) {
                 const itemTitle = item.getAttribute('data-title') || '';
                 const itemTahun = item.getAttribute('data-tahun') || '';
+                const itemJenis = item.getAttribute('data-jenis') || '';
                 const itemBidang = item.getAttribute('data-bidang') || '';
 
                 const matchSearch = !searchVal || itemTitle.includes(searchVal);
                 const matchTahun = !tahunVal || itemTahun === tahunVal;
+                const matchJenis = !jenisVal || itemJenis === jenisVal;
                 const matchBidang = !bidangVal || itemBidang.includes(bidangVal);
 
-                if (matchSearch && matchTahun && matchBidang) {
+                if (matchSearch && matchTahun && matchJenis && matchBidang) {
                     item.classList.remove('hidden');
                     visibleCount++;
                 } else {

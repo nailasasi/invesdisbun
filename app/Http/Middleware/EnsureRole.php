@@ -21,6 +21,10 @@ class EnsureRole
             abort(403, 'Unauthorized.');
         }
 
+        if (! $user->isAktif()) {
+            abort(403, 'Akun Anda telah dinonaktifkan. Silakan hubungi administrator.');
+        }
+
         $roleName = $user->role?->nama_role;
 
         // Trim kedua sisi: spasi ganda di data role tidak boleh membuat

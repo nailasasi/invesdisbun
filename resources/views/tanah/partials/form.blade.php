@@ -104,22 +104,40 @@
 
             <div>
                 <label for="penggunaan_air" class="mb-1 block font-semibold text-slate-700">Penggunaan Air</label>
+                @php
+                    // Pertahankan nilai lama yang belum dikenal (mis. hasil import
+                    // berkapitalisasi berbeda) agar tidak hilang saat form disimpan.
+                    $airOptions = ['Mata Air', 'Air Tanah', 'Air Sungai', 'Air Lainnya'];
+                    $airTerpilih = old('penggunaan_air', $tanah->penggunaan_air ?? '');
+                    if ($airTerpilih !== null && $airTerpilih !== '' && ! in_array($airTerpilih, $airOptions, true)) {
+                        $airOptions[] = $airTerpilih;
+                    }
+                @endphp
                 <select id="penggunaan_air" name="penggunaan_air"
                         class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                     <option value="">-- Pilih Penggunaan Air --</option>
-                    @foreach (['Mata Air', 'Air Tanah', 'Air Sungai', 'Air Lainnya'] as $air)
-                        <option value="{{ $air }}" @selected(old('penggunaan_air', $tanah->penggunaan_air ?? '') == $air)>{{ $air }}</option>
+                    @foreach ($airOptions as $air)
+                        <option value="{{ $air }}" @selected($airTerpilih == $air)>{{ $air }}</option>
                     @endforeach
                 </select>
             </div>
 
             <div>
                 <label for="kondisi" class="mb-1 block font-semibold text-slate-700">Kondisi</label>
+                @php
+                    // Sama seperti Penggunaan Air: nilai lama (mis. "BAIK") tetap
+                    // ditampilkan & terpilih agar tidak terhapus saat disimpan.
+                    $kondisiOptions = ['Baik', 'Rusak Ringan', 'Rusak Berat'];
+                    $kondisiTerpilih = old('kondisi', $tanah->kondisi ?? '');
+                    if ($kondisiTerpilih !== null && $kondisiTerpilih !== '' && ! in_array($kondisiTerpilih, $kondisiOptions, true)) {
+                        $kondisiOptions[] = $kondisiTerpilih;
+                    }
+                @endphp
                 <select id="kondisi" name="kondisi"
                         class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                     <option value="">-- Pilih Kondisi --</option>
-                    @foreach (['Baik', 'Rusak Ringan', 'Rusak Berat'] as $kondisi)
-                        <option value="{{ $kondisi }}" @selected(old('kondisi', $tanah->kondisi ?? '') == $kondisi)>{{ $kondisi }}</option>
+                    @foreach ($kondisiOptions as $kondisi)
+                        <option value="{{ $kondisi }}" @selected($kondisiTerpilih == $kondisi)>{{ $kondisi }}</option>
                     @endforeach
                 </select>
             </div>
@@ -196,6 +214,36 @@
             </div>
         </div>
     </div>
+
+    {{-- ============ 4. KONFIRMASI OTORISASI (HANYA UNTUK EDIT TANAH) ============ --}}
+    @if ($tanah->exists || !empty($tanah->id_tanah))
+    <div class="rounded-3xl border border-amber-100 bg-amber-50/40 p-6 shadow-2xs">
+        <div class="mb-4 flex items-center gap-2.5 border-b border-amber-100 pb-3">
+            <span class="flex h-7 w-7 items-center justify-center rounded-xl bg-amber-100 text-xs font-bold text-amber-700">4</span>
+            <h3 class="text-xs font-bold uppercase tracking-wider text-amber-800">Konfirmasi Otorisasi</h3>
+        </div>
+
+        <div class="text-xs">
+            <label for="password_otorisasi" class="mb-1 block font-semibold text-slate-700">
+                Password Otorisasi (Wajib) <span class="text-rose-500">*</span>
+            </label>
+            {{-- Field password sengaja TIDAK memakai old(): nilai tidak pernah
+                 diisi ulang setelah validasi gagal. --}}
+            <input type="password" id="password_otorisasi" name="password_otorisasi" required
+                   autocomplete="current-password" placeholder="Masukkan ulang password akun Anda"
+                   class="w-full max-w-md rounded-xl border border-slate-200 px-3 py-2 text-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500">
+            <p class="mt-1 text-[11px] text-slate-400">
+                Demi keamanan, masukkan ulang password akun Anda untuk menyimpan perubahan ini.
+            </p>
+            @error('password_otorisasi')
+                <p class="mt-1 text-[11px] font-semibold text-rose-600">{{ $message }}</p>
+            @enderror
+        </div>
+
+        {{-- Jam real-time + kamera bukti otorisasi (wajib sebelum simpan) --}}
+        <x-otorisasi-bukti />
+    </div>
+    @endif
 
     {{-- ============ AKSI SIMPAN ============ --}}
     <div class="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50/50 px-6 py-4 rounded-3xl">

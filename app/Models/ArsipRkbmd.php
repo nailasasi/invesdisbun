@@ -19,9 +19,14 @@ class ArsipRkbmd extends Model
     protected $primaryKey = 'id_arsip';
 
     protected $fillable = [
-        'id_skpd', 'tahun_anggaran', 'nama_dokumen', 'file_path',
+        'id_skpd', 'tahun_anggaran', 'nama_dokumen', 'jenis_dokumen', 'file_path',
         'tanggal_pengesahan', 'uploaded_by',
     ];
+
+    /**
+     * Pilihan jenis dokumen sah RKBMD yang didukung.
+     */
+    public const JENIS_DOKUMEN = ['Inspektorat', 'BPKAD'];
 
     protected $casts = [
         'tahun_anggaran' => 'integer',

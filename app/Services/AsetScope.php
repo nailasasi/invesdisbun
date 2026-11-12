@@ -97,9 +97,16 @@ class AsetScope
      */
     public function user(): ?User
     {
-        if (! $this->userSudahDiambil) {
+        $current = auth()->user();
+
+        if (! $this->userSudahDiambil || ($current && $this->user?->id_user !== $current->id_user)) {
             $this->userSudahDiambil = true;
-            $this->user = auth()->user();
+            $this->user = $current;
+            $this->idLokasiSudahDihitung = false;
+            $this->idLokasiUpt = [];
+            $this->skpdSudahDiresolve = false;
+            $this->skpdId = null;
+            $this->jenisSkpd = null;
             $this->resolveSkpd();
         }
 
@@ -130,9 +137,19 @@ class AsetScope
         return $this->roleKey() === mb_strtolower(self::ROLE_ADMIN_ASET);
     }
 
+    public function isAdminBidang(): bool
+    {
+        return $this->roleKey() === mb_strtolower(self::ROLE_ADMIN_BIDANG);
+    }
+
     public function isAdminUpt(): bool
     {
         return $this->roleKey() === mb_strtolower(self::ROLE_ADMIN_UPT);
+    }
+
+    public function isPegawai(): bool
+    {
+        return $this->roleKey() === mb_strtolower(self::ROLE_PEGAWAI);
     }
 
     /**

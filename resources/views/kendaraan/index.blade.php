@@ -37,14 +37,56 @@
                 @endif
             </form>
 
-            @if ($isAdminAset)
+            @if ($isAdminAset || $isAdminUpt)
                 <x-slot name="actions">
-                    <x-button type="button" id="btn-import" variant="secondary" icon="M12 16V4m0 0L8 8m4-4l4 4m-9 8H5a2 2 0 00-2 2v2a2 2 0 002 2h14a2 2 0 002-2v-2a2 2 0 00-2-2h-2">
-                        Import Excel
-                    </x-button>
-                    <x-button type="button" id="btn-tambah" icon="M12 4v16m8-8H4">
-                        Tambah Kendaraan
-                    </x-button>
+                    <button type="button" id="btn-finalisasi-kendaraan-massal"
+                            class="inline-flex items-center justify-center gap-2 rounded-2xl border border-disbun-card-border bg-white px-3.5 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                            disabled>
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                        <span>Finalisasi Terpilih (<span id="finalisasi-kendaraan-count">0</span>)</span>
+                    </button>
+                    @if ($isAdminAset)
+                        <div class="relative" id="export-menu-wrapper">
+                            <button type="button" id="btn-export-menu"
+                                    class="inline-flex items-center justify-center gap-2 rounded-2xl border border-disbun-card-border bg-white px-3.5 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2M12 4v10"/></svg>
+                                <span>Ekspor</span>
+                            </button>
+                            <div id="export-menu" class="absolute right-0 z-30 mt-2 hidden w-64 overflow-hidden rounded-2xl border border-slate-200 bg-white py-1 shadow-xl">
+                                <a href="{{ route('kendaraan.export', array_merge(request()->query(), ['mode' => 'semua'])) }}"
+                                   class="block px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50">
+                                    <span class="font-semibold">Semua Kendaraan</span>
+                                    <span class="block text-xs text-slate-400">Seluruh kendaraan sesuai filter aktif</span>
+                                </a>
+                                <a href="{{ route('kendaraan.export', array_merge(request()->query(), ['mode' => 'segera'])) }}"
+                                   class="block px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50">
+                                    <span class="font-semibold">Segera Habis Pajak</span>
+                                    <span class="block text-xs text-slate-400">Terlambat atau jatuh tempo &le; 30 hari</span>
+                                </a>
+                                <button type="button" id="btn-export-selected"
+                                        class="block w-full px-4 py-2.5 text-left text-sm text-slate-700 transition hover:bg-slate-50">
+                                    <span class="font-semibold">Kendaraan Terpilih (<span id="export-selected-count">0</span>)</span>
+                                    <span class="block text-xs text-slate-400">Hanya kendaraan yang dicentang</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {{-- Mode terpilih: POST ids[] dari pilihan lintas halaman. --}}
+                        <form method="POST" action="{{ route('kendaraan.export') }}" id="export-selected-form" class="hidden">
+                            @csrf
+                            <input type="hidden" name="mode" value="pilih">
+                            <input type="hidden" name="search" value="{{ request('search') }}">
+                            <input type="hidden" name="status" value="{{ request('status') }}">
+                            <div id="export-selected-inputs"></div>
+                        </form>
+
+                        <x-button type="button" id="btn-import" variant="secondary" icon="M12 16V4m0 0L8 8m4-4l4 4m-9 8H5a2 2 0 00-2 2v2a2 2 0 002 2h14a2 2 0 002-2v-2a2 2 0 00-2-2h-2">
+                            Import Excel
+                        </x-button>
+                        <x-button type="button" id="btn-tambah" icon="M12 4v16m8-8H4">
+                            Tambah Kendaraan
+                        </x-button>
+                    @endif
                 </x-slot>
             @endif
         </x-action-bar>
@@ -53,6 +95,13 @@
             <table class="min-w-full divide-y divide-slate-200">
                 <thead class="bg-slate-50">
                     <tr>
+                        @if ($isAdminAset || $isAdminUpt)
+                            <th scope="col" class="w-10 px-4 py-3 text-center">
+                                <input type="checkbox" id="kendaraan-check-all"
+                                       class="h-4 w-4 rounded border-slate-300 text-disbun-700 focus:ring-disbun-500"
+                                       title="Pilih semua di halaman ini">
+                            </th>
+                        @endif
                         <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">#</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Foto</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Nama Kendaraan</th>
@@ -62,7 +111,7 @@
                         <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Jatuh Tempo Plat (5 Tahunan)</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Pemegang</th>
                         @if ($isAdminAset)
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Nilai</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">SPPKD</th>
                             <th scope="col" class="px-6 py-3 text-right whitespace-nowrap text-xs font-semibold uppercase tracking-wider text-slate-500">Aksi</th>
                         @endif
                     </tr>
@@ -105,6 +154,24 @@
                             };
                         @endphp
                         <tr class="transition hover:bg-slate-50">
+                            @if ($isAdminAset || $isAdminUpt)
+                                @php
+                                    $penempatanAktifRow = $k->aset?->penempatanAktif;
+                                    $isFinalizedRow = $penempatanAktifRow?->is_finalized;
+                                    // Checkbox SELALU tersedia (untuk Ekspor Terpilih & Finalisasi).
+                                    // Finalisasi Massal hanya menghitung yang memenuhi
+                                    // syarat (penempatan aktif belum difinalisasi = 0).
+                                    $bolehFinalMassal = $penempatanAktifRow && !is_null($isFinalizedRow) && (int)$isFinalizedRow === 0;
+                                @endphp
+                                <td class="px-4 py-4 text-center">
+                                    <input type="checkbox"
+                                           class="kendaraan-row-check kendaraan-finalisasi-check h-4 w-4 rounded border-slate-300 text-disbun-700 focus:ring-disbun-500"
+                                           value="{{ $k->id_kendaraan }}"
+                                           data-finalisasi-eligible="{{ $bolehFinalMassal ? '1' : '0' }}"
+                                           @if (! $bolehFinalMassal) title="Kendaraan ini tidak memenuhi syarat Finalisasi Massal" @endif
+                                           aria-label="Pilih kendaraan">
+                                </td>
+                            @endif
                             <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-500">{{ $kendaraanList->firstItem() + $index }}</td>
                             <td class="whitespace-nowrap px-6 py-4">
                                 @if ($k->foto)
@@ -117,7 +184,7 @@
                             </td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm">
                                 <a href="{{ route('kendaraan.show', $k->id_kendaraan) }}" class="font-medium text-disbun-700 hover:underline">
-                                    {{ $k->aset?->barang?->nama_barang ?? 'Kendaraan' }}
+                                    {{ $k->namaTampil() ?? 'Kendaraan' }}
                                 </a>
                                 <p class="text-xs text-slate-400">{{ $k->aset?->nomor_kartu_barang ?? '-' }}</p>
                             </td>
@@ -142,40 +209,118 @@
                                 @endif
                             </td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm">
-                                @if ($k->pemegang)
-                                    <span class="font-medium text-slate-700">{{ $k->pemegang }}</span>
+                                @php
+                                    $penPem = $k->aset?->penempatanAktif;
+                                    $finPem = $penPem?->is_finalized;
+                                    // Sumber utama: PemegangAset aktif. Teks bebas
+                                    // kendaraan.pemegang hanya fallback data lama.
+                                    $pemegangAktifRow = $k->aset?->pemegangSaatIni;
+                                    $namaPemegangRow = $pemegangAktifRow?->pegawai?->nama_pegawai ?: $k->pemegang;
+                                    $idPemegang = $pemegangAktifRow?->pegawai?->id_pegawai
+                                        ?? ($pemegangMap[mb_strtolower(trim((string) $k->pemegang))] ?? null);
+                                @endphp
+                                @if (trim((string) $namaPemegangRow) !== '')
+                                    <div class="flex flex-col gap-1">
+                                        <div class="flex items-center">
+                                            @if ($idPemegang && in_array(auth()->user()?->role?->nama_role, ['Admin Aset', 'Admin UPT'], true))
+                                                <a href="{{ route('master-data.pegawai.show', $idPemegang) }}" class="font-medium text-disbun-700 transition hover:text-disbun-800 hover:underline">
+                                                    {{ $namaPemegangRow }}
+                                                </a>
+                                            @else
+                                                <span class="font-medium text-slate-800">{{ $namaPemegangRow }}</span>
+                                            @endif
+                                        </div>
+                                        @if ($penPem)
+                                            <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                                @if ($finPem === 0)
+                                                    <span class="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">Belum Difinalisasi</span>
+                                                    @if ($isAdminAset || $isAdminUpt)
+                                                        <button type="button" data-edit-pemegang-kendaraan="{{ $k->id_kendaraan }}"
+                                                                data-nama-kendaraan="{{ $k->namaTampil() ?? 'Kendaraan' }}"
+                                                                data-plat-nomor="{{ $platAktif->nomor_plat ?? '' }}"
+                                                                title="Edit Pemegang" aria-label="Edit pemegang kendaraan"
+                                                                class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-amber-50 text-amber-600 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500">
+                                                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                                        </button>
+                                                        <button type="button" data-kendaraan-finalisasi="{{ $k->id_kendaraan }}"
+                                                                data-kendaraan-nama="{{ $k->namaTampil() ?? 'Kendaraan' }}"
+                                                                data-kendaraan-plat="{{ $platAktif->nomor_plat ?? '-' }}"
+                                                                data-kendaraan-id="{{ $k->id_kendaraan }}"
+                                                                title="Finalisasi" class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100">
+                                                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                                        </button>
+                                                    @endif
+                                                @elseif (is_null($finPem))
+                                                    <span class="inline-flex items-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-700">Perlu Verifikasi</span>
+                                                    @if ($isAdminAset || $isAdminUpt)
+                                                        <button type="button" data-kendaraan-verifikasi="{{ $k->id_kendaraan }}"
+                                                                data-kendaraan-nama="{{ $k->namaTampil() ?? 'Kendaraan' }}"
+                                                                data-kendaraan-plat="{{ $platAktif->nomor_plat ?? '-' }}"
+                                                                data-kendaraan-id="{{ $k->id_kendaraan }}"
+                                                                title="Verifikasi & Finalisasi" class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-sky-50 text-sky-600 hover:bg-sky-100">
+                                                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                                        </button>
+                                                    @endif
+                                                @elseif ((int)$finPem === 1)
+                                                    <span class="inline-flex items-center rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">Sudah Difinalisasi</span>
+                                                @endif
+                                            </div>
+                                        @endif
+                                    </div>
                                 @else
-                                    <span class="text-slate-400">-</span>
+                                    @if ($isAdminAset && $k->aset?->status_aset === 'aktif')
+                                        <button type="button" data-penempatan-awal-kendaraan="{{ $k->id_kendaraan }}" class="inline-flex items-center rounded-md border border-slate-300 bg-white px-1.5 py-0.5 text-xs text-slate-600 shadow-sm hover:bg-slate-50" title="Penempatan awal">
+                                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                                        </button>
+                                    @else
+                                        <span class="text-slate-400">-</span>
+                                    @endif
                                 @endif
                             </td>
                             @if ($isAdminAset)
-                                <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $k->aset?->nilai_perolehan ? 'Rp ' . number_format((float) $k->aset->nilai_perolehan, 0, ',', '.') : '-' }}</td>
+                                <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                    @if ((int) $finPem === 1 && trim((string) $namaPemegangRow) !== '')
+                                        <a href="{{ route('kendaraan.sppkd-aktif.download', $k->id_kendaraan) }}"
+                                           class="inline-flex items-center rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-200">
+                                            SPPKD
+                                        </a>
+                                    @else
+                                        {{-- SPPKD hanya tampil bila penempatan aktif sudah difinalisasi dan ada pemegang. --}}
+                                        <span class="text-slate-400">-</span>
+                                    @endif
+                                </td>
                                 <td class="whitespace-nowrap px-3 py-4 text-right text-sm">
                                     <div class="inline-flex items-center gap-1 rounded-2xl border border-slate-200/70 bg-slate-50/60 p-1 shadow-2xs">
                                         <a href="{{ route('kendaraan.show', $k->id_kendaraan) }}" title="Detail Kendaraan" class="flex h-7 w-7 items-center justify-center rounded-xl bg-white text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
                                             <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                                         </a>
+                                        <button type="button" data-edit-target="{{ $k->id_kendaraan }}" title="Edit Kendaraan" aria-label="Edit kendaraan" class="flex h-7 w-7 items-center justify-center rounded-xl bg-white text-disbun-700 transition hover:bg-disbun-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-disbun-500">
+                                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                        </button>
+                                        @if ((int) $finPem === 1)
                                         <button type="button" onclick="openMutasiKendaraan({{ $k->id_kendaraan }})"
                                                 data-mutasi-pemegang="{{ $k->id_kendaraan }}"
-                                                data-mutasi-nama="{{ $k->aset?->barang?->nama_barang ?? 'Kendaraan' }}"
+                                                data-mutasi-nama="{{ $k->namaTampil() ?? 'Kendaraan' }}"
                                                 data-mutasi-plat="{{ $platAktif->nomor_plat ?? '' }}"
-                                                data-mutasi-pemegang-lama="{{ $k->pemegang ?? '' }}"
+                                                data-mutasi-pemegang-lama="{{ $namaPemegangRow ?? '' }}"
+                                                data-mutasi-pemegang-id="{{ $idPemegang ?? '' }}"
                                                 title="Mutasi Pemegang"
                                                 class="flex h-7 w-7 items-center justify-center rounded-xl bg-indigo-50/70 text-indigo-500 transition hover:bg-indigo-100 hover:text-indigo-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
                                             <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
                                         </button>
-                                        <button type="button" data-delete-target="{{ $k->id_kendaraan }}" data-delete-name="{{ $k->aset?->barang?->nama_barang ?? 'Kendaraan' }}" title="Hapus Kendaraan" class="flex h-7 w-7 items-center justify-center rounded-xl bg-red-50 text-red-600 transition hover:bg-red-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
+                                        @endif
+                                        <button type="button" data-delete-target="{{ $k->id_kendaraan }}" data-delete-name="{{ $k->namaTampil() ?? 'Kendaraan' }}" title="Hapus Kendaraan" class="flex h-7 w-7 items-center justify-center rounded-xl bg-red-50 text-red-600 transition hover:bg-red-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
                                             <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                                         </button>
                                     </div>
                                 </td>
                             @endif
                         </tr>
-                    @empty
-                        <tr>
-                            <td colspan="{{ $isAdminAset ? 9 : 7 }}" class="px-6 py-12 text-center text-sm text-slate-400">Belum ada data kendaraan.</td>
-                        </tr>
-                    @endforelse
+                        @empty
+                            <tr>
+                                <td colspan="{{ $isAdminAset ? 11 : ($isAdminUpt ? 9 : 8) }}" class="px-6 py-12 text-center text-sm text-slate-400">Belum ada data kendaraan.</td>
+                            </tr>
+                        @endforelse
                 </tbody>
             </table>
         </div>
@@ -186,429 +331,27 @@
             </div>
         @endif
     </x-card>
-
     @if ($isAdminAset)
-        <div id="import-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
-            <div class="fixed inset-0" data-import-close></div>
-                <div class="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl">
-                    <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
-                        <div>
-                            <h3 class="text-lg font-semibold text-slate-900">Import Kendaraan dari Excel</h3>
-                            <p class="mt-0.5 text-sm text-slate-500">Unggah file .xlsx / .csv untuk menambah banyak kendaraan sekaligus.</p>
-                        </div>
-                        <button type="button" data-import-close class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Tutup">
-                            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                        </button>
-                    </div>
-                    <form method="POST" action="{{ route('kendaraan.import') }}" enctype="multipart/form-data" class="px-6 py-6">
-                        @csrf
-                        <div class="mb-4 flex items-center justify-between gap-3 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
-                            <div>
-                                <span class="block text-sm font-semibold text-slate-700">Belum punya format file?</span>
-                                <span class="text-xs text-slate-500">Unduh template standar import kendaraan</span>
-                            </div>
-                            <a href="{{ route('kendaraan.template') }}"
-                               class="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-disbun-100 bg-white px-3 py-1.5 text-xs font-semibold text-disbun-800 shadow-sm transition hover:bg-disbun-50">
-                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-                                <span>Unduh Template</span>
-                            </a>
-                        </div>
-                        <div class="space-y-1.5">
-                            <label class="block text-sm font-medium text-slate-700">File Excel / CSV <span class="text-red-500">*</span></label>
-                            <input type="file" name="file" accept=".xlsx,.xls,.csv" required class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                            <p class="text-xs text-slate-400">Kolom: Jenis Kendaraan, Nomor Polisi, No. Rangka, No. Mesin, Pemegang Kendaraan, Jatuh Tempo Pajak 1 Tahun, Jatuh Tempo Pajak 5 Tahun, Nominal Pajak, Total Pajak, Pajak 5 Tahunan, Dokumentasi (gambar disisip di baris terkait). Maks 5MB.</p>
-                            @error('file')
-                                <p class="text-xs font-medium text-red-600">{{ $message }}</p>
-                            @enderror
-                        </div>
-                        <div class="mt-4 space-y-1.5">
-                            <label for="import-mode" class="block text-sm font-medium text-slate-700">Mode Duplicate</label>
-                            <select id="import-mode" name="mode" class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                                <option value="skip">Lewati jika No. Rangka / No. Mesin sudah ada</option>
-                                <option value="update">Perbarui data master jika No. Rangka / No. Mesin sama</option>
-                            </select>
-                            <p class="text-xs text-slate-400">Mode Update hanya mengubah data master kendaraan. Pajak dan Riwayat Plat tidak ikut diubah — pergantian plat tetap melalui Pajak 5 Tahunan.</p>
-                            @error('mode')
-                                <p class="text-xs font-medium text-red-600">{{ $message }}</p>
-                            @enderror
-                        </div>
-                        <div class="mt-6 flex items-center justify-end gap-2">
-                            <button type="button" data-import-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
-                            <button type="submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-disbun-700 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-disbun-800">Import</button>
-                        </div>
-                    </form>
-                </div>
-        </div>
-
         <x-modal-confirm id="delete-modal"
                          title="Usulkan Penghapusan Kendaraan?"
                          message="Kendaraan akan masuk antrean usulan penghapusan dan hilang dari daftar aktif. Pembatalan dilakukan di halaman Penghapusan."
                          confirm-label="Usulkan Hapus"
                          confirm-variant="danger" />
 
-        @endif
-
-    @push('scripts')
-    <script>
-        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-        const storeUrl = @json(route('kendaraan.store'));
-        const editUrl = @json(route('kendaraan.edit', ['kendaraan' => '__ID__']));
-        const updateUrl = @json(route('kendaraan.update', ['kendaraan' => '__ID__']));
-        const createDataUrl = @json(route('kendaraan.create'));
-
-        const modal = document.getElementById('kendaraan-modal');
-        const form = document.getElementById('kendaraan-form');
-        let loadedDropdowns = false;
-
-        const pemegangAddBlock = document.getElementById('block-pemegang-add');
-        const pemegangEditBlock = document.getElementById('block-pemegang-edit');
-
-        // Form pemegang dibedakan eksplisit: mode Tambah = input teks
-        // (pemegang awal), mode Edit = tampilan read-only (ganti lewat Mutasi).
-        function setModePemegang(tambah) {
-            if (pemegangAddBlock) pemegangAddBlock.classList.toggle('hidden', !tambah);
-            if (pemegangEditBlock) pemegangEditBlock.classList.toggle('hidden', tambah);
-        }
-
-        const importModal = document.getElementById('import-modal');
-        if (document.getElementById('btn-import')) {
-            document.getElementById('btn-import').addEventListener('click', () => {
-                importModal.classList.remove('hidden');
-                importModal.classList.add('flex');
-            });
-        }
-        if (importModal) {
-            importModal.querySelectorAll('[data-import-close]').forEach(el => el.addEventListener('click', () => {
-                importModal.classList.add('hidden');
-                importModal.classList.remove('flex');
-            }));
-        }
-
-        function showErrors(errors) {
-            form.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
-            Object.keys(errors).forEach(field => {
-                const err = form.querySelector('[data-error-for="' + field + '"]');
-                if (err) { err.textContent = errors[field][0]; err.classList.remove('hidden'); }
-            });
-        }
-
-        function fillOptions(select, options, valueKey, labelKey, placeholder) {
-            select.innerHTML = '';
-            const opt = document.createElement('option');
-            opt.value = ''; opt.textContent = placeholder;
-            select.appendChild(opt);
-            options.forEach(o => {
-                const el = document.createElement('option');
-                el.value = o[valueKey]; el.textContent = o[labelKey];
-                select.appendChild(el);
-            });
-        }
-
-        function openModal() {
-            modal.style.visibility = 'visible';
-            document.body.classList.add('overflow-hidden');
-        }
-        function closeModal() {
-            modal.style.visibility = 'hidden';
-            document.body.classList.remove('overflow-hidden');
-            form.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
-        }
-        modal.querySelectorAll('[data-modal-close]').forEach(el => el.addEventListener('click', closeModal));
-
-        async function ensureDropdowns() {
-            if (loadedDropdowns) return;
-            const res = await fetch(createDataUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } });
-            const data = await res.json();
-            fillOptions(document.getElementById('field-jenis'), data.jenisList.map(v => ({ value: v })), 'value', 'value', '-- Pilih Jenis --');
-            fillOptions(document.getElementById('field-kondisi'), data.kondisiList.map(v => ({ value: v })), 'value', 'value', '-- Pilih Kondisi --');
-            loadedDropdowns = true;
-        }
-
-        if (document.getElementById('btn-tambah')) {
-            document.getElementById('btn-tambah').addEventListener('click', async () => {
-                await ensureDropdowns();
-                document.getElementById('modal-title').textContent = 'Tambah Kendaraan';
-                form.reset();
-                document.getElementById('field-id').value = '';
-                document.getElementById('field-id-aset').value = '';
-                setModePemegang(true);
-                form.action = storeUrl;
-                openModal();
-            });
-        }
-
-        document.querySelectorAll('[data-edit-target]').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                await ensureDropdowns();
-                const id = btn.dataset.editTarget;
-                const res = await fetch(editUrl.replace('__ID__', id), { headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } });
-                const d = await res.json();
-                document.getElementById('modal-title').textContent = 'Edit Kendaraan';
-                document.getElementById('field-id').value = d.id_kendaraan;
-                document.getElementById('field-id-aset').value = d.id_aset;
-                document.getElementById('field-nama').value = d.nama_kendaraan ?? '';
-                document.getElementById('field-jenis').value = d.jenis_kendaraan ?? '';
-                document.getElementById('field-pemegang').value = d.pemegang ?? '';
-                const pemegangValue = document.getElementById('field-pemegang-value');
-                if (pemegangValue) pemegangValue.textContent = d.pemegang || 'Belum ada pemegang';
-                document.getElementById('field-keterangan').value = d.keterangan ?? '';
-                document.getElementById('field-kartu').value = d.nomor_kartu_barang ?? '';
-                document.getElementById('field-rangka').value = d.nomor_rangka ?? '';
-                document.getElementById('field-mesin').value = d.nomor_mesin ?? '';
-                document.getElementById('field-merk').value = d.merk ?? '';
-                document.getElementById('field-tipe').value = d.tipe ?? '';
-                document.getElementById('field-nilai').value = d.nilai_perolehan ?? '';
-                document.getElementById('field-kondisi').value = d.kondisi ?? '';
-                document.getElementById('field-status').value = d.status_aset ?? '';
-                document.getElementById('field-tgl-pengadaan').value = d.tanggal_pengadaan ?? '';
-                document.getElementById('field-tgl-perolehan').value = d.tanggal_perolehan ?? '';
-                document.getElementById('field-tgl-habis').value = d.tanggal_habis_pakai ?? '';
-                document.getElementById('field-plat').value = d.nomor_plat ?? '';
-                const pemegangInputEl = document.getElementById('field-pemegang-input');
-                if (pemegangInputEl) pemegangInputEl.value = '';
-                setModePemegang(false);
-                form.action = updateUrl.replace('__ID__', id);
-                openModal();
-            });
-        });
-
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const submit = document.getElementById('btn-submit');
-            const original = submit.textContent;
-            submit.textContent = 'Menyimpan...';
-            submit.disabled = true;
-            const body = new FormData(form);
-            try {
-                const res = await fetch(form.action, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken }, body });
-                if (res.status === 422) {
-                    const data = await res.json();
-                    showErrors(data.errors);
-                    submit.textContent = original;
-                    submit.disabled = false;
-                    return;
-                }
-                if (res.ok) {
-                    window.location.reload();
-                } else {
-                    alert('Terjadi kesalahan. Coba lagi.');
-                    submit.textContent = original;
-                    submit.disabled = false;
-                }
-            } catch (err) {
-                alert('Koneksi bermasalah. Coba lagi.');
-                submit.textContent = original;
-                submit.disabled = false;
-            }
-        });
-
-        {{-- Delete handling --}}
-        const deleteModal = document.getElementById('delete-modal');
-        const deleteForm = deleteModal ? deleteModal.querySelector('form') : null;
-        if (deleteModal) {
-            deleteModal.querySelectorAll('[data-modal-close]').forEach(el => el.addEventListener('click', () => deleteModal.classList.add('hidden')));
-        }
-        document.querySelectorAll('[data-delete-target]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const id = btn.dataset.deleteTarget;
-                const name = btn.dataset.deleteName;
-                if (!deleteModal) return;
-                const msgEl = deleteModal.querySelector('[data-confirm-message]');
-                if (msgEl) msgEl.textContent = 'Usulkan penghapusan kendaraan "' + name + '"? Kendaraan akan hilang dari daftar aktif hingga proses usulan selesai.';
-                deleteForm.action = @json(route('kendaraan.destroy', ['kendaraan' => '__ID__'])).replace('__ID__', id);
-                deleteModal.classList.remove('hidden');
-                deleteModal.classList.add('flex');
-            });
-        });
-        if (deleteForm) {
-            deleteForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const res = await fetch(deleteForm.action, { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken } });
-                const data = await res.json();
-                if (data.success) {
-                    window.location.reload();
-                } else {
-                    alert(data.message || 'Gagal mengajukan usulan penghapusan.');
-                }
-            });
-        }
-
-        {{-- Mutasi pemegang handling --}}
-        const mutasiStoreUrl = @json(route('kendaraan.mutasi-pemegang.store', ['kendaraan' => '__ID__']));
-        const mutasiModal = document.getElementById('mutasi-modal');
-        const mutasiForm = document.getElementById('mutasi-form');
-
-        function openMutasiKendaraan(id) {
-            const row = document.querySelector(`[data-mutasi-pemegang="${id}"]`);
-            const plat = row.dataset.mutasiPlat || '';
-            document.getElementById('mutasi-kendaraan-id').value = id;
-            document.getElementById('mutasi-kendaraan-name').textContent = (row.dataset.mutasiNama || 'Kendaraan') + (plat ? ' — ' + plat : '');
-            document.getElementById('mutasi-pemegang-lama').textContent = row.dataset.mutasiPemegangLama || 'Belum ada pemegang';
-            document.getElementById('mutasi-pegawai-baru').value = '';
-            document.getElementById('mutasi-tanggal').value = new Date().toISOString().slice(0, 10);
-            document.getElementById('mutasi-nomor-surat').value = '';
-            document.getElementById('mutasi-keterangan').value = '';
-            mutasiForm.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
-            mutasiForm.action = mutasiStoreUrl.replace('__ID__', id);
-            mutasiModal.classList.remove('hidden');
-            mutasiModal.classList.add('flex');
-            document.body.classList.add('overflow-hidden');
-        }
-        function closeMutasiPemegang() {
-            mutasiModal.classList.add('hidden');
-            mutasiModal.classList.remove('flex');
-            document.body.classList.remove('overflow-hidden');
-        }
-        if (mutasiModal) {
-            mutasiModal.querySelectorAll('[data-mutasi-close]').forEach(el => el.addEventListener('click', closeMutasiPemegang));
-        }
-        if (mutasiForm) {
-            mutasiForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const submit = mutasiForm.querySelector('button[type="submit"]');
-                const original = submit.textContent;
-                submit.textContent = 'Menyimpan...';
-                submit.disabled = true;
-                const body = new FormData(mutasiForm);
-                try {
-                    const res = await fetch(mutasiForm.action, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken }, body });
-                    if (res.status === 422) {
-                        const data = await res.json();
-                        const err = mutasiForm.querySelector('[data-error-for="id_pegawai_baru"]');
-                        if (err) {
-                            err.textContent = (data.errors && data.errors.id_pegawai_baru) ? data.errors.id_pegawai_baru[0] : 'Pilih pemegang baru yang valid.';
-                            err.classList.remove('hidden');
-                        }
-                        submit.textContent = original;
-                        submit.disabled = false;
-                        return;
-                    }
-                    if (res.ok) {
-                        window.location.reload();
-                    } else {
-                        alert('Terjadi kesalahan. Coba lagi.');
-                        submit.textContent = original;
-                        submit.disabled = false;
-                    }
-                } catch (err) {
-                    alert('Koneksi bermasalah. Coba lagi.');
-                    submit.textContent = original;
-                    submit.disabled = false;
-                }
-            });
-        }
-
-        {{-- Berkas modal sukses mutasi --}}
-        const berkasModal = document.getElementById('berkas-modal');
-        if (berkasModal) {
-            berkasModal.querySelectorAll('[data-modal-close]').forEach(el => el.addEventListener('click', () => {
-                berkasModal.classList.add('hidden');
-                berkasModal.classList.remove('flex');
-                document.body.classList.remove('overflow-hidden');
-            }));
-            berkasModal.classList.remove('hidden');
-            berkasModal.classList.add('flex');
-            document.body.classList.add('overflow-hidden');
-        }
-    </script>
-    @endpush
-
-    @if ($isAdminAset)
         @push('modals')
-            @include('kendaraan._edit-modal')
-
-            {{-- MODAL MUTASI PEMEGANG (body level, luar kontainer overflow main) --}}
-            <div id="mutasi-modal" class="fixed inset-0 z-50 hidden items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-xs">
-                <div class="fixed inset-0" data-mutasi-close></div>
-                <div class="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl">
-                    <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
-                        <div>
-                            <h3 class="text-lg font-semibold text-slate-900">Mutasi Pemegang Kendaraan</h3>
-                            <p class="text-sm text-slate-500">Serah terima kendaraan ke pegawai lain</p>
-                        </div>
-                        <button type="button" data-mutasi-close class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600">
-                            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                        </button>
-                    </div>
-                    <form id="mutasi-form" method="POST" class="space-y-4 px-6 py-6">
-                        @csrf
-                        <input type="hidden" id="mutasi-kendaraan-id" name="id_kendaraan" value="">
-                        <div class="space-y-1.5">
-                            <label class="block text-sm font-medium text-slate-700">Kendaraan</label>
-                            <div id="mutasi-kendaraan-name" class="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-sm font-medium text-slate-800"></div>
-                        </div>
-                        <div class="space-y-1.5">
-                            <label class="block text-sm font-medium text-slate-700">Pemegang Lama</label>
-                            <div class="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-sm text-slate-600">
-                                <span id="mutasi-pemegang-lama" class="font-medium text-slate-800"></span>
-                                <span class="text-[11px] italic text-slate-400">Diubah melalui formulir ini</span>
-                            </div>
-                        </div>
-                        <div class="space-y-1.5">
-                            <label for="mutasi-pegawai-baru" class="block text-sm font-medium text-slate-700">Pemegang Baru <span class="text-red-500">*</span></label>
-                            <select id="mutasi-pegawai-baru" name="id_pegawai_baru" required class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 transition">
-                                <option value="">-- Pilih Pegawai --</option>
-                                @foreach ($pegawais as $p)
-                                    <option value="{{ $p->id_pegawai }}" @selected(old('id_pegawai_baru') == $p->id_pegawai)>{{ $p->nama_pegawai }}@if($p->nip) ({{ $p->nip }})@endif</option>
-                                @endforeach
-                            </select>
-                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_pegawai_baru"></p>
-                        </div>
-                        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <div class="space-y-1.5">
-                                <label for="mutasi-tanggal" class="block text-sm font-medium text-slate-700">Tanggal Mutasi</label>
-                                <input type="date" id="mutasi-tanggal" name="tanggal_mutasi" value="{{ old('tanggal_mutasi', now()->format('Y-m-d')) }}" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 transition">
-                            </div>
-                            <div class="space-y-1.5">
-                                <label for="mutasi-nomor-surat" class="block text-sm font-medium text-slate-700">Nomor Surat <span class="text-[11px] font-normal text-slate-400">(opsional)</span></label>
-                                <input type="text" id="mutasi-nomor-surat" name="nomor_surat" maxlength="150" value="{{ old('nomor_surat') }}" placeholder="cth. /442/BKD/2026" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 transition">
-                            </div>
-                        </div>
-                        <div class="space-y-1.5">
-                            <label for="mutasi-keterangan" class="block text-sm font-medium text-slate-700">Alasan / Catatan</label>
-                            <textarea id="mutasi-keterangan" name="keterangan" rows="3" maxlength="1000" placeholder="cth. Serah terima karena rotasi jabatan" class="block w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-400 transition">{{ old('keterangan') }}</textarea>
-                        </div>
-                        <div class="flex items-center justify-end gap-2 pt-2">
-                            <button type="button" data-mutasi-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50">Batal</button>
-                            <button type="submit" class="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-sky-700">
-                                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 4v12m0 0l4-4m-4 4l-4-4"/></svg>
-                                Simpan Mutasi
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        @endpush
-
-        @if ($berkasId = session('mutasi_kendaraan_id'))
-        @push('modals')
-            {{-- MODAL SUKSES UNDUH DOKUMEN MUTASI (body level) --}}
-            <div id="berkas-modal" class="fixed inset-0 z-50 hidden items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-xs">
-                <div class="fixed inset-0" data-modal-close></div>
-                <div class="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-                    <div class="flex flex-col items-center text-center">
-                        <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
-                            <svg class="h-6 w-6 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                        </div>
-                        <h3 class="text-lg font-semibold text-slate-900">Mutasi Kendaraan Berhasil</h3>
-                        <p class="mt-1 text-sm text-slate-500">Unduh dokumen untuk disahkan dan ditandatangani.</p>
-                        <div class="mt-4 w-full space-y-2">
-                            <a href="{{ route('kendaraan.sppkd.download', $berkasId) }}" target="_blank"
-                               class="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700">
-                                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 7l-4-4-4 4M12 3v13"/></svg>
-                                Unduh Dokumen SPPKD (.docx)
-                            </a>
-                            <a href="{{ route('kendaraan.bast.download', $berkasId) }}" target="_blank"
-                               class="flex items-center justify-center gap-2 rounded-xl bg-disbun-700 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-disbun-800">
-                                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 7l-4-4-4 4M12 3v13"/></svg>
-                                Unduh BAST Kendaraan (.docx)
-                            </a>
-                        </div>
-                        <button data-modal-close class="mt-5 rounded-xl bg-slate-100 px-5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">Selesai</button>
-                    </div>
-                </div>
-            </div>
+            @include('kendaraan.partials.modal-kendaraan')
+            @include('kendaraan.partials.modal-import')
+            @include('kendaraan.partials.modal-mutasi')
+            @include('kendaraan.partials.modal-berkas-mutasi')
         @endpush
     @endif
+
+    @if ($isAdminAset || $isAdminUpt)
+        @push('modals')
+            @include('kendaraan.partials.modal-penempatan')
+            @include('kendaraan.partials.modal-finalisasi')
+        @endpush
     @endif
+
+    @include('kendaraan.partials.scripts-index')
 @endsection

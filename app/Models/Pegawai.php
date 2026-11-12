@@ -20,8 +20,6 @@ class Pegawai extends Model
 
     protected $fillable = ['nip', 'nama_pegawai', 'jabatan', 'id_skpd', 'id_ruangan'];
 
-    public $timestamps = false;
-
     public function skpd()
     {
         return $this->belongsTo(Skpd::class, 'id_skpd');

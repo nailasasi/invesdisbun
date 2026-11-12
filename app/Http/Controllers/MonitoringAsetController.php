@@ -5,19 +5,26 @@ namespace App\Http\Controllers;
 use App\Models\Aset;
 use App\Models\UsulanPenghapusan;
 use App\Services\AsetScope;
+use App\Services\MasaPakaiAset;
+use App\Services\MonitoringAsetExporter;
+use App\Services\PeriodeSensus;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Style\Alignment;
-use PhpOffice\PhpSpreadsheet\Style\Fill;
-use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use Illuminate\Support\Facades\Log;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class MonitoringAsetController extends Controller
 {
-    public function __construct(private readonly AsetScope $scope)
-    {
+    private readonly MonitoringAsetExporter $exporter;
+
+    public function __construct(
+        private readonly AsetScope $scope,
+        private readonly MasaPakaiAset $masaPakai,
+        ?MonitoringAsetExporter $exporter = null
+    ) {
+        $this->exporter = $exporter ?? app(MonitoringAsetExporter::class);
     }
 
     /**
@@ -25,121 +32,189 @@ class MonitoringAsetController extends Controller
      */
     public function index(Request $request)
     {
-        $query = $this->applyFilters($request);
+        $periodeAktif = PeriodeSensus::periodeAktif();
+        $periodeDipilih = PeriodeSensus::normalisasi($request->query('periode', $periodeAktif));
 
-        [$totalNilaiBuku, $asetHabisCount, $asetKritisCount] = $this->ringkasan((clone $query)->get());
+        $query = $this->applyFilters($request, $periodeDipilih);
+
+        $queryKpi = (clone $query)
+            ->setEagerLoads([])
+            ->select([
+                'id_aset',
+                'tanggal_pengadaan',
+                'tanggal_habis_pakai',
+                'nilai_perolehan',
+            ]);
+
+        [$totalNilaiBuku, $asetHabisCount, $asetKritisCount] = $this->ringkasan($queryKpi->get());
 
         $tahunList = Aset::query()
-            ->selectRaw('YEAR(tanggal_perolehan) as tahun')
-            ->whereNotNull('tanggal_perolehan')
+            ->selectRaw('YEAR(tanggal_pengadaan) as tahun')
+            ->whereNotNull('tanggal_pengadaan')
+            ->where(fn ($q) => $q->whereNull('status_aset')->orWhere('status_aset', '!=', 'dihapuskan'))
+            ->tap(fn ($q) => $this->terapkanScopeMonitoring($q))
             ->distinct()
             ->orderByDesc('tahun')
             ->pluck('tahun');
+
+        $daftarPeriode = PeriodeSensus::daftarPeriode(1, 2);
+        if (! in_array($periodeDipilih, $daftarPeriode, true)) {
+            array_unshift($daftarPeriode, $periodeDipilih);
+        }
 
         $pendingAsetIds = UsulanPenghapusan::where('status_usulan', 'diajukan')->pluck('id_aset');
 
         $asetList = $query->orderByDesc('id_aset')->paginate(10)->withQueryString();
         $asetList->setCollection($asetList->getCollection()->map(
-            fn (Aset $a) => $this->toRow($a, $pendingAsetIds)
+            fn (Aset $a) => $this->toRow($a, $pendingAsetIds, $periodeDipilih)
         ));
 
         return view('monitoring-aset.index', compact(
-            'asetList', 'totalNilaiBuku', 'asetHabisCount', 'asetKritisCount', 'tahunList'
+            'asetList', 'totalNilaiBuku', 'asetHabisCount', 'asetKritisCount', 'tahunList',
+            'periodeAktif', 'periodeDipilih', 'daftarPeriode'
         ));
     }
 
     /**
-     * Ekspor rekap neraca aset (.xlsx) dengan filter yang sedang aktif.
+     * Ekspor rekap inventaris aset (.xlsx) dengan filter yang sedang aktif.
+     * Mendukung 4 jenis laporan:
+     * - seluruh: Rekap Seluruh Aset
+     * - per_skpd: Rekap Aset per SKPD Pemegang
+     * - per_pemegang: Rekap Aset per Pemegang
+     * - per_ruangan: Rekap Aset per Ruangan
      */
     public function export(Request $request)
     {
-        $rows = $this->applyFilters($request)
-            ->orderByDesc('id_aset')
-            ->get()
-            ->map(fn (Aset $a) => $this->toRow($a, collect()));
+        $periodeAktif = PeriodeSensus::periodeAktif();
+        $periodeDipilih = $request->filled('periode')
+            ? PeriodeSensus::normalisasi($request->query('periode'))
+            : $periodeAktif;
 
-        $spreadsheet = new Spreadsheet();
-        $sheet = $spreadsheet->getActiveSheet();
-        $sheet->setTitle('Monitoring Aset');
+        // Tentukan jenis laporan (dengan pemetaan backwards-compatibility)
+        $jenisLaporan = trim((string) $request->query('jenis_laporan', 'seluruh'));
+        $bentukRekap = trim((string) $request->query('bentuk_rekap'));
 
-        $headers = [
-            'No', 'Nama Barang', 'No. Kartu Barang', 'Lokasi / Pemegang',
-            'Nilai Perolehan', 'Nilai Buku Terkini', 'Tanggal Pengadaan',
-            'Masa Pakai', 'Kondisi',
+        if ($bentukRekap === 'per_pengguna') {
+            $jenisLaporan = 'per_skpd';
+        } elseif ($bentukRekap === 'melekat_ruangan') {
+            $jenisLaporan = 'per_ruangan';
+        }
+
+        // Susun query dengan filter aktif dan AsetScope
+        $query = $this->applyFilters($request, $periodeDipilih);
+
+        // Eager load lengkap untuk mencegah N+1 query
+        $with = [
+            'barang',
+            'kendaraan.platAktif',
+            'pemegang' => fn ($q) => $q->where('status', 'aktif')->with('pegawai.skpd'),
+            'penempatanAktif.ruangan.skpd',
+            'sensus' => fn ($q) => $q->where('periode', $periodeDipilih),
         ];
-        $sheet->fromArray($headers, null, 'A1');
-        $sheet->getStyle('A1:I1')->applyFromArray([
-            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '047857']],
-            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
-        ]);
 
-        $rowNum = 2;
-        foreach ($rows as $i => $r) {
-            $lokasiPemegang = $r->lokasi ?: ($r->pemegang ?: '-');
-            $sheet->fromArray([
-                $i + 1,
-                (string) ($r->nama_barang ?? '-'),
-                (string) ($r->nomor_kartu ?? '-'),
-                $lokasiPemegang,
-                $r->punya_nilai ? $r->nilai_perolehan : '-',
-                $r->punya_nilai ? $r->nilai_buku : '-',
-                $r->tanggal_pengadaan ? Carbon::parse($r->tanggal_pengadaan)->format('d M Y') : '-',
-                $this->masaText($r),
-                (string) ($r->kondisi ?? '-'),
-            ], null, "A{$rowNum}");
+        $asetList = $query
+            ->with($with)
+            ->orderByDesc('id_aset')
+            ->get();
 
-            if ($r->punya_nilai) {
-                $sheet->getStyle("E{$rowNum}:F{$rowNum}")->getNumberFormat()
-                    ->setFormatCode('"Rp "#,##0');
-            }
-            $rowNum++;
-        }
+        $filterInfo = [
+            'search' => trim((string) $request->query('search')),
+            'tahun' => (int) $request->query('tahun') ?: null,
+            'status' => $request->query('status'),
+            'jenis_aset' => trim((string) $request->query('jenis_aset')),
+            'penempatan' => trim((string) $request->query('penempatan')),
+        ];
 
-        foreach (['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'] as $col) {
-            $sheet->getColumnDimension($col)->setAutoSize(true);
-        }
+        $spreadsheet = $this->exporter->generate($asetList, $jenisLaporan, $periodeDipilih, $filterInfo);
 
+        $slugJenis = match ($jenisLaporan) {
+            MonitoringAsetExporter::JENIS_PER_SKPD, 'skpd' => 'rekap-aset-per-skpd',
+            MonitoringAsetExporter::JENIS_PER_PEMEGANG, 'pemegang', 'per_pengguna' => 'rekap-aset-per-pemegang',
+            MonitoringAsetExporter::JENIS_PER_RUANGAN, 'ruangan', 'melekat_ruangan' => 'rekap-aset-per-ruangan',
+            default => 'rekap-seluruh-aset',
+        };
+
+        $filename = sprintf('%s-%s.xlsx', $slugJenis, now()->format('Ymd'));
         $writer = new Xlsx($spreadsheet);
 
         return response()->streamDownload(
             static fn () => $writer->save('php://output'),
-            'rekap-monitoring-aset-' . now()->format('Ymd') . '.xlsx'
+            $filename,
+            ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
         );
+    }
+
+    /**
+     * Endpoint kompatibilitas mundur: Ekspor aset per pengguna.
+     */
+    public function exportPerPengguna(Request $request)
+    {
+        $request->merge(['jenis_laporan' => MonitoringAsetExporter::JENIS_PER_SKPD]);
+
+        return $this->export($request);
+    }
+
+    /**
+     * Endpoint kompatibilitas mundur: Ekspor aset melekat ruangan.
+     */
+    private function exportMelekatRuangan(Request $request)
+    {
+        $request->merge(['jenis_laporan' => MonitoringAsetExporter::JENIS_PER_RUANGAN]);
+
+        return $this->export($request);
     }
 
     /**
      * Query dasar = seluruh aset yang belum "dihapuskan", dihiasi filter.
      */
-    private function applyFilters(Request $request)
+    private function applyFilters(Request $request, ?string $periode = null)
     {
         $search = trim((string) $request->query('search'));
         $tahun = (int) $request->query('tahun');
         $status = $request->query('status');
+        $status = is_string($status) ? trim($status) : null;
+        $jenisAset = trim((string) $request->query('jenis_aset'));
+        $penempatan = trim((string) $request->query('penempatan'));
+
+        $with = ['barang', 'kendaraan.platAktif', 'penempatanAktif.ruangan.lokasi', 'pemegangSaatIni.pegawai', 'skpd', 'lokasi'];
+        if ($periode) {
+            $with['sensus'] = fn ($q) => $q->where('periode', $periode);
+        }
 
         return Aset::query()
-            ->with(['barang', 'kendaraan', 'penempatanAktif.ruangan', 'pemegangSaatIni.pegawai', 'skpd', 'lokasi'])
+            ->with($with)
             ->where(fn ($q) => $q->whereNull('status_aset')->orWhere('status_aset', '!=', 'dihapuskan'))
-            ->tap(fn ($q) => $this->scope->terapkan($q))
+            ->tap(fn ($q) => $this->terapkanScopeMonitoring($q))
             ->when($search !== '', fn ($q) => $q->where(function ($q2) use ($search) {
-                $q2->whereHas('barang', fn ($b) => $b->where('nama_barang', 'like', "%{$search}%"))
-                    ->orWhere('nomor_kartu_barang', 'like', "%{$search}%");
+                $q2->where('nomor_kartu_barang', 'like', "%{$search}%")
+                    ->orWhere('merk', 'like', "%{$search}%")
+                    ->orWhereHas('barang', function ($b) use ($search) {
+                        $b->where('nama_barang', 'like', "%{$search}%")
+                            ->orWhere('kode_barang', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('pemegangSaatIni.pegawai', function ($p) use ($search) {
+                        $p->where('nama_pegawai', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('kendaraan', function ($k) use ($search) {
+                        $k->where('nama_kendaraan', 'like', "%{$search}%")
+                            ->orWhere('merk', 'like', "%{$search}%")
+                            ->orWhere('tipe', 'like', "%{$search}%")
+                            ->orWhere('jenis_kendaraan', 'like', "%{$search}%")
+                            ->orWhere('pemegang', 'like', "%{$search}%")
+                            ->orWhereHas('platAktif', fn ($p) => $p->where('nomor_plat', 'like', "%{$search}%"));
+                    });
             }))
-            ->when($tahun, fn ($q) => $q->whereYear('tanggal_perolehan', $tahun))
-            ->when($status === 'habis', fn ($q) => $q
-                ->whereNotNull('tanggal_habis_pakai')
-                ->whereDate('tanggal_habis_pakai', '<=', Carbon::today()->toDateString()))
-            ->when($status === 'kritis', fn ($q) => $q
-                ->whereNotNull('tanggal_habis_pakai')
-                ->whereDate('tanggal_habis_pakai', '>=', Carbon::today()->addDays(1)->toDateString())
-                ->whereDate('tanggal_habis_pakai', '<', Carbon::today()->addDays(30)->toDateString()))
-            ->when($status === 'normal', fn ($q) => $q->where(fn ($q2) => $q2
-                ->whereNull('tanggal_habis_pakai')
-                ->orWhereDate('tanggal_habis_pakai', '>=', Carbon::today()->addDays(30)->toDateString())));
+            ->when($jenisAset === 'barang', fn ($q) => $q->where(fn ($q2) => $q2->whereNull('is_kendaraan')->orWhere('is_kendaraan', false)))
+            ->when($jenisAset === 'kendaraan', fn ($q) => $q->where('is_kendaraan', true))
+            ->when($penempatan === 'memiliki_pemegang', fn ($q) => $q->whereHas('pemegang', fn ($pm) => $pm->where('status', 'aktif')))
+            ->when($penempatan === 'melekat_ruangan', fn ($q) => $q->whereHas('penempatanAktif'))
+            ->when($tahun, fn ($q) => $q->whereYear('tanggal_pengadaan', $tahun))
+            ->tap(fn ($q) => $this->masaPakai->terapkanFilterStatus($q, $status));
     }
 
     /**
-     * Agregasi 3 KPI sebagai ringkasan global (tidak terpengaruh filter).
+     * Agregasi 3 KPI dari kumpulan data yang sama dengan tabel/filter.
+     * Status bersifat mutually exclusive agar satu aset tidak dihitung ganda.
      *
      * @return array{float, int, int}
      */
@@ -150,14 +225,17 @@ class MonitoringAsetController extends Controller
         $kritis = 0;
 
         foreach ($asetList as $aset) {
-            $calc = $this->hitungDepresiasi($aset);
-            $total += $calc['nilai_buku'];
+            $calc = $this->masaPakai->evaluasi($aset);
 
-            if ($aset->nilai_perolehan !== null && $calc['nilai_buku'] <= 0) {
-                $habis++;
+            // Nilai buku yang tidak dapat ditentukan tidak boleh dihitung
+            // sebagai Rp0 pada total KPI.
+            if ($calc['nilai_buku'] !== null) {
+                $total += $calc['nilai_buku'];
             }
 
-            if ($calc['sisa_hari'] !== null && $calc['sisa_hari'] < 30) {
+            if ($calc['masa_status'] === 'habis') {
+                $habis++;
+            } elseif ($calc['masa_status'] === 'kritis') {
                 $kritis++;
             }
         }
@@ -166,86 +244,132 @@ class MonitoringAsetController extends Controller
     }
 
     /**
-     * Penyusutan garis lurus (straight-line) berbasis tanggal perolehan &
-     * tanggal habis pakai. Nilai buku = nilai_perolehan x sisa proporsi umur.
+     * Dekorasi aset menjadi baris tampilan + metadata sensus aset.
      */
-    private function hitungDepresiasi(Aset $aset): array
+    private function toRow(Aset $aset, Collection $pendingAsetIds, string $periodeDipilih = ''): object
     {
-        $buku = (float) ($aset->nilai_perolehan ?? 0);
-        $perolehan = $aset->tanggal_perolehan ? Carbon::parse($aset->tanggal_perolehan) : null;
-        $habis = $aset->tanggal_habis_pakai ? Carbon::parse($aset->tanggal_habis_pakai)->startOfDay() : null;
-
-        $sisaHari = null;
-        if ($habis) {
-            $sisaHari = (int) Carbon::today()->startOfDay()->diffInDays($habis, false);
-        }
-
-        if ($perolehan && $habis && $habis->greaterThan($perolehan)) {
-            $totalHari = max(1, (int) $perolehan->startOfDay()->diffInDays($habis));
-            $hariTerpakai = max(0, (int) $perolehan->startOfDay()->diffInDays(Carbon::today()->startOfDay()));
-            $rasio = min(1, $hariTerpakai / $totalHari);
-            $buku = round($buku * (1 - $rasio), 2);
-            if ($buku < 0) {
-                $buku = 0.0;
-            }
-        }
-
-        if ($sisaHari === null) {
-            $masa = 'nan';
-        } elseif ($sisaHari < 0) {
-            $masa = 'habis';
-        } elseif ($sisaHari < 30) {
-            $masa = 'kritis';
-        } else {
-            $masa = 'normal';
-        }
-
-        return ['nilai_buku' => $buku, 'sisa_hari' => $sisaHari, 'masa_status' => $masa];
-    }
-
-    /**
-     * Dekorasi aset menjadi baris tampilan + metadata untuk aksi "Usulkan Hapus".
-     */
-    private function toRow(Aset $aset, Collection $pendingAsetIds): object
-    {
-        $calc = $this->hitungDepresiasi($aset);
+        $calc = $this->masaPakai->evaluasi($aset);
         $punyaNilai = $aset->nilai_perolehan !== null;
 
         $dalamAntrean = $aset->status_aset === 'diusulkan_hapus' || $pendingAsetIds->contains($aset->id_aset);
 
         $usulanAlasan = match (true) {
-            $punyaNilai && $calc['nilai_buku'] <= 0, $calc['masa_status'] === 'habis' => 'Masa Pakai Habis',
+            $calc['masa_status'] === 'habis' => 'Masa Pakai Habis',
             in_array($aset->kondisi, ['Rusak Berat', 'Rusak', 'Rusak Berat / Tidak Layak'], true) => 'Rusak Berat',
             default => 'Lainnya',
         };
+
+        if ($periodeDipilih === '') {
+            $periodeDipilih = PeriodeSensus::periodeAktif();
+        }
+
+        $sensus = $aset->relationLoaded('sensus')
+            ? $aset->sensus->first()
+            : $aset->sensusPeriode($periodeDipilih)->first();
+
+        $hasilSensus = $sensus?->hasil_sensus ?? 'Belum Disensus';
+        $sudahDisensus = $sensus !== null;
+
+        // Fallback pemegang: relasi pemegang aktif -> nama_pegawai, atau kolom kendaraan.pemegang
+        $pemegangNama = $aset->pemegangSaatIni?->pegawai?->nama_pegawai;
+        if (! $pemegangNama && $aset->is_kendaraan) {
+            $pemegangNama = $aset->kendaraan?->pemegang;
+        }
+
+        // Nomor polisi kendaraan
+        $nomorPlat = $aset->is_kendaraan ? $aset->kendaraan?->platAktif?->nomor_plat : null;
+
+        // Status penempatan: berdasarkan keberadaan relasi penempatan aktif dan nilai is_finalized
+        $penempatanAktif = $aset->penempatanAktif;
+        $statusPenempatan = match (true) {
+            ! $penempatanAktif => 'Belum Ditempatkan',
+            (int) ($penempatanAktif->is_finalized ?? 0) === 1 => 'Sudah Difinalisasi',
+            default => 'Belum Difinalisasi',
+        };
+
+        // Lokasi fisik / ruangan: ruangan aktif -> lokasi master -> null
+        $namaRuangan = $penempatanAktif?->ruangan?->nama_ruangan;
+        $namaLokasi = $penempatanAktif?->ruangan?->lokasi?->nama_lokasi ?? $aset->lokasi?->nama_lokasi;
+        $lokasiTampil = $namaRuangan ?? $namaLokasi;
 
         return (object) [
             'id_aset' => $aset->id_aset,
             'id_kendaraan' => $aset->kendaraan?->id_kendaraan,
             'is_kendaraan' => (bool) $aset->is_kendaraan,
-            'nama_barang' => $aset->barang?->nama_barang,
+            'nama_barang' => $aset->kendaraan?->namaTampil() ?? $aset->barang?->nama_barang,
             'nomor_kartu' => $aset->nomor_kartu_barang,
-            'lokasi' => $aset->penempatanAktif?->ruangan?->nama_ruangan,
-            'pemegang' => $aset->pemegangSaatIni?->pegawai?->nama_pegawai,
+            'lokasi' => $lokasiTampil,
+            'nama_ruangan' => $namaRuangan,
+            'nama_lokasi' => $namaLokasi,
+            'status_penempatan' => $statusPenempatan,
+            'pemegang' => $pemegangNama,
+            'nomor_plat' => $nomorPlat,
             'kondisi' => $aset->kondisi,
-            'nilai_perolehan' => (float) ($aset->nilai_perolehan ?? 0),
+            'nilai_perolehan' => $punyaNilai ? (float) $aset->nilai_perolehan : null,
             'punya_nilai' => $punyaNilai,
             'nilai_buku' => $calc['nilai_buku'],
-            'tanggal_pengadaan' => $aset->tanggal_pengadaan ?? $aset->tanggal_perolehan,
+            'tanggal_pengadaan' => $aset->tanggal_pengadaan,
             'sisa_hari' => $calc['sisa_hari'],
             'masa_status' => $calc['masa_status'],
-            'bisa_usul' => $aset->status_aset === 'aktif' && ! $dalamAntrean,
+            'hasil_sensus' => $hasilSensus,
+            'sudah_disensus' => $sudahDisensus,
+            'periode_sensus' => $periodeDipilih,
+            'catatan_sensus' => $sensus?->catatan ?? '',
+            'tanggal_sensus' => $sensus?->tanggal_sensus ? Carbon::parse($sensus->tanggal_sensus)->format('Y-m-d') : date('Y-m-d'),
+            'bisa_usul' => $this->scope->isAdminAset()
+                && $aset->status_aset === 'aktif'
+                && ! $dalamAntrean,
             'dalam_antrean' => $dalamAntrean,
             'usulan_alasan' => $usulanAlasan,
         ];
     }
 
+    /**
+     * Scope hak akses khusus Monitoring Aset.
+     *
+     * - Admin Aset: cakupan penuh (seluruh aset dan kendaraan di seluruh dinas/unit).
+     * - Admin UPT:
+     *   1. Aset yang secara fisik berada di lokasi UPT (aset.id_lokasi IN lokasi UPT).
+     *   2. ATAU aset yang belum memiliki lokasi fisik (aset.id_lokasi IS NULL), tetapi
+     *      terbukti sah milik SKPD UPT ini (aset.id_skpd = skpdId UPT).
+     *   Aset pool pusat (id_lokasi NULL & id_skpd NULL) maupun aset milik UPT lain
+     *   TIDAK AKAN PERNAH bocor ke Admin UPT.
+     */
+    private function terapkanScopeMonitoring(Builder $query): Builder
+    {
+        if ($this->scope->isAdminUpt()) {
+            $idLokasi = $this->scope->idLokasi() ?: [0];
+            $idSkpd = $this->scope->skpdId();
+
+            return $query->where(function ($q) use ($idLokasi, $idSkpd) {
+                // Kuadran I & IV: Berada di lokasi fisik UPT (termasuk ruang bersama)
+                $q->whereIn('aset.id_lokasi', $idLokasi);
+
+                // Kuadran II: Belum memiliki lokasi fisik, tetapi SKPD terbukti sah milik UPT ini
+                if ($idSkpd) {
+                    $q->orWhere(function ($q2) use ($idSkpd) {
+                        $q2->whereNull('aset.id_lokasi')
+                            ->where('aset.id_skpd', $idSkpd);
+                    });
+                }
+            });
+        }
+
+        return $this->scope->terapkan($query);
+    }
+
     private function masaText(object $row): string
     {
+        if ($row->masa_status === 'habis') {
+            return $row->sisa_hari !== null && $row->sisa_hari > 0
+                ? 'Nilai buku habis'
+                : 'Masa pakai habis';
+        }
+
         if ($row->sisa_hari === null) {
             return 'Tidak ditentukan';
         }
 
-        return $row->sisa_hari < 0 ? 'Masa pakai habis' : sprintf('%d hari lagi', $row->sisa_hari);
+        return sprintf('%d hari lagi', $row->sisa_hari);
     }
 }

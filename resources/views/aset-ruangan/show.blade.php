@@ -22,25 +22,26 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-2.5">
-            @if ($isAdminAset)
-            <a href="{{ route('aset-ruangan.label.download', $ruangan->id_ruangan) }}"
+            @if ($bolehCetakDokumen)
+            {{-- Cetak Label Ruangan (Admin Aset & Admin UPT) --}}
+            <button type="button" id="btn-label-scope"
                class="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-1.5 text-xs font-bold text-amber-700 shadow-2xs transition hover:bg-amber-100"
-               title="Unduh Semua Label Aset di Ruangan Ini">
-                <svg class="h-3.5 w-3.5 text-amber-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-                <span>Cetak Semua Label</span>
-            </a>
+               title="Cetak label aset resmi dan/atau inventaris lokal di ruangan ini">
+                <svg class="h-3.5 w-3.5 text-amber-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.01"/></svg>
+                <span>Cetak Label</span>
+            </button>
 
-            {{-- Cetak KIR (Biru / Sky Pastel) --}}
-            <a href="{{ route('aset-ruangan.kir.download', $ruangan->id_ruangan) }}"
-               target="_blank"
+            {{-- Cetak KIR (Admin Aset & Admin UPT) --}}
+            <button type="button" id="btn-kir-scope"
                class="inline-flex items-center gap-1.5 rounded-xl border border-sky-200 bg-sky-50/80 px-3 py-1.5 text-xs font-bold text-sky-700 shadow-2xs transition hover:bg-sky-100"
                title="Unduh Kartu Inventaris Ruangan (KIR)">
                 <svg class="h-3.5 w-3.5 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
                 <span>Cetak KIR</span>
-            </a>
+            </button>
+            @endif
 
-            {{-- Pasang Aset (existing master, tanpa pemegang) --}}
-            @if ($asetPasang->isNotEmpty())
+            {{-- Pasang Aset (Admin Aset only: existing master, tanpa pemegang) --}}
+            @if ($isAdminAset && $adaKandidatPasang)
             <button type="button" id="btn-pasang"
                     class="inline-flex items-center gap-1.5 rounded-xl bg-disbun-700 px-3.5 py-2 text-xs font-bold text-white shadow-2xs transition hover:bg-disbun-800"
                     title="Pasang master aset yang sudah ada ke ruangan ini">
@@ -48,15 +49,15 @@
                 <span>Pasang Aset</span>
             </button>
             @endif
-            @endif
         </div>
     </div>
 
     <x-alert type="success" />
     <x-alert type="error" />
 
+    {{-- Card Ringkasan Informasi Ruangan --}}
     <x-card class="mb-5">
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <div>
                 <p class="text-xs font-medium uppercase tracking-wider text-slate-400">Lantai</p>
                 <p class="mt-1 text-sm font-semibold text-slate-800">{{ $ruangan->lantai ?? '-' }}</p>
@@ -66,276 +67,526 @@
                 <p class="mt-1 text-sm font-semibold text-slate-800">{{ $ruangan->skpd?->nama_skpd ?? '-' }}</p>
             </div>
             <div>
-                <p class="text-xs font-medium uppercase tracking-wider text-slate-400">Jumlah Aset</p>
-                <p class="mt-1 text-sm font-semibold text-slate-800">{{ $asetList->count() }} aset</p>
+                <p class="text-xs font-medium uppercase tracking-wider text-slate-400">Barang Melekat</p>
+                <p class="mt-1 text-sm font-semibold text-slate-800">{{ $asetMelekat->count() }} aset</p>
+            </div>
+            <div>
+                <p class="text-xs font-medium uppercase tracking-wider text-slate-400">Dipegang Pegawai</p>
+                <p class="mt-1 text-sm font-semibold text-slate-800">{{ $asetDipegang->count() }} aset</p>
+            </div>
+            <div>
+                <p class="text-xs font-medium uppercase tracking-wider text-slate-400">Inventaris Lokal</p>
+                <p class="mt-1 text-sm font-semibold text-slate-800">{{ $inventarisLokal->count() }} item</p>
             </div>
         </div>
     </x-card>
 
-    <x-card :padding="false">
-        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-6 py-4">
-            <p class="text-sm font-semibold text-slate-700">Daftar Aset</p>
-        </div>
+    {{-- Tabel Barang Melekat pada Ruangan --}}
+    @include('aset-ruangan.partials.tabel-barang-melekat')
 
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-slate-200">
-                <thead class="bg-slate-50">
-                    <tr>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">#</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Nama Barang</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Kartu Barang</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Merk</th>
-                        @if ($isAdminAset)
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Nilai</th>
-                        @endif
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Kondisi</th>
-                        @if ($isAdminAset)
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Pemegang</th>
-                        @endif
-                        @if ($isAdminAset)
-                        <th scope="col" class="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Aksi</th>
-                        @endif
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100 bg-white">
-                    @forelse ($asetList as $i => $aset)
-                        @php
-                            $pemegang = $aset->pemegangSaatIni?->pegawai;
-                            $kondisiColor = match ($aset->kondisi) {
-                                'Baik' => 'bg-disbun-100 text-disbun-800',
-                                'Rusak Ringan' => 'bg-amber-100 text-amber-700',
-                                'Rusak Berat' => 'bg-red-100 text-red-700',
-                                default => 'bg-slate-100 text-slate-600',
-                            };
-                        @endphp
-                        <tr class="transition hover:bg-slate-50">
-                            <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-500">{{ $i + 1 }}</td>
-                            <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">{{ $aset->barang?->nama_barang ?? '-' }}</td>
-                            <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $aset->nomor_kartu_barang ?? '-' }}</td>
-                            <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $aset->merk ?? '-' }}</td>
-                            @if ($isAdminAset)
-                            <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $aset->nilai_perolehan ? 'Rp ' . number_format((float) $aset->nilai_perolehan, 0, ',', '.') : '-' }}</td>
-                            @endif
-                            <td class="whitespace-nowrap px-6 py-4 text-sm">
-                                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {{ $kondisiColor }}">{{ $aset->kondisi ?? '-' }}</span>
-                            </td>
-                            @if ($isAdminAset)
-                            <td class="whitespace-nowrap px-6 py-4 text-sm">
-                                @if ($pemegang)
-                                    <span class="font-medium text-slate-700">{{ $pemegang->nama_pegawai }}</span>
-                                @else   
-                                    <span class="text-slate-400">-</span>
-                                @endif
-                            </td>
-                            @endif
-                            @if ($isAdminAset)
-                            <td class="whitespace-nowrap px-3 py-4 text-sm">
-                                <div class="inline-flex items-center gap-1 rounded-2xl border border-slate-200/70 bg-slate-50/60 p-1 shadow-2xs">
-                                <a href="{{ route('aset-barang.cetak.label.single', $aset->id_aset) }}" target="_blank" title="Cetak Label" class="flex h-7 w-7 items-center justify-center rounded-xl bg-amber-50 text-amber-600 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400">
-                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.01"/></svg>
-                                </a>
-                                <button type="button" data-detach-target="{{ $aset->id_aset }}" data-detach-name="{{ $aset->barang?->nama_barang ?? $aset->nomor_kartu_barang }}" title="Keluarkan" class="flex h-7 w-7 items-center justify-center rounded-xl bg-red-50 text-red-600 transition hover:bg-red-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
-                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                                </button>
-                                </div>
-                            </td>
-                            @endif
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="{{ $isAdminAset ? 8 : 5 }}" class="px-6 py-12 text-center text-sm text-slate-400">Belum ada aset di ruangan ini.</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
-    </x-card>
+    {{-- Tabel Inventaris Lokal Ruangan --}}
+    @include('aset-ruangan.partials.tabel-inventaris-lokal')
 
-    @if ($isAdminAset)
-    {{-- Modal Pasang Aset ke Ruangan.
-         PENEMPATAN AWAL: memasang master aset yang sudah ada dan belum
-         berpemegang. Tidak membuat record `aset` baru, tidak membuat
-         pemegang, dan tidak mencatat mutasi. --}}
-    <div id="pasang-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
-        <div class="fixed inset-0" data-pasang-close></div>
-        <div class="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl">
-            <div class="flex items-start justify-between border-b border-slate-100 px-6 py-4">
-                <div>
-                    <h3 class="text-lg font-semibold text-slate-900">Pasang Aset</h3>
-                    <p class="mt-0.5 text-sm text-slate-500">Pilih master aset tanpa pemegang untuk {{ $ruangan->nama_ruangan }}.</p>
-                </div>
-                <button type="button" data-pasang-close class="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" aria-label="Tutup">
-                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                </button>
-            </div>
+    {{-- Tabel Barang Dipegang Pegawai --}}
+    @include('aset-ruangan.partials.tabel-barang-dipegang')
 
-            <form id="pasang-form" method="POST" autocomplete="off">
-                @csrf
-                <div class="max-h-[70vh] space-y-4 overflow-y-auto px-6 py-6">
-                    <div class="space-y-1.5">
-                        <label for="field-aset-select" class="block text-sm font-medium text-slate-700">Master Aset <span class="text-red-500">*</span></label>
-                        <select id="field-aset-select" required class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                            <option value="">-- Pilih Master Aset --</option>
-                            @foreach ($asetPasang as $kandidat)
-                                <option value="{{ $kandidat->id_aset }}">{{ $kandidat->barang?->nama_barang ?? '-' }} — {{ $kandidat->nomor_kartu_barang }}</option>
-                            @endforeach
-                        </select>
-                        <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_aset"></p>
-                    </div>
-
-                    <div class="space-y-1 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
-                        <p class="font-semibold text-slate-700">Aset dipasang tanpa pemegang.</p>
-                        <p class="mt-1">Pemegang: <span class="font-semibold text-slate-800">- (kosong)</span> · Ruangan: <span class="font-semibold text-slate-800">{{ $ruangan->nama_ruangan }}</span></p>
-                        <p class="mt-1">Aset yang sudah dipegang pegawai tidak bisa dipasang di sini — ruangannya mengikuti pemegang.</p>
-                    </div>
-                </div>
-
-                <div class="flex items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
-                    <button type="button" data-pasang-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
-                    <button type="submit" id="btn-pasang-submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-disbun-700 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-disbun-800">
-                        Pasang
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    {{-- Modal Keluarkan Aset --}}
-    <div id="detach-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
-        <div class="fixed inset-0" data-detach-close></div>
-        <div class="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <div class="flex items-start gap-4">
-                <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-100">
-                    <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                </div>
-                <div class="min-w-0">
-                    <h3 class="text-lg font-semibold text-slate-900">Keluarkan Aset</h3>
-                    <p class="mt-1 text-sm text-slate-500">Keluarkan <span id="detach-name" class="font-medium text-slate-700"></span> dari ruangan ini?</p>
-                </div>
-            </div>
-            <div class="mt-6 flex justify-end gap-2">
-                <button type="button" data-detach-close class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">Batal</button>
-                <form id="detach-form" method="POST" action="">
-                    @csrf
-                    @method('DELETE')
-<button type="submit" class="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700">Keluarkan</button>
-                </form>
-            </div>
-    </div>
-    </div>
+    {{-- Modal-modal --}}
+    @include('aset-ruangan.partials.modal-cetak-label')
+    @include('aset-ruangan.partials.modal-cetak-kir')
+    @include('aset-ruangan.partials.modal-inventaris')
+    @include('aset-ruangan.partials.modal-mutasi-ruangan')
+    @include('aset-ruangan.partials.modal-pasang-aset')
+    @include('aset-ruangan.partials.modal-detach-aset')
 
     @push('scripts')
     <script>
-        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        (function () {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            const loginUrl = @json(route('login'));
 
-        // ---- Pasang Aset ke Ruangan (penempatan awal) ----
-        const pasangModal = document.getElementById('pasang-modal');
-        const pasangForm = document.getElementById('pasang-form');
-        const btnPasang = document.getElementById('btn-pasang');
-        const pasangUrl = @json(route('aset-ruangan.aset.pasang', ['ruangan' => $ruangan->id_ruangan, 'aset' => '__ID__']));
+            function openModal(el) {
+                if (!el) return;
+                el.classList.remove('hidden');
+                el.classList.add('flex');
+                document.body.classList.add('overflow-hidden');
+            }
 
-        function clearPasangErrors() {
-            if (!pasangForm) return;
-            pasangForm.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
-        }
-        function showPasangErrors(errors) {
-            if (!pasangForm) return;
-            pasangForm.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
-            Object.keys(errors || {}).forEach(field => {
-                const err = pasangForm.querySelector('[data-error-for="' + field + '"]');
-                if (err) { err.textContent = errors[field][0]; err.classList.remove('hidden'); }
-            });
-        }
-        function openPasangModal() {
-            if (!pasangModal) return;
-            pasangModal.classList.remove('hidden');
-            pasangModal.classList.add('flex');
-            document.body.classList.add('overflow-hidden');
-            clearPasangErrors();
-            const select = document.getElementById('field-aset-select');
-            if (select) select.value = '';
-        }
-        function closePasangModal() {
-            if (!pasangModal) return;
-            pasangModal.classList.add('hidden');
-            pasangModal.classList.remove('flex');
-            document.body.classList.remove('overflow-hidden');
-            clearPasangErrors();
-        }
-
-        if (btnPasang && pasangModal) {
-            btnPasang.addEventListener('click', openPasangModal);
-            pasangModal.querySelectorAll('[data-pasang-close]').forEach(el => el.addEventListener('click', closePasangModal));
-        }
-
-        if (pasangForm) {
-            pasangForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const submit = document.getElementById('btn-pasang-submit');
-                const original = submit.textContent;
-                const idAset = document.getElementById('field-aset-select').value;
-
-                if (!idAset) {
-                    showPasangErrors({ id_aset: ['Pilih master aset yang akan dipasang.'] });
-                    return;
-                }
-
-                submit.textContent = 'Memasang...';
-                submit.disabled = true;
-                try {
-                    const res = await fetch(pasangUrl.replace('__ID__', idAset), {
-                        method: 'POST',
-                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken },
-                    });
-
-                    if (res.status === 422) {
-                        const data = await res.json().catch(() => ({}));
-                        showPasangErrors(data.errors || {});
-                        submit.textContent = original;
-                        submit.disabled = false;
-                        return;
-                    }
-
-                    const data = await res.json().catch(() => ({}));
-
-                    if (res.ok) {
-                        window.location.reload();
-                        return;
-                    }
-
-                    alert(data.message || 'Gagal memasang aset.');
-                    submit.textContent = original;
-                    submit.disabled = false;
-                } catch (err) {
-                    alert('Koneksi bermasalah. Coba lagi.');
-                    submit.textContent = original;
-                    submit.disabled = false;
-                }
-            });
-        }
-
-        const detachModal = document.getElementById('detach-modal');
-
-        const detachForm = document.getElementById('detach-form');
-        const detachUrl = @json(route('aset-ruangan.aset.detach', ['ruangan' => $ruangan->id_ruangan, 'aset' => '__ID__']));
-        document.querySelectorAll('[data-detach-target]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                detachForm.action = detachUrl.replace('__ID__', btn.dataset.detachTarget);
-                document.getElementById('detach-name').textContent = btn.dataset.detachName;
-                detachModal.classList.remove('hidden');
-                detachModal.classList.add('flex');
-            });
-        });
-
-        function bindClose(modalEl, closeSelector) {
-            modalEl.querySelectorAll(closeSelector).forEach(el => el.addEventListener('click', () => {
-                modalEl.classList.add('hidden');
-                modalEl.classList.remove('flex');
+            function closeModal(el) {
+                if (!el) return;
+                el.classList.add('hidden');
+                el.classList.remove('flex');
                 document.body.classList.remove('overflow-hidden');
-            }));
-        }
-        bindClose(detachModal, '[data-detach-close]');
+            }
+
+            function bindClose(modalEl, closeSelector) {
+                if (!modalEl) return;
+                modalEl.querySelectorAll(closeSelector).forEach(el => {
+                    el.addEventListener('click', () => closeModal(modalEl));
+                });
+            }
+
+            // ---- Cakupan Cetak Label Ruangan ----
+            const labelScopeModal = document.getElementById('label-scope-modal');
+            const labelScopeForm = document.getElementById('label-scope-form');
+            const btnLabelScope = document.getElementById('btn-label-scope');
+            const labelCetakAset = document.getElementById('label-cetak-aset');
+            const labelCetakInventaris = document.getElementById('label-cetak-inventaris');
+            const labelScopeError = document.getElementById('label-scope-error');
+
+            if (btnLabelScope && labelScopeModal && labelScopeForm) {
+                btnLabelScope.addEventListener('click', () => {
+                    if (labelScopeError) labelScopeError.classList.add('hidden');
+                    openModal(labelScopeModal);
+                });
+                bindClose(labelScopeModal, '[data-label-scope-close]');
+                labelScopeForm.addEventListener('submit', (e) => {
+                    if (!labelCetakAset?.checked && !labelCetakInventaris?.checked) {
+                        e.preventDefault();
+                        if (labelScopeError) labelScopeError.classList.remove('hidden');
+                    }
+                });
+            }
+
+            // ---- Inventaris Lokal (Kelola & Mutasi) ----
+            const invStoreUrl = @json(route('aset-ruangan.inventaris.store', $ruangan->id_ruangan));
+            const invUpdateUrl = @json(route('aset-ruangan.inventaris.update', ['ruangan' => $ruangan->id_ruangan, 'inventaris' => '__ID__']));
+            const invMoveUrl = @json(route('aset-ruangan.inventaris.move', ['ruangan' => $ruangan->id_ruangan, 'inventaris' => '__ID__']));
+            const invDelUrl = @json(route('aset-ruangan.inventaris.destroy', ['ruangan' => $ruangan->id_ruangan, 'inventaris' => '__ID__']));
+
+            const invModal = document.getElementById('inv-modal');
+            const invForm = document.getElementById('inv-form');
+            const invMethod = document.getElementById('inv-method');
+            const invTitle = document.getElementById('inv-modal-title');
+            const invKodeInput = document.getElementById('inv-kode');
+            const invKodeNote = document.getElementById('inv-kode-note');
+
+            function clearInvErrors() {
+                if (!invForm) return;
+                invForm.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
+            }
+
+            function showInvErrors(errors, form) {
+                if (!form) return;
+                form.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
+                Object.keys(errors || {}).forEach(field => {
+                    const el = form.querySelector('[data-inv-error="' + field + '"]');
+                    if (el) {
+                        el.textContent = errors[field][0];
+                        el.classList.remove('hidden');
+                    }
+                });
+            }
+
+            // Tambah Inventaris
+            const btnAdd = document.getElementById('btn-inv-add');
+            if (btnAdd && invForm && invModal) {
+                btnAdd.addEventListener('click', () => {
+                    invForm.reset();
+                    invForm.action = invStoreUrl;
+                    if (invMethod) invMethod.value = 'POST';
+                    if (invTitle) invTitle.textContent = 'Tambah Inventaris';
+                    if (invKodeInput) invKodeInput.value = '';
+                    if (invKodeNote) invKodeNote.textContent = 'Kosongkan agar kode dibuat otomatis (contoh: RUA-INV-001).';
+                    clearInvErrors();
+                    openModal(invModal);
+                });
+            }
+
+            // Ubah Inventaris
+            document.querySelectorAll('[data-inv-edit]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (!invForm || !invModal) return;
+                    invForm.reset();
+                    invForm.action = invUpdateUrl.replace('__ID__', btn.dataset.invEdit);
+                    if (invMethod) invMethod.value = 'PUT';
+                    if (invTitle) invTitle.textContent = 'Ubah Inventaris';
+                    if (invKodeInput) invKodeInput.value = btn.dataset.invKode || '';
+                    if (invKodeNote) invKodeNote.textContent = 'Kosongkan untuk mempertahankan kode saat ini.';
+                    const elNama = document.getElementById('inv-nama');
+                    const elMerk = document.getElementById('inv-merk');
+                    const elKondisi = document.getElementById('inv-kondisi');
+                    const elKeterangan = document.getElementById('inv-keterangan');
+                    if (elNama) elNama.value = btn.dataset.invNama || '';
+                    if (elMerk) elMerk.value = btn.dataset.invMerk || '';
+                    if (elKondisi) elKondisi.value = btn.dataset.invKondisi || 'Baik';
+                    if (elKeterangan) elKeterangan.value = btn.dataset.invKeterangan || '';
+                    clearInvErrors();
+                    openModal(invModal);
+                });
+            });
+
+            if (invModal) bindClose(invModal, '[data-inv-close]');
+
+            if (invForm) {
+                invForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const kodeRaw = invKodeInput ? invKodeInput.value : '';
+                    if (kodeRaw !== '' && kodeRaw.trim() === '') {
+                        showInvErrors({ kode_inventaris: ['Kode inventaris tidak boleh hanya berisi spasi.'] }, invForm);
+                        return;
+                    }
+
+                    const submit = document.getElementById('btn-inv-submit');
+                    const original = submit ? submit.textContent : 'Simpan';
+                    if (submit) {
+                        submit.textContent = 'Menyimpan...';
+                        submit.disabled = true;
+                    }
+
+                    try {
+                        const res = await fetch(invForm.action, {
+                            method: 'POST',
+                            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+                            body: new FormData(invForm),
+                        });
+                        if (res.status === 422) {
+                            const data = await res.json().catch(() => ({}));
+                            showInvErrors(data.errors || {}, invForm);
+                            if (submit) { submit.textContent = original; submit.disabled = false; }
+                            return;
+                        }
+                        if (res.ok) { window.location.reload(); return; }
+                        const data = await res.json().catch(() => ({}));
+                        alert(data.message || 'Gagal menyimpan inventaris.');
+                        if (submit) { submit.textContent = original; submit.disabled = false; }
+                    } catch (err) {
+                        alert('Koneksi bermasalah. Coba lagi.');
+                        if (submit) { submit.textContent = original; submit.disabled = false; }
+                    }
+                });
+            }
+
+            // Mutasi Ruangan (Inventaris Lokal)
+            const moveModal = document.getElementById('inv-move-modal');
+            const moveForm = document.getElementById('inv-move-form');
+            document.querySelectorAll('[data-inv-move]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (!moveForm || !moveModal) return;
+                    moveForm.reset();
+                    moveForm.action = invMoveUrl.replace('__ID__', btn.dataset.invMove);
+                    const tujuan = document.getElementById('inv-tujuan');
+                    if (tujuan) tujuan.value = '';
+                    const aset = document.getElementById('inv-move-aset');
+                    if (aset) aset.textContent = btn.dataset.invNama || '-';
+                    const kib = document.getElementById('inv-move-kib');
+                    if (kib) kib.textContent = btn.dataset.invKode || '-';
+                    const keterangan = document.getElementById('inv-move-keterangan');
+                    if (keterangan) keterangan.value = btn.dataset.invKeterangan || '';
+                    moveForm.querySelectorAll('.field-error').forEach(el => el.classList.add('hidden'));
+                    openModal(moveModal);
+                });
+            });
+            if (moveModal) bindClose(moveModal, '[data-inv-move-close]');
+
+            if (moveForm) {
+                moveForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const submit = document.getElementById('btn-inv-move-submit');
+                    const original = submit ? submit.textContent : 'Pindahkan';
+                    if (submit) {
+                        submit.textContent = 'Memindahkan...';
+                        submit.disabled = true;
+                    }
+                    try {
+                        const res = await fetch(moveForm.action, {
+                            method: 'POST',
+                            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+                            body: new FormData(moveForm),
+                        });
+                        if (res.status === 422) {
+                            const data = await res.json().catch(() => ({}));
+                            moveForm.querySelectorAll('.field-error').forEach(el => el.classList.add('hidden'));
+                            const el = moveForm.querySelector('[data-inv-error="id_ruangan_tujuan"]');
+                            if (el) {
+                                el.textContent = (data.errors && data.errors.id_ruangan_tujuan ? data.errors.id_ruangan_tujuan[0] : (data.message || 'Ruangan tujuan tidak valid.'));
+                                el.classList.remove('hidden');
+                            }
+                            if (submit) { submit.textContent = original; submit.disabled = false; }
+                            return;
+                        }
+                        if (res.ok) { window.location.reload(); return; }
+                        const data = await res.json().catch(() => ({}));
+                        alert(data.message || 'Gagal memindahkan inventaris.');
+                        if (submit) { submit.textContent = original; submit.disabled = false; }
+                    } catch (err) {
+                        alert('Koneksi bermasalah. Coba lagi.');
+                        if (submit) { submit.textContent = original; submit.disabled = false; }
+                    }
+                });
+            }
+
+            // Hapus Inventaris Lokal
+            const delModal = document.getElementById('inv-del-modal');
+            const delForm = document.getElementById('inv-del-form');
+            document.querySelectorAll('[data-inv-del]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (!delForm || !delModal) return;
+                    delForm.action = invDelUrl.replace('__ID__', btn.dataset.invDel);
+                    const elName = document.getElementById('inv-del-name');
+                    if (elName) elName.textContent = btn.dataset.invNama || '';
+                    openModal(delModal);
+                });
+            });
+            if (delModal) bindClose(delModal, '[data-inv-del-close]');
+
+            // ---- Keluarkan Aset (Admin Aset & Admin UPT) ----
+            const detachModal = document.getElementById('detach-modal');
+            const detachForm = document.getElementById('detach-form');
+            const detachUrl = @json(route('aset-ruangan.aset.detach', ['ruangan' => $ruangan->id_ruangan, 'aset' => '__ID__']));
+
+            document.querySelectorAll('[data-detach-target]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (!detachForm || !detachModal) return;
+                    detachForm.action = detachUrl.replace('__ID__', btn.dataset.detachTarget);
+                    const elName = document.getElementById('detach-name');
+                    if (elName) elName.textContent = btn.dataset.detachName || '';
+                    openModal(detachModal);
+                });
+            });
+            if (detachModal) bindClose(detachModal, '[data-detach-close]');
+
+            // ---- Pasang Aset ke Ruangan (Admin Aset Only) ----
+            const pasangModal = document.getElementById('pasang-modal');
+            const pasangForm = document.getElementById('pasang-form');
+            const btnPasang = document.getElementById('btn-pasang');
+            const pasangKandidatUrl = @json(route('aset-ruangan.aset.pasang.kandidat', ['ruangan' => $ruangan->id_ruangan]));
+            const pasangMassalUrl = @json(route('aset-ruangan.aset.pasang-massal', ['ruangan' => $ruangan->id_ruangan]));
+            const jenisSelect = document.getElementById('field-jenis-select');
+            const jumlahInput = document.getElementById('field-jumlah');
+            const pasangTersedia = document.getElementById('pasang-tersedia');
+            const pasangRingkasan = document.getElementById('pasang-ringkasan');
+            const ringkasanJenis = document.getElementById('ringkasan-jenis');
+            const ringkasanJumlah = document.getElementById('ringkasan-jumlah');
+
+            let pasangKandidat = [];
+
+            function clearPasangErrors() {
+                if (!pasangForm) return;
+                pasangForm.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
+            }
+
+            function showPasangErrors(errors) {
+                if (!pasangForm) return;
+                pasangForm.querySelectorAll('.field-error').forEach(e => e.classList.add('hidden'));
+                Object.keys(errors || {}).forEach(field => {
+                    const err = pasangForm.querySelector('[data-error-for="' + field + '"]');
+                    if (err) { err.textContent = errors[field][0]; err.classList.remove('hidden'); }
+                });
+            }
+
+            function refreshRingkasan() {
+                const opt = jenisSelect && jenisSelect.options[jenisSelect.selectedIndex];
+                const idBarang = jenisSelect ? jenisSelect.value : '';
+                const ditemukan = pasangKandidat.find(k => String(k.id_barang) === String(idBarang));
+                const tersedia = ditemukan ? ditemukan.tersedia : 0;
+
+                if (pasangTersedia) pasangTersedia.textContent = tersedia;
+                if (jumlahInput && tersedia > 0) jumlahInput.max = tersedia;
+
+                const jumlah = jumlahInput && parseInt(jumlahInput.value, 10) > 0 ? parseInt(jumlahInput.value, 10) : 0;
+
+                if (pasangRingkasan && jumlah > 0 && opt && opt.value) {
+                    pasangRingkasan.classList.remove('hidden');
+                    ringkasanJenis.textContent = opt.textContent;
+                    ringkasanJumlah.textContent = jumlah;
+                } else if (pasangRingkasan) {
+                    pasangRingkasan.classList.add('hidden');
+                }
+            }
+
+            async function muatKandidat() {
+                if (!jenisSelect) return;
+                try {
+                    const res = await fetch(pasangKandidatUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } });
+                    const data = await res.json().catch(() => ({}));
+                    pasangKandidat = data.kandidat || [];
+
+                    const current = jenisSelect.value;
+                    jenisSelect.innerHTML = '<option value="">-- Pilih Jenis Barang --</option>';
+                    pasangKandidat.forEach(k => {
+                        const opt = document.createElement('option');
+                        opt.value = k.id_barang;
+                        opt.textContent = k.nama_barang + ' (' + k.tersedia + ' tersedia)';
+                        jenisSelect.appendChild(opt);
+                    });
+                    jenisSelect.value = current;
+                    refreshRingkasan();
+                } catch (err) {
+                    pasangKandidat = [];
+                }
+            }
+
+            function openPasangModal() {
+                if (!pasangModal) return;
+                openModal(pasangModal);
+                clearPasangErrors();
+                if (jenisSelect) jenisSelect.value = '';
+                if (jumlahInput) jumlahInput.value = '';
+                refreshRingkasan();
+                muatKandidat();
+            }
+
+            function closePasangModal() {
+                if (!pasangModal) return;
+                closeModal(pasangModal);
+                clearPasangErrors();
+            }
+
+            if (btnPasang && pasangModal) {
+                btnPasang.addEventListener('click', openPasangModal);
+                bindClose(pasangModal, '[data-pasang-close]');
+            }
+
+            if (jenisSelect) jenisSelect.addEventListener('change', refreshRingkasan);
+            if (jumlahInput) jumlahInput.addEventListener('input', refreshRingkasan);
+
+            if (pasangForm) {
+                pasangForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const submit = document.getElementById('btn-pasang-submit');
+                    const original = submit ? submit.textContent : 'Pasang';
+
+                    const idBarang = jenisSelect ? jenisSelect.value : '';
+                    const jumlah = jumlahInput ? parseInt(jumlahInput.value, 10) : 0;
+
+                    if (!idBarang) {
+                        showPasangErrors({ id_barang: ['Pilih jenis barang terlebih dahulu.'] });
+                        return;
+                    }
+                    if (!jumlah || jumlah < 1) {
+                        showPasangErrors({ jumlah: ['Jumlah minimal 1.'] });
+                        return;
+                    }
+
+                    if (submit) {
+                        submit.textContent = 'Memasang...';
+                        submit.disabled = true;
+                    }
+                    try {
+                        const body = new FormData();
+                        body.append('id_barang', idBarang);
+                        body.append('jumlah', jumlah);
+
+                        const res = await fetch(pasangMassalUrl, {
+                            method: 'POST',
+                            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+                            body,
+                        });
+
+                        if (res.status === 422) {
+                            const data = await res.json().catch(() => ({}));
+                            showPasangErrors(data.errors || {});
+                            if (submit) { submit.textContent = original; submit.disabled = false; }
+                            return;
+                        }
+
+                        const data = await res.json().catch(() => ({}));
+
+                        if (res.ok) {
+                            window.location.reload();
+                            return;
+                        }
+
+                        alert(data.message || 'Gagal memasang aset.');
+                        if (submit) { submit.textContent = original; submit.disabled = false; }
+                    } catch (err) {
+                        alert('Koneksi bermasalah. Coba lagi.');
+                        if (submit) { submit.textContent = original; submit.disabled = false; }
+                    }
+                });
+            }
+
+            // ---- Mutasi Ruangan (Aset Melekat - Admin Aset Only) ----
+            const mutasiRuanganModal = document.getElementById('mutasi-ruangan-modal');
+            const mutasiRuanganForm = document.getElementById('mutasi-ruangan-form');
+            const mutasiRuanganUrl = @json(route('aset-ruangan.aset.mutasi-ruangan', ['ruangan' => $ruangan->id_ruangan, 'aset' => '__ID__']));
+            const mutasiRuanganAset = document.getElementById('mutasi-ruangan-aset');
+            const mutasiRuanganKib = document.getElementById('mutasi-ruangan-kib');
+
+            document.querySelectorAll('[data-mutasi-ruangan]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (!mutasiRuanganModal || !mutasiRuanganForm) return;
+                    mutasiRuanganForm.action = mutasiRuanganUrl.replace('__ID__', btn.getAttribute('data-mutasi-ruangan'));
+                    if (mutasiRuanganAset) mutasiRuanganAset.textContent = btn.getAttribute('data-aset-nama') || '-';
+                    if (mutasiRuanganKib) mutasiRuanganKib.textContent = btn.getAttribute('data-aset-kib') || '-';
+                    const elTujuan = document.getElementById('mutasi-ruangan-tujuan');
+                    const elKet = document.getElementById('mutasi-ruangan-keterangan');
+                    if (elTujuan) elTujuan.value = '';
+                    if (elKet) elKet.value = '';
+                    openModal(mutasiRuanganModal);
+                });
+            });
+            if (mutasiRuanganModal) bindClose(mutasiRuanganModal, '[data-mutasi-ruangan-close]');
+
+            if (mutasiRuanganForm) {
+                mutasiRuanganForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const submit = document.getElementById('btn-mutasi-ruangan-submit');
+                    const original = submit ? submit.textContent : 'Pindahkan';
+                    if (submit) {
+                        submit.textContent = 'Memindahkan...';
+                        submit.disabled = true;
+                    }
+
+                    try {
+                        const res = await fetch(mutasiRuanganForm.action, {
+                            method: 'POST',
+                            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+                            body: new FormData(mutasiRuanganForm),
+                        });
+
+                        if (res.status === 422) {
+                            const data = await res.json().catch(() => ({}));
+                            const first = data.errors ? (Object.values(data.errors)[0]?.[0] || 'Validasi gagal.') : 'Validasi gagal.';
+                            alert(first);
+                            if (submit) { submit.textContent = original; submit.disabled = false; }
+                            return;
+                        }
+
+                        const data = await res.json().catch(() => ({}));
+
+                        if (res.ok) {
+                            window.location.reload();
+                            return;
+                        }
+
+                        if (res.status === 401 || res.status === 419) {
+                            alert(data.message || 'Sesi Anda telah berakhir. Silakan masuk kembali.');
+                            window.location.href = loginUrl;
+                            return;
+                        }
+
+                        if (res.status === 403) {
+                            alert(data.message || 'Anda tidak memiliki hak akses untuk memindahkan aset ini.');
+                            if (submit) { submit.textContent = original; submit.disabled = false; }
+                            return;
+                        }
+
+                        if (res.status === 404) {
+                            alert(data.message || 'Endpoint mutasi tidak ditemukan. Muat ulang halaman lalu coba lagi.');
+                            if (submit) { submit.textContent = original; submit.disabled = false; }
+                            return;
+                        }
+
+                        if (res.status >= 500) {
+                            alert(data.message || 'Terjadi kesalahan di server saat memindahkan aset. Silakan coba lagi.');
+                            if (submit) { submit.textContent = original; submit.disabled = false; }
+                            return;
+                        }
+
+                        alert(data.message || 'Gagal memindahkan aset.');
+                        if (submit) { submit.textContent = original; submit.disabled = false; }
+                    } catch (err) {
+                        console.error('Mutasi Ruangan gagal:', err);
+                        const pesanJaringan = (err instanceof TypeError) && /fetch|network|Failed to fetch/i.test(err.message || '');
+                        alert(pesanJaringan
+                            ? 'Koneksi bermasalah. Coba lagi.'
+                            : 'Terjadi kesalahan pada halaman ini. Muat ulang halaman (Ctrl+F5) lalu coba lagi.');
+                        if (submit) { submit.textContent = original; submit.disabled = false; }
+                    }
+                });
+            }
+        })();
     </script>
     @endpush
-    @endif
 @endsection
