@@ -253,6 +253,11 @@ class LaporanEksekutifService
 
         // 3. Progres Sensus Fisik Siklus 3 Tahunan
         $siklusSensusAktif = PeriodeSensus::periodeAktif($acuan);
+        [$mulaiAktif] = PeriodeSensus::urai($siklusSensusAktif);
+        $periodeCocok = [
+            $siklusSensusAktif,
+            PeriodeSensus::format($mulaiAktif, $mulaiAktif + PeriodeSensus::INTERVAL_TAHUN),
+        ];
         $asetIdsInReport = $asetList->pluck('id_aset')->all();
         $sudahSensusCount = 0;
         $sensusBaik = 0;
@@ -260,7 +265,7 @@ class LaporanEksekutifService
         $sensusRusakBerat = 0;
 
         if (! empty($asetIdsInReport)) {
-            $sensusRecords = SensusAset::where('periode', $siklusSensusAktif)
+            $sensusRecords = SensusAset::whereIn('periode', $periodeCocok)
                 ->whereIn('id_aset', $asetIdsInReport)
                 ->get(['id_aset', 'hasil_sensus']);
 

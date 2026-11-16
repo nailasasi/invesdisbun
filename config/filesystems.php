@@ -64,6 +64,22 @@ return [
             'report' => false,
         ],
 
+        /*
+         * Master Template Dokumen Dinas: PRIVAT.
+         *
+         * Disimpan di `storage/app/private` sehingga TIDAK dapat diakses secara
+         * anonim lewat web server / symlink `public/storage`. Akses unduh
+         * resmi hanya melalui TemplateDokumenController setelah otorisasi Admin Aset.
+         */
+        'templates' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private'),
+            'serve' => false,
+            'visibility' => 'private',
+            'throw' => false,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

@@ -90,6 +90,11 @@ class Aset extends Model
         return $this->hasMany(SensusAset::class, 'id_aset');
     }
 
+    public function sensusAset()
+    {
+        return $this->sensus();
+    }
+
     public function sensusPeriode(string $periode)
     {
         return $this->hasOne(SensusAset::class, 'id_aset')->where('periode', $periode);

@@ -264,22 +264,31 @@ class LaporanEksekutifExportTest extends TestCase
         $uptUser = $this->adminUpt('UPT P2BTP');
         $this->actingAs($uptUser);
 
-        // Ekspor Excel untuk Admin UPT
+        // Ekspor Excel untuk Admin UPT wajib ditolak HTTP 403
         $respExcel = $this->get('/laporan/export/excel?jenis=bulanan&tahun=2026&bulan=11');
-        $respExcel->assertStatus(200);
+        $respExcel->assertStatus(403);
 
-        $cdExcel = strtolower((string) $respExcel->headers->get('Content-Disposition'));
-        // Nama file tidak boleh berisi "seluruh_unit" jika user Admin UPT
-        $this->assertStringNotContainsString('seluruh_unit_kerja', $cdExcel);
-        $this->assertStringContainsString('upt_p2btp', $cdExcel);
-
-        // Ekspor PDF untuk Admin UPT
+        // Ekspor PDF untuk Admin UPT wajib ditolak HTTP 403
         $respPdf = $this->get('/laporan/export/pdf?jenis=bulanan&tahun=2026&bulan=11');
-        $respPdf->assertStatus(200);
+        $respPdf->assertStatus(403);
+    }
 
-        $cdPdf = strtolower((string) $respPdf->headers->get('Content-Disposition'));
-        $this->assertStringNotContainsString('seluruh_unit_kerja', $cdPdf);
-        $this->assertStringContainsString('upt_p2btp', $cdPdf);
+    public function test_role_non_admin_aset_ditolak_pada_seluruh_endpoint_ekspor(): void
+    {
+        $adminBidang = $this->userDenganRole('Admin Bidang');
+        $this->actingAs($adminBidang);
+        $this->get('/laporan/export/excel')->assertStatus(403);
+        $this->get('/laporan/export/pdf')->assertStatus(403);
+
+        $pegawai = $this->userDenganRole('Pegawai');
+        $this->actingAs($pegawai);
+        $this->get('/laporan/export/excel')->assertStatus(403);
+        $this->get('/laporan/export/pdf')->assertStatus(403);
+
+        // Guest redirect ke login
+        auth()->logout();
+        $this->get('/laporan/export/excel')->assertStatus(302)->assertRedirect(route('login'));
+        $this->get('/laporan/export/pdf')->assertStatus(302)->assertRedirect(route('login'));
     }
 
     public function test_halaman_index_memiliki_tombol_ekspor_dengan_parameter_aktif(): void

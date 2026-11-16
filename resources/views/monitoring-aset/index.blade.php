@@ -10,8 +10,8 @@
     <x-alert type="success" />
     <x-alert type="error" />
 
-    {{-- 3 Metrics Card (Grid 3 Kolom) --}}
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+    {{-- 4 Metrics Cards (Grid Responsif 1 -> 2 -> 4 Kolom) --}}
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {{-- Card 1 --}}
         <x-card class="flex items-center justify-between">
             <div>
@@ -59,6 +59,22 @@
                 </svg>
             </div>
         </x-card>
+
+        {{-- Card 4: Aset Belum Disensus --}}
+        <x-card class="flex items-center justify-between">
+            <div>
+                <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Aset Belum Disensus</p>
+                <h3 class="mt-1 text-xl font-black text-orange-600">
+                    {{ $asetBelumDisensusCount ?? 0 }} <span class="text-xs font-semibold text-slate-500">Aset</span>
+                </h3>
+                <p class="mt-1 text-[11px] text-slate-400">Periode aktif masing-masing aset</p>
+            </div>
+            <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+                </svg>
+            </div>
+        </x-card>
     </div>
 
     {{-- Main Table Container --}}
@@ -79,7 +95,7 @@
                 <select name="periode" class="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 focus:border-disbun-600 focus:outline-hidden focus:ring-1 focus:ring-disbun-400/40">
                     @foreach ($daftarPeriode ?? [] as $p)
                         <option value="{{ $p }}" {{ ($periodeDipilih ?? '') === $p ? 'selected' : '' }}>
-                            Periode {{ $p }} {{ $p === ($periodeAktif ?? '') ? '(Aktif)' : '' }}
+                            Periode {{ $p }} {{ in_array($p, $periodeAktifList ?? [], true) ? '(Aktif)' : '' }}
                         </option>
                     @endforeach
                 </select>
@@ -226,23 +242,32 @@
                             </td>
                             <td class="py-3 px-3 text-center">
                                 <div class="flex items-center justify-center gap-1.5">
-                                    <button type="button"
-                                            onclick="openModalSensus(this)"
-                                            data-action="{{ route('monitoring-aset.sensus.update', $item->id_aset) }}"
-                                            data-id-aset="{{ $item->id_aset }}"
-                                            data-nama-barang="{{ $item->nama_barang }}"
-                                            data-nomor-kartu="{{ $item->nomor_kartu ?? '-' }}{{ $item->is_kendaraan && !empty($item->nomor_plat) ? ' (' . $item->nomor_plat . ')' : '' }}"
-                                            data-pemegang="{{ $item->pemegang ?: '-' }}"
-                                            data-lokasi="{{ $item->lokasi ?: 'Lokasi Belum Ditentukan' }}"
-                                            data-tanggal-pengadaan="{{ $item->tanggal_pengadaan ? \Carbon\Carbon::parse($item->tanggal_pengadaan)->format('d M Y') : '-' }}"
-                                            data-periode="{{ $periodeDipilih ?? $item->periode_sensus }}"
-                                            data-hasil-sensus="{{ $item->sudah_disensus ? $item->hasil_sensus : '' }}"
-                                            data-tanggal-sensus="{{ $item->tanggal_sensus ?? date('Y-m-d') }}"
-                                            data-catatan="{{ $item->catatan_sensus ?? '' }}"
-                                            data-sudah-disensus="{{ !empty($item->sudah_disensus) ? '1' : '0' }}"
-                                            class="inline-flex items-center gap-1 rounded-xl border {{ !empty($item->sudah_disensus) ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100' }} px-2.5 py-1 text-[11px] font-bold transition">
-                                        {{ !empty($item->sudah_disensus) ? 'Edit Sensus' : 'Tambah Sensus' }}
-                                    </button>
+                                    @if ($item->periode_berlangsung)
+                                        <button type="button"
+                                                onclick="openModalSensus(this)"
+                                                data-action="{{ route('monitoring-aset.sensus.update', $item->id_aset) }}"
+                                                data-id-aset="{{ $item->id_aset }}"
+                                                data-nama-barang="{{ $item->nama_barang }}"
+                                                data-nomor-kartu="{{ $item->nomor_kartu ?? '-' }}{{ $item->is_kendaraan && !empty($item->nomor_plat) ? ' (' . $item->nomor_plat . ')' : '' }}"
+                                                data-pemegang="{{ $item->pemegang ?: '-' }}"
+                                                data-lokasi="{{ $item->lokasi ?: 'Lokasi Belum Ditentukan' }}"
+                                                data-tanggal-pengadaan="{{ $item->tanggal_pengadaan ? \Carbon\Carbon::parse($item->tanggal_pengadaan)->format('d M Y') : '-' }}"
+                                                data-periode="{{ $item->periode_sensus_aktif }}"
+                                                data-periode-aktif="{{ $item->periode_sensus_aktif }}"
+                                                data-daftar-periode="{{ json_encode([$item->periode_sensus_aktif]) }}"
+                                                data-hasil-sensus="{{ $item->hasil_sensus_aktif ?? '' }}"
+                                                data-tanggal-sensus="{{ $item->tanggal_sensus_aktif ?? date('Y-m-d') }}"
+                                                data-catatan="{{ $item->catatan_sensus_aktif ?? '' }}"
+                                                data-sudah-disensus="{{ !empty($item->sudah_disensus_aktif) ? '1' : '0' }}"
+                                                class="inline-flex items-center gap-1 rounded-xl border {{ !empty($item->sudah_disensus_aktif) ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100' }} px-2.5 py-1 text-[11px] font-bold transition">
+                                            {{ !empty($item->sudah_disensus_aktif) ? 'Edit Sensus' : 'Tambah Sensus' }}
+                                        </button>
+                                    @else
+                                        <span class="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500" title="Periode sensus {{ $item->periode_sensus }} telah berakhir dan terkunci">
+                                            <svg class="h-3.5 w-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                                            Terkunci
+                                        </span>
+                                    @endif
                                     <a href="{{ route('monitoring-aset.sensus.riwayat', $item->id_aset) }}"
                                        class="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 transition hover:bg-slate-50"
                                        title="Lihat Riwayat Sensus Seluruh Periode">
@@ -641,8 +666,28 @@
         document.getElementById('sensus-m-tgl-pengadaan').textContent = tglPengadaan || '-';
 
         const periodeSelect = document.getElementById('sensus-m-periode');
-        if (periodeSelect && periode) {
-            periodeSelect.value = periode;
+        if (periodeSelect) {
+            if (btn.dataset.daftarPeriode) {
+                try {
+                    const list = JSON.parse(btn.dataset.daftarPeriode);
+                    const aktif = btn.dataset.periodeAktif;
+                    const targetPeriode = periode || aktif;
+                    periodeSelect.innerHTML = '';
+                    list.forEach(p => {
+                        const opt = document.createElement('option');
+                        opt.value = p;
+                        opt.textContent = 'Periode ' + p + (p === aktif ? ' (Aktif)' : '');
+                        if (p === targetPeriode) {
+                            opt.selected = true;
+                        }
+                        periodeSelect.appendChild(opt);
+                    });
+                } catch (e) {
+                    console.error('Gagal memuat daftar periode aset:', e);
+                }
+            } else if (periode) {
+                periodeSelect.value = periode;
+            }
         }
 
         const tglInput = document.getElementById('sensus-m-tgl-sensus');

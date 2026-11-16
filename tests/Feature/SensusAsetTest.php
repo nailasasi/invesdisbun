@@ -179,7 +179,7 @@ class SensusAsetTest extends TestCase
             ->get(route('monitoring-aset.sensus.edit', $this->asetP2btp))
             ->assertOk()
             ->assertSee($this->asetP2btp->nomor_kartu_barang)
-            ->assertSee('Periode 2025–2028');
+            ->assertSee('Periode ' . PeriodeSensus::periodeAktif(null, $this->asetP2btp));
 
         // Akses aset di UPT PSBP
         $this->actingAs($this->adminAset)
@@ -496,7 +496,8 @@ class SensusAsetTest extends TestCase
         $this->assertStringContainsString('Belum Disensus', $htmlAktif);
         $this->assertStringContainsString('data-sudah-disensus="0"', $htmlAktif);
 
-        // Saat filter beralih ke periode lama (2022–2025), tombol harus berubah menjadi "Edit Sensus"
+        // Saat filter beralih ke periode lama (2022–2025), kolom Hasil Sensus menampilkan data historis "Baik",
+        // sementara tombol aksi tetap mengarah ke periode aktif aset (tidak terkunci sembarangan karena dropdown)
         $resLama = $this->actingAs($this->adminAset)
             ->get(route('monitoring-aset.index', [
                 'periode' => '2022–2025',
@@ -505,13 +506,14 @@ class SensusAsetTest extends TestCase
 
         $resLama->assertOk();
         $htmlLama = $resLama->getContent();
-        $this->assertStringContainsString('Edit Sensus', $htmlLama);
-        $this->assertStringContainsString('data-sudah-disensus="1"', $htmlLama);
+        $this->assertStringContainsString('Baik', $htmlLama);
+        $this->assertStringContainsString('Tambah Sensus', $htmlLama);
 
-        // 2. Tambah sensus pada periode baru 2025–2028
+        // 2. Tambah sensus pada periode baru 2025–2027 (periode aktif)
+        $periodeAktifAset = PeriodeSensus::periodeAktif(null, $this->asetP2btp);
         $this->actingAs($this->adminAset)
             ->post(route('monitoring-aset.sensus.update', $this->asetP2btp), [
-                'periode' => '2025–2028',
+                'periode' => $periodeAktifAset,
                 'hasil_sensus' => 'Rusak Ringan',
                 'tanggal_sensus' => '2026-10-28',
             ]);
@@ -519,12 +521,12 @@ class SensusAsetTest extends TestCase
         // Pastikan catatan periode lama dan baru tersimpan terpisah (tidak saling menimpa)
         $this->assertSame(2, SensusAset::where('id_aset', $this->asetP2btp->id_aset)->count());
         $this->assertDatabaseHas('sensus_aset', ['id_aset' => $this->asetP2btp->id_aset, 'periode' => '2022–2025', 'hasil_sensus' => 'Baik']);
-        $this->assertDatabaseHas('sensus_aset', ['id_aset' => $this->asetP2btp->id_aset, 'periode' => '2025–2028', 'hasil_sensus' => 'Rusak Ringan']);
+        $this->assertDatabaseHas('sensus_aset', ['id_aset' => $this->asetP2btp->id_aset, 'periode' => $periodeAktifAset, 'hasil_sensus' => 'Rusak Ringan']);
 
-        // Sekarang pada filter 2025–2028, tombol dinamis berubah menjadi "Edit Sensus"
+        // Sekarang pada filter periode aktif, tombol dinamis berubah menjadi "Edit Sensus"
         $resAktif2 = $this->actingAs($this->adminAset)
             ->get(route('monitoring-aset.index', [
-                'periode' => '2025–2028',
+                'periode' => $periodeAktifAset,
                 'search' => $this->asetP2btp->nomor_kartu_barang,
             ]));
 
@@ -551,7 +553,7 @@ class SensusAsetTest extends TestCase
         $this->assertStringContainsString(route('monitoring-aset.index'), $html);
     }
 
-    public function test_tombol_edit_pada_setiap_baris_riwayat_membuka_catatan_sesuai_periode(): void
+    public function test_halaman_riwayat_sensus_tidak_lagi_menampilkan_kolom_aksi_dan_tombol_edit(): void
     {
         // Buat dua riwayat sensus pada periode berbeda
         SensusAset::create([
@@ -578,22 +580,19 @@ class SensusAsetTest extends TestCase
         $response->assertOk();
         $html = $response->getContent();
 
-        // Verifikasi tautan Edit per baris memuat parameter periode yang tepat
-        $urlEditLama = route('monitoring-aset.sensus.edit', ['aset' => $this->asetP2btp->id_aset, 'periode' => '2022–2025']);
-        $urlEditAktif = route('monitoring-aset.sensus.edit', ['aset' => $this->asetP2btp->id_aset, 'periode' => '2025–2028']);
-
-        $this->assertStringContainsString($urlEditLama, $html);
-        $this->assertStringContainsString($urlEditAktif, $html);
-
-        // Verifikasi saat membuka halaman edit dengan parameter periode lama, form menampilkan data periode tersebut
-        $editResponse = $this->actingAs($this->adminAset)->get($urlEditLama);
-        $editResponse->assertOk();
-        $editHtml = $editResponse->getContent();
-        $this->assertStringContainsString('Sensus periode lalu', $editHtml);
-        $this->assertStringContainsString('2022–2025', $editHtml);
+        // Verifikasi bahwa kolom aksi dan tombol edit TIDAK ada di halaman riwayat sensus
+        $this->assertStringNotContainsString('<th class="py-3 px-3 text-center">Aksi</th>', $html);
+        $this->assertStringNotContainsString(
+            route('monitoring-aset.sensus.edit', ['aset' => $this->asetP2btp->id_aset, 'periode' => '2022–2025']),
+            $html
+        );
+        $this->assertStringNotContainsString(
+            route('monitoring-aset.sensus.edit', ['aset' => $this->asetP2btp->id_aset, 'periode' => '2025–2028']),
+            $html
+        );
     }
 
-    public function test_hasil_sensus_rusak_berat_tidak_mengubah_kondisi_inventaris_dan_tidak_otomatis_membuat_usulan_penghapusan(): void
+    public function test_hasil_sensus_rusak_berat_memperbarui_kondisi_inventaris_tanpa_otomatis_membuat_usulan_penghapusan(): void
     {
         // Pastikan kondisi awal inventaris adalah 'Baik' dan status aktif
         $this->asetP2btp->update([
@@ -621,9 +620,9 @@ class SensusAsetTest extends TestCase
             'hasil_sensus' => 'Rusak Berat',
         ]);
 
-        // 1. Kondisi inventaris asli di tabel aset TIDAK berubah (tetap 'Baik')
+        // 1. Kondisi inventaris asli di tabel aset IKUT DIPERBARUI menjadi 'Rusak Berat'
         $this->asetP2btp->refresh();
-        $this->assertSame('Baik', $this->asetP2btp->kondisi, 'Kondisi sistem inventaris harus tetap mandiri dan tidak boleh diubah otomatis oleh hasil sensus.');
+        $this->assertSame('Rusak Berat', $this->asetP2btp->kondisi, 'Kondisi master aset harus sinkron dan diperbarui sesuai hasil sensus.');
 
         // 2. Status aset tetap 'aktif' dan tidak berubah menjadi 'diusulkan_hapus'
         $this->assertSame('aktif', $this->asetP2btp->status_aset, 'Status aset tidak boleh otomatis berubah karena hasil sensus.');
@@ -631,5 +630,253 @@ class SensusAsetTest extends TestCase
         // 3. Tidak ada usulan penghapusan yang dibuat secara otomatis
         $jumlahUsulanAkhir = UsulanPenghapusan::where('id_aset', $this->asetP2btp->id_aset)->count();
         $this->assertSame($jumlahUsulanAwal, $jumlahUsulanAkhir, 'Hasil sensus Rusak Berat tidak boleh otomatis membuat usulan penghapusan.');
+    }
+
+    public function test_admin_upt_dapat_menyimpan_sensus_pada_aset_tanpa_lokasi_jika_skpd_sesuai(): void
+    {
+        $skpdP2 = Skpd::where('nama_skpd', 'UPT P2BTP')->firstOrFail();
+
+        // Buat aset milik UPT P2BTP tanpa lokasi fisik (id_lokasi = null)
+        $asetTanpaLokasi = Aset::create([
+            'id_skpd' => $skpdP2->id_skpd,
+            'id_lokasi' => null,
+            'nomor_kartu_barang' => 'TEST-UNPLACED-' . uniqid(),
+            'tanggal_pengadaan' => '2025-01-01',
+            'kondisi' => 'Baik',
+            'status_aset' => 'aktif',
+            'is_kendaraan' => false,
+        ]);
+
+        $response = $this->actingAs($this->adminUptP2btp)
+            ->post(route('monitoring-aset.sensus.update', $asetTanpaLokasi), [
+                'periode' => '2025–2027',
+                'hasil_sensus' => 'Rusak Ringan',
+                'tanggal_sensus' => '2026-10-28',
+                'catatan' => 'Sensus aset unplaced sukses',
+                'redirect_to' => 'monitoring',
+            ]);
+
+        $response->assertRedirect(route('monitoring-aset.index', ['periode' => '2025–2027']))
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('sensus_aset', [
+            'id_aset' => $asetTanpaLokasi->id_aset,
+            'periode' => '2025–2027',
+            'hasil_sensus' => 'Rusak Ringan',
+        ]);
+
+        // Kondisi master aset juga terupdate
+        $asetTanpaLokasi->refresh();
+        $this->assertSame('Rusak Ringan', $asetTanpaLokasi->kondisi);
+
+        // Admin UPT lain (PSBP) DITOLAK mengakses aset unplaced milik P2BTP
+        $resDitolak = $this->actingAs($this->adminUptPsbp)
+            ->post(route('monitoring-aset.sensus.update', $asetTanpaLokasi), [
+                'periode' => '2025–2027',
+                'hasil_sensus' => 'Baik',
+                'tanggal_sensus' => '2026-10-28',
+            ]);
+
+        $resDitolak->assertForbidden();
+    }
+
+    public function test_skenario_1_tambah_sensus_pada_periode_berjalan_berhasil(): void
+    {
+        $response = $this->actingAs($this->adminAset)
+            ->post(route('monitoring-aset.sensus.update', $this->asetP2btp), [
+                'periode' => '2025–2027',
+                'hasil_sensus' => 'Baik',
+                'tanggal_sensus' => '2026-10-28',
+                'catatan' => 'Sensus periode aktif berjalan',
+                'redirect_to' => 'monitoring',
+            ]);
+
+        $response->assertRedirect(route('monitoring-aset.index', ['periode' => '2025–2027']))
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('sensus_aset', [
+            'id_aset' => $this->asetP2btp->id_aset,
+            'periode' => '2025–2027',
+            'hasil_sensus' => 'Baik',
+            'catatan' => 'Sensus periode aktif berjalan',
+        ]);
+
+        $this->asetP2btp->refresh();
+        $this->assertSame('Baik', $this->asetP2btp->kondisi);
+    }
+
+    public function test_skenario_2_edit_sensus_pada_periode_berjalan_berhasil(): void
+    {
+        // Catat sensus awal pada periode berjalan
+        SensusAset::create([
+            'id_aset' => $this->asetP2btp->id_aset,
+            'periode' => '2025–2027',
+            'hasil_sensus' => 'Baik',
+            'tanggal_sensus' => '2026-05-10',
+            'id_user' => $this->adminAset->id_user,
+        ]);
+
+        // Edit sensus pada periode berjalan yang sama
+        $response = $this->actingAs($this->adminAset)
+            ->post(route('monitoring-aset.sensus.update', $this->asetP2btp), [
+                'periode' => '2025–2027',
+                'hasil_sensus' => 'Rusak Ringan',
+                'tanggal_sensus' => '2026-10-28',
+                'catatan' => 'Pembaruan kondisi fisik pada periode berjalan',
+            ]);
+
+        $response->assertSessionHas('success');
+
+        $this->assertDatabaseHas('sensus_aset', [
+            'id_aset' => $this->asetP2btp->id_aset,
+            'periode' => '2025–2027',
+            'hasil_sensus' => 'Rusak Ringan',
+            'catatan' => 'Pembaruan kondisi fisik pada periode berjalan',
+        ]);
+
+        $this->asetP2btp->refresh();
+        $this->assertSame('Rusak Ringan', $this->asetP2btp->kondisi);
+    }
+
+    public function test_skenario_3_edit_sensus_pada_periode_sudah_berakhir_ditolak(): void
+    {
+        // Rekam data sensus masa lalu
+        $sensusLama = SensusAset::create([
+            'id_aset' => $this->asetP2btp->id_aset,
+            'periode' => '2022–2024',
+            'hasil_sensus' => 'Baik',
+            'tanggal_sensus' => '2023-05-15',
+            'catatan' => 'Catatan lama asli',
+            'id_user' => $this->adminAset->id_user,
+        ]);
+
+        $this->asetP2btp->update(['kondisi' => 'Baik']);
+
+        // Coba edit sensus periode lampau yang sudah berakhir
+        $response = $this->actingAs($this->adminAset)
+            ->post(route('monitoring-aset.sensus.update', $this->asetP2btp), [
+                'periode' => '2022–2024',
+                'hasil_sensus' => 'Rusak Berat',
+                'tanggal_sensus' => '2026-10-28',
+                'catatan' => 'Mencoba mengubah data masa lalu',
+            ]);
+
+        $response->assertSessionHasErrors('periode');
+
+        // Pastikan database dan kondisi aset tidak berubah sama sekali
+        $sensusLama->refresh();
+        $this->assertSame('Baik', $sensusLama->hasil_sensus);
+        $this->assertSame('Catatan lama asli', $sensusLama->catatan);
+
+        $this->asetP2btp->refresh();
+        $this->assertSame('Baik', $this->asetP2btp->kondisi);
+    }
+
+    public function test_skenario_4_tambah_sensus_pada_periode_sudah_berakhir_ditolak(): void
+    {
+        $response = $this->actingAs($this->adminAset)
+            ->post(route('monitoring-aset.sensus.update', $this->asetP2btp), [
+                'periode' => '2022–2024',
+                'hasil_sensus' => 'Baik',
+                'tanggal_sensus' => '2026-10-28',
+            ]);
+
+        $response->assertSessionHasErrors('periode');
+
+        $this->assertDatabaseMissing('sensus_aset', [
+            'id_aset' => $this->asetP2btp->id_aset,
+            'periode' => '2022–2024',
+        ]);
+    }
+
+    public function test_skenario_5_tambah_sensus_pada_periode_belum_dimulai_ditolak(): void
+    {
+        // Periode masa depan (2028–2030) saat ini tahun 2026
+        $response = $this->actingAs($this->adminAset)
+            ->post(route('monitoring-aset.sensus.update', $this->asetP2btp), [
+                'periode' => '2028–2030',
+                'hasil_sensus' => 'Baik',
+                'tanggal_sensus' => '2026-10-28',
+            ]);
+
+        $response->assertSessionHasErrors('periode');
+
+        $this->assertDatabaseMissing('sensus_aset', [
+            'id_aset' => $this->asetP2btp->id_aset,
+            'periode' => '2028–2030',
+        ]);
+    }
+
+    public function test_skenario_6_akses_langsung_url_edit_periode_sudah_berakhir_ditolak_403(): void
+    {
+        // Akses langsung melalui URL query periode masa lampau yang sudah berakhir
+        $response = $this->actingAs($this->adminAset)
+            ->get(route('monitoring-aset.sensus.edit', [
+                'aset' => $this->asetP2btp->id_aset,
+                'periode' => '2022–2024',
+            ]));
+
+        $response->assertForbidden();
+
+        // Akses langsung URL query periode legacy lampau juga ditolak 403
+        $responseLegacy = $this->actingAs($this->adminAset)
+            ->get(route('monitoring-aset.sensus.edit', [
+                'aset' => $this->asetP2btp->id_aset,
+                'periode' => '2022–2025',
+            ]));
+
+        $responseLegacy->assertForbidden();
+    }
+
+    public function test_skenario_7_tampilan_riwayat_sensus_periode_lama_terlihat_tanpa_tombol_edit(): void
+    {
+        SensusAset::create([
+            'id_aset' => $this->asetP2btp->id_aset,
+            'periode' => '2022–2024',
+            'hasil_sensus' => 'Baik',
+            'tanggal_sensus' => '2023-04-10',
+            'catatan' => 'Sensus historis masa lampau',
+            'id_user' => $this->adminAset->id_user,
+        ]);
+
+        $response = $this->actingAs($this->adminAset)
+            ->get(route('monitoring-aset.sensus.riwayat', $this->asetP2btp));
+
+        $response->assertOk();
+        $html = $response->getContent();
+
+        // Data terlihat jelas
+        $this->assertStringContainsString('2022–2024', $html);
+        $this->assertStringContainsString('Baik', $html);
+        $this->assertStringContainsString('Sensus historis masa lampau', $html);
+
+        // Tidak ada tombol edit atau link edit form
+        $this->assertStringNotContainsString(route('monitoring-aset.sensus.edit', $this->asetP2btp), $html);
+        $this->assertStringNotContainsString('<th class="py-3 px-3 text-center">Aksi</th>', $html);
+    }
+
+    public function test_skenario_8_admin_upt_mencoba_mengedit_aset_upt_lain_ditolak_403(): void
+    {
+        // Admin UPT P2BTP mencoba akses URL edit aset milik UPT PSBP -> 403
+        $resEdit = $this->actingAs($this->adminUptP2btp)
+            ->get(route('monitoring-aset.sensus.edit', $this->asetPsbp));
+
+        $resEdit->assertForbidden();
+
+        // Admin UPT P2BTP mencoba kirim POST update untuk aset UPT PSBP -> 403
+        $resUpdate = $this->actingAs($this->adminUptP2btp)
+            ->post(route('monitoring-aset.sensus.update', $this->asetPsbp), [
+                'periode' => '2025–2027',
+                'hasil_sensus' => 'Baik',
+                'tanggal_sensus' => '2026-10-28',
+            ]);
+
+        $resUpdate->assertForbidden();
+
+        // Pastikan tidak ada data yang tersimpan
+        $this->assertDatabaseMissing('sensus_aset', [
+            'id_aset' => $this->asetPsbp->id_aset,
+            'periode' => '2025–2027',
+        ]);
     }
 }

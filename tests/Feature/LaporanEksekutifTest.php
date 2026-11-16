@@ -550,15 +550,13 @@ class LaporanEksekutifTest extends TestCase
             'is_kendaraan' => false,
         ]);
 
-        // Login sebagai Admin P2BTP
+        // Login sebagai Admin P2BTP mencoba mengakses laporan ditolak HTTP 403
         $response = $this->actingAs($adminP2btp)->get(route('laporan.index', [
             'jenis' => 'tahunan',
             'tahun' => 2025,
         ]));
 
-        $response->assertStatus(200);
-        // Pastikan dropdown pemilihan unit tidak muncul untuk role non-Admin Aset
-        $response->assertDontSee('Semua Unit (Konsolidasi)');
+        $response->assertStatus(403);
 
         $service = app(LaporanEksekutifService::class);
         $query = $service->asetQueryAt(Carbon::parse('2025-12-31 23:59:59'));
@@ -595,6 +593,9 @@ class LaporanEksekutifTest extends TestCase
         ]);
 
         $this->actingAs($adminBidang);
+        // Akses langsung ke halaman laporan ditolak HTTP 403 untuk Admin Bidang
+        $this->get(route('laporan.index'))->assertStatus(403);
+
         $service = app(LaporanEksekutifService::class);
         $query = $service->asetQueryAt(Carbon::parse('2025-12-31 23:59:59'));
 
@@ -630,6 +631,9 @@ class LaporanEksekutifTest extends TestCase
         ]);
 
         $this->actingAs($pegawaiP2btp);
+        // Akses langsung ke halaman laporan ditolak HTTP 403 untuk Pegawai
+        $this->get(route('laporan.index'))->assertStatus(403);
+
         $service = app(LaporanEksekutifService::class);
         $query = $service->asetQueryAt(Carbon::parse('2025-12-31 23:59:59'));
 
@@ -646,6 +650,56 @@ class LaporanEksekutifTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertViewIs('laporan.index');
+    }
+
+    /** 18b. Seluruh endpoint Modul Laporan eksklusif hanya dapat diakses Admin Aset */
+    public function test_seluruh_endpoint_laporan_eksklusif_hanya_admin_aset(): void
+    {
+        $endpoints = [
+            'laporan.index' => [],
+            'laporan.bulanan' => [],
+            'laporan.export.excel' => [],
+            'laporan.export.pdf' => [],
+        ];
+
+        // 1. Admin Aset berhasil (HTTP 200)
+        $adminAset = $this->userDenganRole('Admin Aset');
+        $this->actingAs($adminAset);
+        foreach ($endpoints as $routeName => $params) {
+            $resp = $this->get(route($routeName, $params));
+            $resp->assertStatus(200);
+        }
+
+        // 2. Admin UPT ditolak (HTTP 403)
+        $adminUpt = $this->adminUpt('UPT P2BTP');
+        $this->actingAs($adminUpt);
+        foreach ($endpoints as $routeName => $params) {
+            $resp = $this->get(route($routeName, $params));
+            $resp->assertStatus(403);
+        }
+
+        // 3. Admin Bidang ditolak (HTTP 403)
+        $adminBidang = $this->adminBidang();
+        $this->actingAs($adminBidang);
+        foreach ($endpoints as $routeName => $params) {
+            $resp = $this->get(route($routeName, $params));
+            $resp->assertStatus(403);
+        }
+
+        // 4. Pegawai ditolak (HTTP 403)
+        $pegawai = $this->pegawaiRole('UPT P2BTP');
+        $this->actingAs($pegawai);
+        foreach ($endpoints as $routeName => $params) {
+            $resp = $this->get(route($routeName, $params));
+            $resp->assertStatus(403);
+        }
+
+        // 5. Tamu (Guest) diarahkan ke login (HTTP 302)
+        auth()->logout();
+        foreach ($endpoints as $routeName => $params) {
+            $resp = $this->get(route($routeName, $params));
+            $resp->assertStatus(302)->assertRedirect(route('login'));
+        }
     }
 
     /** 19. Tamu tanpa login ditolak ke halaman login dan tidak ada endpoint ekspor bypass di Phase 1 */
@@ -1346,6 +1400,28 @@ class LaporanEksekutifTest extends TestCase
     {
         $admin = $this->userDenganRole('Admin Aset');
         $this->actingAs($admin);
+
+        $lokasiDinas = Lokasi::where('jenis_lokasi', 'Dinas')->firstOrFail();
+
+        Aset::create([
+            'id_lokasi' => $lokasiDinas->id_lokasi,
+            'nomor_kartu_barang' => 'TST-KND-B-' . uniqid(),
+            'tanggal_pengadaan' => '2026-11-01',
+            'nilai_perolehan' => 10000000,
+            'kondisi' => 'Baik',
+            'status_aset' => 'aktif',
+            'is_kendaraan' => true,
+        ]);
+
+        Aset::create([
+            'id_lokasi' => $lokasiDinas->id_lokasi,
+            'nomor_kartu_barang' => 'TST-KND-RB-' . uniqid(),
+            'tanggal_pengadaan' => '2026-11-01',
+            'nilai_perolehan' => 10000000,
+            'kondisi' => 'Rusak Berat',
+            'status_aset' => 'aktif',
+            'is_kendaraan' => true,
+        ]);
 
         $service = app(LaporanEksekutifService::class);
         $resNov = $service->resolvePeriode('bulanan', 2026, 11);

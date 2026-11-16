@@ -140,6 +140,7 @@ class PegawaiController extends Controller
         $lokasiDinas = Lokasi::dinas();
         $fieldLabels = self::FIELD_LABELS;
         $roleList = $this->scope->roleListBoleh();
+        $isAdminAset = $this->scope->isAdminAset();
 
         return view('master-data.pegawai.index', compact(
             'pegawaiList',
@@ -147,7 +148,8 @@ class PegawaiController extends Controller
             'ruanganList',
             'lokasiDinas',
             'fieldLabels',
-            'roleList'
+            'roleList',
+            'isAdminAset'
         ));
     }
 
@@ -208,13 +210,17 @@ class PegawaiController extends Controller
 
         $pegawai->load('skpd', 'ruangan', 'user.role');
 
-        $riwayatLogs = \App\Models\ActivityLog::query()
-            ->where('subject_type', Pegawai::class)
-            ->where('subject_id', $pegawai->id_pegawai)
-            ->with(['actor.pegawai', 'actor.role'])
-            ->orderByDesc('created_at')
-            ->orderByDesc('id_activity_log')
-            ->get();
+        $isAdminAset = $this->scope->isAdminAset();
+
+        $riwayatLogs = $isAdminAset
+            ? \App\Models\ActivityLog::query()
+                ->where('subject_type', Pegawai::class)
+                ->where('subject_id', $pegawai->id_pegawai)
+                ->with(['actor.pegawai', 'actor.role'])
+                ->orderByDesc('created_at')
+                ->orderByDesc('id_activity_log')
+                ->get()
+            : collect();
 
         return view('master-data.pegawai.show', [
             'pegawai' => $pegawai,
@@ -222,6 +228,7 @@ class PegawaiController extends Controller
             'roleList' => $this->scope->rolesUntukPegawai($pegawai),
             'riwayatLogs' => $riwayatLogs,
             'fieldLabels' => self::FIELD_LABELS,
+            'isAdminAset' => $isAdminAset,
         ]);
     }
 
@@ -401,24 +408,28 @@ class PegawaiController extends Controller
         ], [
             'id_skpd.required' => 'SKPD wajib dipilih.',
             'id_skpd.in' => 'Anda tidak berwenang memilih SKPD tersebut.',
+            'id_ruangan.required' => 'Ruangan kerja wajib dipilih.',
+            'id_ruangan.exists' => 'Ruangan yang dipilih tidak valid atau tidak ditemukan.',
         ]);
 
         return $data;
     }
 
     /**
-     * Ruangan wajib berada pada lokasi kerja SKPD yang dipilih.
-     * Ruang bersama (id_skpd NULL) tetap boleh dipakai semua SKPD.
+     * Ruangan wajib dipilih dan harus berada pada lokasi kerja SKPD terpilih.
+     * Ruangan bersama (id_skpd NULL) tetap diperbolehkan selama id_lokasi sesuai.
      *
      * @return array<int, mixed>
      */
     private function ruanganRules(Request $request): array
     {
         return [
-            'nullable',
+            'required',
             'exists:ruangan,id_ruangan',
             function (string $attribute, $value, \Closure $fail) use ($request) {
                 if ($value === null || $value === '') {
+                    $fail('Ruangan kerja wajib dipilih.');
+
                     return;
                 }
 
@@ -426,18 +437,15 @@ class PegawaiController extends Controller
                 $skpdId = $request->input('id_skpd');
 
                 if (! $ruangan) {
-                    return;
-                }
+                    $fail('Ruangan yang dipilih tidak valid atau tidak ditemukan.');
 
-                // Ruang bersama (tanpa skpd) boleh dipakai siapa saja.
-                if ($ruangan->id_skpd === null) {
                     return;
                 }
 
                 $lokasiSkpd = Lokasi::untukSkpd($skpdId !== null && $skpdId !== '' ? (int) $skpdId : null);
 
                 // Fail-closed: tanpa lokasi kerja yang sah untuk SKPD terpilih,
-                // ruangan milik SKPD lain TIDAK BOLEH diterima.
+                // ruangan milik lokasi lain TIDAK BOLEH diterima.
                 if (! $lokasiSkpd) {
                     $fail('Lokasi kerja untuk SKPD terpilih belum tersedia. Ruangan tidak dapat dipilih.');
 
@@ -445,7 +453,7 @@ class PegawaiController extends Controller
                 }
 
                 if ((int) $ruangan->id_lokasi !== (int) $lokasiSkpd->id_lokasi) {
-                    $fail('Ruangan yang dipilih tidak berada pada lokasi SKPD tersebut. Pilih ruang lain atau ganti SKPD.');
+                    $fail('Ruangan yang dipilih tidak sesuai dengan lokasi kerja SKPD.');
                 }
             },
         ];

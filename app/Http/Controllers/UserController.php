@@ -62,7 +62,7 @@ class UserController extends Controller
      */
     public function index(Request $request)
     {
-        abort_unless($this->scope->bolehKelolaModul(), 403, 'Anda tidak memiliki hak akses untuk menu ini.');
+        abort_unless($this->scope->isAdminAset(), 403, 'Anda tidak memiliki hak akses untuk menu ini.');
 
         return redirect()->route('master-data.pegawai.index', $request->query());
     }
@@ -72,7 +72,7 @@ class UserController extends Controller
      */
     public function show(Pegawai $pegawai)
     {
-        abort_unless($this->scope->bolehLihatPegawai($pegawai), 403, 'Anda tidak memiliki hak akses untuk pegawai ini.');
+        abort_unless($this->scope->isAdminAset(), 403, 'Anda tidak memiliki hak akses untuk pegawai ini.');
 
         return redirect()->route('master-data.pegawai.show', ['pegawai' => $pegawai, 'tab' => 'tab-akun']);
     }
@@ -80,40 +80,23 @@ class UserController extends Controller
     /**
      * BUAT AKUN untuk pegawai yang SUDAH ADA (belum punya akun).
      *
+     * Eksklusif Admin Aset.
      * Tidak membuat pegawai baru, tidak mengubah data pegawai.
-     * Username & password default = NIP.
-     *
-     * Pencegahan duplikat dilakukan di application layer (cek + lock baris
-     * pegawai dalam transaksi) karena users.id_pegawai belum UNIQUE.
+     * Username & password default = NIP. Password opsional untuk seluruh pegawai.
+     * Akun baru otomatis memperoleh role Pegawai.
      */
     public function storeAccount(Request $request, Pegawai $pegawai)
     {
-        abort_unless($this->scope->bolehLihatPegawai($pegawai), 403, 'Anda tidak memiliki hak akses untuk pegawai ini.');
-
-        $nipLength = strlen(trim((string) $pegawai->nip));
-        $passwordRules = ['nullable', 'string', 'min:8'];
-        if ($nipLength < 8) {
-            $passwordRules = ['required', 'string', 'min:8'];
-        }
+        abort_unless($this->scope->isAdminAset(), 403, 'Anda tidak memiliki hak akses untuk pegawai ini.');
 
         $data = $request->validate([
-            'id_role' => ['required', 'exists:role,id_role'],
             'username' => ['nullable', 'string', 'max:255', 'unique:users,username'],
-            'password' => $passwordRules,
+            'password' => ['nullable', 'string', 'min:8'],
         ], [
-            'password.required' => 'NIP pegawai kurang dari 8 karakter. Anda wajib memasukkan password manual minimal 8 karakter.',
             'password.min' => 'Password minimal harus 8 karakter.',
         ]);
 
-        $role = Role::find($data['id_role']);
-
-        if (! $role) {
-            throw ValidationException::withMessages([
-                'id_role' => 'Role tidak ditemukan.',
-            ]);
-        }
-
-        $this->scope->validasiRoleUntukPegawai($role->nama_role, $pegawai);
+        $role = Role::where('nama_role', UserManagementScope::ROLE_PEGAWAI)->firstOrFail();
 
         if ($pegawai->user()->exists()) {
             throw ValidationException::withMessages([
@@ -190,7 +173,7 @@ class UserController extends Controller
      */
     public function update(Request $request, Pegawai $pegawai)
     {
-        abort_unless($this->scope->bolehLihatPegawai($pegawai), 403, 'Anda tidak memiliki hak akses untuk pegawai ini.');
+        abort_unless($this->scope->isAdminAset(), 403, 'Anda tidak memiliki hak akses untuk pegawai ini.');
 
         $user = $pegawai->user;
 
@@ -245,7 +228,7 @@ class UserController extends Controller
      */
     public function updateRole(Request $request, Pegawai $pegawai)
     {
-        abort_unless($this->scope->bolehLihatPegawai($pegawai), 403, 'Anda tidak memiliki hak akses untuk pegawai ini.');
+        abort_unless($this->scope->isAdminAset(), 403, 'Anda tidak memiliki hak akses untuk pegawai ini.');
 
         $data = $request->validate([
             'id_role' => ['required', 'exists:role,id_role'],
@@ -297,7 +280,7 @@ class UserController extends Controller
      */
     public function updateStatus(Request $request, Pegawai $pegawai)
     {
-        abort_unless($this->scope->bolehLihatPegawai($pegawai), 403, 'Anda tidak memiliki hak akses untuk pegawai ini.');
+        abort_unless($this->scope->isAdminAset(), 403, 'Anda tidak memiliki hak akses untuk pegawai ini.');
 
         $data = $request->validate([
             'status_user' => ['required', Rule::in(['aktif', 'nonaktif'])],

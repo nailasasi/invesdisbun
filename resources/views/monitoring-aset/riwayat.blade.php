@@ -79,7 +79,6 @@
                         <th class="py-3 px-3">Petugas Pencatat</th>
                         <th class="py-3 px-3">Catatan</th>
                         <th class="py-3 px-3">Waktu Rekam</th>
-                        <th class="py-3 px-3 text-center">Aksi</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-50">
@@ -116,16 +115,10 @@
                             <td class="py-3 px-3 text-slate-400 text-[11px]">
                                 {{ $r->created_at ? $r->created_at->format('d M Y H:i') : '-' }}
                             </td>
-                            <td class="py-3 px-3 text-center">
-                                <a href="{{ route('monitoring-aset.sensus.edit', ['aset' => $aset->id_aset, 'periode' => $r->periode]) }}"
-                                   class="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 transition hover:bg-slate-50">
-                                    Edit
-                                </a>
-                            </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="py-8 text-center text-slate-400">Belum ada catatan sensus untuk aset ini.</td>
+                            <td colspan="6" class="py-8 text-center text-slate-400">Belum ada catatan sensus untuk aset ini.</td>
                         </tr>
                     @endforelse
                 </tbody>

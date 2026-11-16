@@ -105,7 +105,7 @@
         @error('id_skpd')<p class="text-xs font-medium text-red-600">{{ $message }}</p>@enderror
     </div>
 
-    {{-- Field 5 & 6: Lokasi Kerja (Otomatis) & Ruangan Kerja (Opsional) berdampingan di sm+, vertikal di mobile --}}
+    {{-- Field 5 & 6: Lokasi Kerja (Otomatis) & Ruangan Kerja (Wajib) berdampingan di sm+, vertikal di mobile --}}
     <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div class="space-y-1">
             <label for="{{ $prefix }}lokasi" class="block text-xs font-semibold uppercase tracking-wider text-slate-600">
@@ -124,14 +124,15 @@
 
         <div class="space-y-1">
             <label for="{{ $prefix }}id_ruangan" class="block text-xs font-semibold uppercase tracking-wider text-slate-600">
-                Ruangan Kerja
+                Ruangan Kerja <span class="text-red-500">*</span>
             </label>
             <select
                 id="{{ $prefix }}id_ruangan"
                 name="id_ruangan"
+                required
                 class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-xs focus:border-disbun-600 focus:outline-none focus:ring-2 focus:ring-disbun-400 transition"
             >
-                <option value="">-- Pilih Ruangan --</option>
+                <option value="" disabled @selected((string) $oldRuangan === '')>-- Pilih Ruangan --</option>
                 @foreach ($ruanganList as $ruangan)
                     <option
                         value="{{ $ruangan->id_ruangan }}"

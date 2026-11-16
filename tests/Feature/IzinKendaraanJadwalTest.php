@@ -232,7 +232,8 @@ class IzinKendaraanJadwalTest extends TestCase
         // Multi hari
         $start3 = Carbon::parse('2026-12-25 08:00:00');
         $end3 = Carbon::parse('2026-12-27 15:00:00');
-        $this->assertEquals('3 Hari (' . $start3->translatedFormat('d M') . ' - ' . $end3->translatedFormat('d M Y') . ')', IzinKendaraanController::hitungDurasi($start3, $end3));
+        $rentang3 = $start3->translatedFormat('H:i, d M') . ' - ' . $end3->translatedFormat('H:i, d M Y');
+        $this->assertEquals('3 Hari (' . $rentang3 . ')', IzinKendaraanController::hitungDurasi($start3, $end3));
     }
 
     /**
@@ -429,8 +430,8 @@ class IzinKendaraanJadwalTest extends TestCase
 
         // Pilih jadwal yang mencakup saat ini (now)
         $res = $this->getJson(route('layanan.izin-kendaraan.ketersediaan', [
-            'tanggal_berangkat' => now()->subHour()->format('Y-m-d'),
-            'waktu_berangkat' => now()->subHour()->format('H:i'),
+            'tanggal_berangkat' => now()->format('Y-m-d'),
+            'waktu_berangkat' => now()->format('H:i'),
             'tanggal_kembali' => now()->addHours(2)->format('Y-m-d'),
             'waktu_kembali' => now()->addHours(2)->format('H:i'),
         ]));
@@ -574,6 +575,7 @@ class IzinKendaraanJadwalTest extends TestCase
         $knd = $this->buatKendaraan(isFinalized: true);
 
         // 12.1 Ajukan izin dengan jadwal lengkap
+        Carbon::setTestNow(Carbon::parse(now()->toDateString() . ' 08:00:00'));
         $this->loginSebagai($pemohon);
         $resStore = $this->post(route('layanan.izin-kendaraan.store'), [
             'id_kendaraan' => $knd->id_kendaraan,
@@ -581,7 +583,7 @@ class IzinKendaraanJadwalTest extends TestCase
             'nama_pengemudi' => 'Driver Alur Lengkap',
             'tujuan' => 'Dinas Surabaya - Malang',
             'tanggal_berangkat' => now()->toDateString(),
-            'waktu_berangkat' => '00:01',
+            'waktu_berangkat' => '08:00',
             'tanggal_kembali' => now()->toDateString(),
             'waktu_kembali' => '23:59',
         ]);
@@ -590,7 +592,7 @@ class IzinKendaraanJadwalTest extends TestCase
         $izin = IzinKendaraan::where('id_kendaraan', $knd->id_kendaraan)->latest('id_izin')->first();
         $this->assertNotNull($izin);
         $this->assertEquals('Menunggu', $izin->status_approval);
-        $this->assertEquals('1 Hari (00:01 - 23:59)', $izin->durasi);
+        $this->assertEquals('1 Hari (08:00 - 23:59)', $izin->durasi);
 
         // 12.2 ACC oleh Admin Aset
         $this->loginSebagai($adminAset);

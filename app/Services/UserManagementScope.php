@@ -127,8 +127,8 @@ class UserManagementScope
     /**
      * Daftar nama role yang boleh ditetapkan oleh akun login ini.
      *
-     * Admin Aset: seluruh role. Admin UPT: hanya Pegawai & Admin UPT
-     * (dan tetap lolos validasi role terhadap SKPD pegawainya).
+     * Hanya Admin Aset yang berwenang menetapkan role pengguna.
+     * Admin UPT, Admin Bidang, dan Pegawai tidak memiliki wewenang.
      *
      * @return array<int, string>
      */
@@ -136,10 +136,6 @@ class UserManagementScope
     {
         if ($this->isAdminAset()) {
             return [self::ROLE_ASET, self::ROLE_BIDANG, self::ROLE_UPT, self::ROLE_PEGAWAI];
-        }
-
-        if ($this->isAdminUpt()) {
-            return [self::ROLE_UPT, self::ROLE_PEGAWAI];
         }
 
         return [];
@@ -222,6 +218,10 @@ class UserManagementScope
      */
     public function validasiRoleUntukPegawai(string $namaRole, ?Pegawai $pegawai): void
     {
+        if (! $this->isAdminAset()) {
+            abort(403, 'Hanya Admin Aset yang berwenang mengubah role akun.');
+        }
+
         if (! $pegawai) {
             throw ValidationException::withMessages([
                 'id_role' => 'Pegawai tidak ditemukan.',
@@ -252,22 +252,6 @@ class UserManagementScope
             throw ValidationException::withMessages([
                 'id_role' => 'Role Admin UPT hanya dapat diberikan kepada pegawai dengan penempatan SKPD jenis UPT.',
             ]);
-        }
-
-        if (! $this->isAdminAset()) {
-            $skpdAdminUpt = $this->skpdAdminUpt();
-
-            if ($skpdAdminUpt === null) {
-                throw ValidationException::withMessages([
-                    'id_role' => 'Penempatan UPT Anda tidak sah. Hubungi Admin Aset.',
-                ]);
-            }
-
-            if ($pegawai->id_skpd === null || (int) $pegawai->id_skpd !== $skpdAdminUpt) {
-                throw ValidationException::withMessages([
-                    'id_role' => 'Anda hanya dapat mengelola pegawai pada UPT milik Anda sendiri.',
-                ]);
-            }
         }
     }
 }

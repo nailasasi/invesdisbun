@@ -18,12 +18,20 @@ class SppbiTemplateTest extends TestCase
 {
     private function templateAktif(): ?string
     {
-        $pattern = function_exists('storage_path') && app() instanceof \Illuminate\Contracts\Foundation\Application
-            ? storage_path('app/public/templates/sppbi_*.docx')
-            : dirname(__DIR__, 2).'/storage/app/public/templates/sppbi_*.docx';
+        $patterns = [
+            function_exists('storage_path') && app() instanceof \Illuminate\Contracts\Foundation\Application
+                ? storage_path('app/private/templates/sppbi_*.docx')
+                : dirname(__DIR__, 2).'/storage/app/private/templates/sppbi_*.docx',
+            function_exists('storage_path') && app() instanceof \Illuminate\Contracts\Foundation\Application
+                ? storage_path('app/public/templates/sppbi_*.docx')
+                : dirname(__DIR__, 2).'/storage/app/public/templates/sppbi_*.docx',
+        ];
 
-        $files = glob($pattern) ?: [];
-        $files = array_values(array_filter($files, 'is_file'));
+        $files = [];
+        foreach ($patterns as $pattern) {
+            $matched = glob($pattern) ?: [];
+            $files = array_merge($files, array_values(array_filter($matched, 'is_file')));
+        }
 
         if ($files === []) {
             return null;

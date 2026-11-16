@@ -31,7 +31,7 @@
                         };
                     @endphp
                     <tr class="transition hover:bg-slate-50">
-                        <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-500">{{ $i + 1 }}</td>
+                        <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-500">{{ ($asetMelekat->firstItem() ?? 1) + $i }}</td>
                         <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">{{ $aset->barang?->nama_barang ?? '-' }}</td>
                         <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $aset->nomor_kartu_barang ?? '-' }}</td>
                         <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $aset->merk ?? '-' }}</td>
@@ -76,5 +76,11 @@
             </tbody>
         </table>
     </div>
+
+    @if ($asetMelekat->hasPages())
+    <div class="border-t border-slate-100 px-6 py-4">
+        {{ $asetMelekat->links() }}
+    </div>
+    @endif
 </x-card>
 

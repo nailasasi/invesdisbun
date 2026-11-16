@@ -247,49 +247,66 @@ class ManajemenPegawaiRefactorTest extends TestCase
     }
 
     /**
-     * 6. Role yang tidak sesuai SKPD ditolak backend.
+     * 6. Role akun baru otomatis Pegawai & validasi role tidak sesuai SKPD pada Ubah Role ditolak backend.
      */
     public function test_06_role_tidak_sesuai_skpd_ditolak_backend(): void
     {
         $admin = $this->getAdminAset();
         $this->actingAs($admin);
 
+        $rolePegawai = Role::where('nama_role', 'Pegawai')->firstOrFail();
         $roleAdminUpt = Role::where('nama_role', 'Admin UPT')->firstOrFail();
         $roleAdminBidang = Role::where('nama_role', 'Admin Bidang')->firstOrFail();
         $roleAdminAset = Role::where('nama_role', 'Admin Aset')->firstOrFail();
 
-        // Kasus A: Pegawai Bidang (id_skpd 2) ditolak jika diberi role Admin UPT
+        // 1. Parameter tampering saat buat akun: mencoba kirim id_role Admin UPT untuk pegawai Bidang
+        // Sistem WAJIB mengabaikan id_role dari request dan tetap menetapkan role Pegawai secara otomatis.
         $pegawaiBidang = Pegawai::create([
             'nip' => '199912312024011002',
             'nama_pegawai' => 'Pegawai Bidang Uji Role',
             'id_skpd' => 2,
         ]);
 
-        $responseA = $this->post(route('user.akun.store', $pegawaiBidang), [
+        $responseTamper = $this->post(route('user.akun.store', $pegawaiBidang), [
+            'id_role' => $roleAdminUpt->id_role,
+        ]);
+        $responseTamper->assertRedirect();
+        $this->assertTrue($pegawaiBidang->user()->exists());
+        $this->assertEquals($rolePegawai->id_role, $pegawaiBidang->user->id_role, 'Akun baru wajib otomatis ber-role Pegawai meskipun request menyertakan id_role lain.');
+
+        // 2. Pada fitur Ubah Role: Pegawai Bidang ditolak jika diubah ke Admin UPT
+        $responseA = $this->post(route('user.role.update', $pegawaiBidang), [
             'id_role' => $roleAdminUpt->id_role,
         ]);
         $responseA->assertSessionHasErrors('id_role');
-        $this->assertFalse($pegawaiBidang->user()->exists());
 
-        // Kasus B: Pegawai UPT (id_skpd 6) ditolak jika diberi role Admin Bidang
+        // 3. Pegawai UPT (id_skpd 6): buat akun otomatis Pegawai
         $pegawaiUpt = Pegawai::create([
             'nip' => '199912312024011003',
             'nama_pegawai' => 'Pegawai UPT Uji Role',
             'id_skpd' => 6,
         ]);
+        $this->post(route('user.akun.store', $pegawaiUpt))->assertRedirect();
+        $this->assertEquals($rolePegawai->id_role, $pegawaiUpt->fresh()->user->id_role);
 
-        $responseB = $this->post(route('user.akun.store', $pegawaiUpt), [
+        // Kasus B: Pegawai UPT ditolak jika diubah ke Admin Bidang
+        $responseB = $this->post(route('user.role.update', $pegawaiUpt), [
             'id_role' => $roleAdminBidang->id_role,
         ]);
         $responseB->assertSessionHasErrors('id_role');
-        $this->assertFalse($pegawaiUpt->user()->exists());
 
-        // Kasus C: Pegawai UPT (id_skpd 6) ditolak jika diberi role Admin Aset
-        $responseC = $this->post(route('user.akun.store', $pegawaiUpt), [
+        // Kasus C: Pegawai UPT ditolak jika diubah ke Admin Aset
+        $responseC = $this->post(route('user.role.update', $pegawaiUpt), [
             'id_role' => $roleAdminAset->id_role,
         ]);
         $responseC->assertSessionHasErrors('id_role');
-        $this->assertFalse($pegawaiUpt->user()->exists());
+
+        // Kasus D: Pegawai UPT diubah ke Admin UPT -> Berhasil
+        $responseD = $this->post(route('user.role.update', $pegawaiUpt), [
+            'id_role' => $roleAdminUpt->id_role,
+        ]);
+        $responseD->assertSessionHas('success');
+        $this->assertEquals($roleAdminUpt->id_role, $pegawaiUpt->fresh()->user->id_role);
     }
 
     /**
@@ -318,11 +335,13 @@ class ManajemenPegawaiRefactorTest extends TestCase
         $this->actingAs($admin);
 
         // Coba pindahkan SKPD ke UPT (id_skpd 6) tanpa mengubah role terlebih dahulu
+        $ruangUpt = Ruangan::where('id_lokasi', 2)->value('id_ruangan');
         $response = $this->put(route('master-data.pegawai.update', $pegawai), [
             'nip' => $pegawai->nip,
             'nama_pegawai' => $pegawai->nama_pegawai,
             'jabatan' => $pegawai->jabatan,
             'id_skpd' => 6, // UPT
+            'id_ruangan' => $ruangUpt,
         ]);
 
         $response->assertSessionHasErrors('id_skpd');
@@ -401,11 +420,13 @@ class ManajemenPegawaiRefactorTest extends TestCase
         $admin = $this->getAdminAset();
         $this->actingAs($admin);
 
+        $ruangDinas = Ruangan::where('id_lokasi', 1)->value('id_ruangan');
         $response = $this->put(route('master-data.pegawai.update', $pegawai), [
             'nip' => $pegawai->nip,
             'nama_pegawai' => 'Nama Sesudah Diedit',
             'jabatan' => 'Staf Sesudah',
             'id_skpd' => 1,
+            'id_ruangan' => $ruangDinas,
         ]);
 
         $response->assertRedirect(route('master-data.pegawai.show', $pegawai));
@@ -578,7 +599,7 @@ class ManajemenPegawaiRefactorTest extends TestCase
     }
 
     /**
-     * 15. NIP kurang dari 8 karakter wajib mengisi password manual minimal 8 karakter.
+     * 15. Password bersifat opsional untuk seluruh pegawai termasuk NIP pendek (default: NIP).
      */
     public function test_15_nip_kurang_dari_8_karakter_wajib_password_manual(): void
     {
@@ -588,35 +609,26 @@ class ManajemenPegawaiRefactorTest extends TestCase
             'id_skpd' => 1,
         ]);
 
-        $rolePegawai = Role::where('nama_role', 'Pegawai')->firstOrFail();
-
         $admin = $this->getAdminAset();
         $this->actingAs($admin);
 
-        // Tanpa password manual -> gagal validasi
-        $responseTanpaPassword = $this->post(route('user.akun.store', $pegawai), [
-            'id_role' => $rolePegawai->id_role,
-        ]);
-        $responseTanpaPassword->assertSessionHasErrors('password');
-        $this->assertFalse($pegawai->user()->exists());
-
-        // Password kurang dari 8 karakter -> gagal validasi
+        // 1. Password kurang dari 8 karakter saat diisi manual -> gagal validasi min:8
         $responsePasswordPendek = $this->post(route('user.akun.store', $pegawai), [
-            'id_role' => $rolePegawai->id_role,
             'password' => 'pendek',
         ]);
         $responsePasswordPendek->assertSessionHasErrors('password');
         $this->assertFalse($pegawai->user()->exists());
 
-        // Dengan password manual minimal 8 karakter -> berhasil
-        $responseValid = $this->post(route('user.akun.store', $pegawai), [
-            'id_role' => $rolePegawai->id_role,
-            'password' => 'manualpass123',
+        // 2. Tanpa password (kosong) -> BERHASIL (menggunakan NIP sebagai password awal)
+        $responseTanpaPassword = $this->post(route('user.akun.store', $pegawai), [
+            'password' => '',
         ]);
-        $responseValid->assertRedirect(route('master-data.pegawai.show', ['pegawai' => $pegawai, 'tab' => 'tab-akun']));
-
+        $responseTanpaPassword->assertRedirect(route('master-data.pegawai.show', ['pegawai' => $pegawai, 'tab' => 'tab-akun']));
         $pegawai->refresh();
         $this->assertTrue($pegawai->user()->exists());
+        $this->assertEquals('12345', $pegawai->user->username);
+        $rolePegawai = Role::where('nama_role', 'Pegawai')->firstOrFail();
+        $this->assertEquals($rolePegawai->id_role, $pegawai->user->id_role);
     }
 
     /**
@@ -735,11 +747,13 @@ class ManajemenPegawaiRefactorTest extends TestCase
         ]);
 
         // Simpan pembaruan via PUT AJAX
+        $ruangDinas = Ruangan::where('id_lokasi', 1)->value('id_ruangan');
         $responseUpdate = $this->putJson(route('master-data.pegawai.update', $pegawai), [
             'nip' => '199001012020011088',
             'nama_pegawai' => 'Nama Baru Pegawai Terupdate',
             'jabatan' => 'Jabatan Baru Terupdate',
             'id_skpd' => 1,
+            'id_ruangan' => $ruangDinas,
         ]);
 
         $responseUpdate->assertStatus(200);
@@ -968,10 +982,12 @@ class ManajemenPegawaiRefactorTest extends TestCase
         $this->get(route('master-data.pegawai.show', $pegawaiPsbp))->assertStatus(200);
 
         // 6. Update pegawai PSBP miliknya sendiri -> 200
+        $ruangPsbp = Ruangan::where('id_lokasi', 3)->value('id_ruangan');
         $responseUpdate = $this->putJson(route('master-data.pegawai.update', $pegawaiPsbp), [
             'nip' => '198909092013011007',
             'nama_pegawai' => 'Pegawai PSBP Nama Diperbarui',
             'id_skpd' => 7,
+            'id_ruangan' => $ruangPsbp,
         ]);
         $responseUpdate->assertStatus(200);
         $responseUpdate->assertJson(['success' => true]);
@@ -1062,11 +1078,13 @@ class ManajemenPegawaiRefactorTest extends TestCase
         $admin = $this->getAdminAset();
         $this->actingAs($admin);
 
+        $ruangDinas = Ruangan::where('id_lokasi', 1)->value('id_ruangan');
         $response = $this->postJson(route('master-data.pegawai.store'), [
             'nip' => '199505052025011099',
             'nama_pegawai' => 'Pegawai Baru Dari Modal Tambah',
             'jabatan' => 'Analis Data',
             'id_skpd' => 1,
+            'id_ruangan' => $ruangDinas,
         ]);
 
         $response->assertStatus(200);

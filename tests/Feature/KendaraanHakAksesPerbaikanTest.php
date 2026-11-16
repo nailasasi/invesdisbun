@@ -257,10 +257,7 @@ class KendaraanHakAksesPerbaikanTest extends TestCase
         $resIndexBidang->assertDontSee('/aset-barang/' . $pemegangPegawai->id_pegawai, false);
 
         $resShowBidang = $this->get(route('kendaraan.show', $kendaraan->id_kendaraan));
-        $resShowBidang->assertOk();
-        $resShowBidang->assertSee('Drs. Pemegang Uji Coba');
-        $resShowBidang->assertDontSee($expectedPegawaiUrl, false);
-        $resShowBidang->assertDontSee('/aset-barang/' . $pemegangPegawai->id_pegawai, false);
+        $resShowBidang->assertForbidden();
 
         // 3.4 Pegawai: teks biasa, TIDAK ada link ke profil pegawai dan TIDAK ada aset-barang.show
         $this->loginSebagai($pegawaiUser);

@@ -120,7 +120,7 @@
                         Silakan masuk dengan akun username &amp; password Anda.
                     </p>
 
-                    <form method="POST" action="{{ route('login.attempt') }}" class="mt-8 space-y-4">
+                    <form id="login-form" method="POST" action="{{ route('login.attempt') }}" class="mt-8 space-y-4">
                         @csrf
 
                         {{-- Username --}}
@@ -196,10 +196,33 @@
                         </div>
 
                         {{-- Submit --}}
-                        <button type="submit"
-                                class="w-full h-12 rounded-2xl bg-gradient-to-r from-[#07834d] via-[#099955] to-[#0ba35c] hover:from-[#067343] hover:to-[#099955] text-white font-bold text-sm tracking-wide shadow-md transition active:scale-[0.99] flex items-center justify-center">
-                            Masuk ke Dashboard
-                        </button>
+                        @php
+                            $isRateLimited = ($rateLimitSeconds ?? 0) > 0;
+                        @endphp
+                        <div>
+                            <button type="submit"
+                                    id="btn-login-submit"
+                                    @if($isRateLimited) disabled @endif
+                                    class="w-full h-12 rounded-2xl text-sm font-bold tracking-wide transition flex items-center justify-center {{ $isRateLimited ? 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300 shadow-none' : 'bg-gradient-to-r from-[#07834d] via-[#099955] to-[#0ba35c] hover:from-[#067343] hover:to-[#099955] text-white shadow-md active:scale-[0.99]' }}">
+                                <span id="btn-login-text">
+                                    @if($isRateLimited)
+                                        Coba lagi dalam {{ $rateLimitSeconds }} detik
+                                    @else
+                                        Masuk ke Dashboard
+                                    @endif
+                                </span>
+                            </button>
+
+                            {{-- Countdown box tepat di bawah tombol --}}
+                            <div id="rate-limit-countdown-box"
+                                 class="{{ $isRateLimited ? '' : 'hidden' }} mt-2.5 flex items-center justify-center gap-2 rounded-xl bg-amber-50 border border-amber-200/80 px-3.5 py-2 text-xs font-semibold text-amber-800 transition">
+                                <svg class="h-4 w-4 animate-spin text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                </svg>
+                                <span>Coba lagi dalam <strong id="rate-limit-countdown-seconds">{{ $rateLimitSeconds ?? 0 }}</strong> detik</span>
+                            </div>
+                        </div>
                     </form>
 
                     {{-- Banner catatan keamanan data --}}
@@ -218,9 +241,10 @@
                 </p>
             </div>
         </div>
-    </div>
+    </main>
 
     <script>
+        // Toggle password show/hide
         const toggle = document.getElementById('toggle-password');
         const pw = document.getElementById('password');
         const eye = document.getElementById('icon-eye');
@@ -235,6 +259,83 @@
                 toggle.setAttribute('aria-label', show ? 'Sembunyikan password' : 'Tampilkan password');
             });
         }
+
+        // Penanganan Rate Limit Countdown & Kunci Tombol
+        let remainingSeconds = {{ (int) ($rateLimitSeconds ?? 0) }};
+        const submitBtn = document.getElementById('btn-login-submit');
+        const submitBtnText = document.getElementById('btn-login-text');
+        const countdownBox = document.getElementById('rate-limit-countdown-box');
+        const countdownSec = document.getElementById('rate-limit-countdown-seconds');
+        const loginForm = document.getElementById('login-form');
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+
+        function updateRateLimitUI(disabled, seconds) {
+            if (!submitBtn) return;
+
+            if (disabled) {
+                submitBtn.disabled = true;
+                submitBtn.setAttribute('disabled', 'disabled');
+                submitBtn.className = 'w-full h-12 rounded-2xl text-sm font-bold tracking-wide shadow-none transition flex items-center justify-center bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300';
+                if (submitBtnText) {
+                    submitBtnText.textContent = 'Coba lagi dalam ' + seconds + ' detik';
+                }
+                if (countdownBox) {
+                    countdownBox.classList.remove('hidden');
+                }
+                if (countdownSec) {
+                    countdownSec.textContent = seconds;
+                }
+            } else {
+                submitBtn.disabled = false;
+                submitBtn.removeAttribute('disabled');
+                submitBtn.className = 'w-full h-12 rounded-2xl text-sm font-bold tracking-wide shadow-md transition flex items-center justify-center bg-gradient-to-r from-[#07834d] via-[#099955] to-[#0ba35c] hover:from-[#067343] hover:to-[#099955] text-white active:scale-[0.99]';
+                if (submitBtnText) {
+                    submitBtnText.textContent = 'Masuk ke Dashboard';
+                }
+                if (countdownBox) {
+                    countdownBox.classList.add('hidden');
+                }
+            }
+        }
+
+        if (remainingSeconds > 0) {
+            updateRateLimitUI(true, remainingSeconds);
+
+            const timer = setInterval(() => {
+                remainingSeconds--;
+                if (remainingSeconds <= 0) {
+                    clearInterval(timer);
+                    remainingSeconds = 0;
+                    updateRateLimitUI(false, 0);
+                } else {
+                    updateRateLimitUI(true, remainingSeconds);
+                }
+            }, 1000);
+        }
+
+        // Kunci submit saat countdown aktif (klik tombol maupun enter)
+        if (loginForm) {
+            loginForm.addEventListener('submit', (e) => {
+                if (remainingSeconds > 0) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
+                }
+            });
+        }
+
+        [usernameInput, passwordInput].forEach((input) => {
+            if (input) {
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && remainingSeconds > 0) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return false;
+                    }
+                });
+            }
+        });
     </script>
 </body>
 </html>

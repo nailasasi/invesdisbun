@@ -207,31 +207,88 @@ class KendaraanController extends Controller
      * Ekspor daftar kendaraan ke Excel (.xlsx).
      *
      * Tiga mode lewat parameter `mode`:
-     *  - semua  : seluruh kendaraan sesuai cakupan (AsetScope) + filter daftar.
-     *  - segera : hanya yang pajak aktifnya terlambat / jatuh tempo <= 30 hari.
-     *  - pilih  : hanya id_kendaraan terpilih (mode=pilih, ids[]).
+     *  - semua  : seluruh kendaraan dengan status aset 'aktif'.
+     *  - segera : kendaraan aktif dengan jatuh tempo pajak (1 tahun / 5 tahun)
+     *             berada pada rentang hari ini s.d. 30 hari ke depan (inklusif).
+     *  - pilih  : hanya kendaraan aktif dari id_kendaraan terpilih (ids[]).
      *
-     * Route hanya untuk role Admin Aset (middleware). ID dari request SELALU
-     * divalidasi dan query tetap dibatasi AsetScope + filter daftar, sehingga
-     * manipulasi request tidak dapat membocorkan kendaraan di luar cakupan.
+     * Akses eksklusif untuk role Admin Aset (didukung otorisasi lapis kedua).
+     * Seluruh mode mengunci status aset 'aktif' di backend untuk mencegah kebocoran
+     * kendaraan nonaktif melalui manipulasi parameter.
      */
     public function export(Request $request)
     {
+        abort_unless($this->scope->isAdminAset(), 403, 'Hanya Admin Aset yang berwenang mengekspor data kendaraan.');
+
         $mode = (string) $request->input('mode', 'semua');
         if (! in_array($mode, ['semua', 'segera', 'pilih'], true)) {
             $mode = 'semua';
         }
 
-        $query = $this->filteredKendaraanQuery($request)->with(['pajak', 'platAktif']);
+        // Kebutuhan bisnis: seluruh mode ekspor HANYA mencakup kendaraan dengan
+        // status aset 'aktif'. Status pengguna 'nonaktif' dan status sistem
+        // ('diusulkan_hapus', 'dihapuskan') tidak boleh disertakan.
+        $exportRequest = clone $request;
+        $exportRequest->merge(['status' => 'aktif']);
+
+        $query = $this->filteredKendaraanQuery($exportRequest)
+            ->whereHas('aset', fn ($a) => $a->where('status_aset', 'aktif'))
+            ->with([
+                'aset.barang',
+                'aset.pemegangSaatIni.pegawai',
+                'aset.penempatanAktif.ruangan',
+                'aset.skpd',
+                'aset.lokasi',
+                'pajak',
+                'platAktif',
+            ]);
 
         if ($mode === 'segera') {
-            // Ambang 30 hari mengikuti halaman Kendaraan. Pajak aktif yang
-            // tanggal_berakhir-nya <= hari ini + 30 (termasuk yang sudah
-            // terlambat) ikut; tanggal null tidak ikut.
+            // Kebutuhan bisnis Segera Habis Pajak:
+            // - Rentang: hari ini sampai 30 hari ke depan (inklusif).
+            // - Pajak yang sudah lewat tanggal jatuh tempo (< today) TIDAK BOLEH masuk.
+            // - Pajak yang jatuh tempo > 30 hari TIDAK BOLEH masuk.
+            // - Tanggal kosong (null) TIDAK BOLEH masuk.
+            // - Memeriksa Pajak Tahunan (pajak_5_tahunan = false) dan Pajak 5 Tahunan (true).
+            // - Jika salah satu atau kedua jenis pajak memenuhi kriteria, kendaraan masuk 1 kali.
+            // - Pajak 5 tahunan diperiksa langsung dari riwayat tanggal terbaru tanpa
+            //   terhalang anomali status 'Tidak Aktif' hasil impor massal.
+            $today = Carbon::today()->toDateString();
             $batas = Carbon::today()->addDays(30)->toDateString();
-            $query->whereHas('pajakAktif', function ($q) use ($batas) {
-                $q->whereNotNull('tanggal_berakhir')
-                    ->whereDate('tanggal_berakhir', '<=', $batas);
+
+            $query->where(function (Builder $q) use ($today, $batas) {
+                // Pajak Tahunan: tanggal_berakhir terbaru berada dalam [today, batas]
+                $q->whereExists(function ($sub) use ($today, $batas) {
+                    $sub->selectRaw(1)
+                        ->from('pajak_kendaraan as p1')
+                        ->whereColumn('p1.id_kendaraan', 'kendaraan.id_kendaraan')
+                        ->where('p1.pajak_5_tahunan', false)
+                        ->whereNotNull('p1.tanggal_berakhir')
+                        ->whereBetween('p1.tanggal_berakhir', [$today, $batas])
+                        ->whereNotExists(function ($newer) {
+                            $newer->selectRaw(1)
+                                ->from('pajak_kendaraan as p1_newer')
+                                ->whereColumn('p1_newer.id_kendaraan', 'p1.id_kendaraan')
+                                ->where('p1_newer.pajak_5_tahunan', false)
+                                ->whereColumn('p1_newer.tanggal_berakhir', '>', 'p1.tanggal_berakhir');
+                        });
+                })
+                // ATAU Pajak Lima Tahunan: tanggal_berakhir terbaru berada dalam [today, batas]
+                ->orWhereExists(function ($sub) use ($today, $batas) {
+                    $sub->selectRaw(1)
+                        ->from('pajak_kendaraan as p5')
+                        ->whereColumn('p5.id_kendaraan', 'kendaraan.id_kendaraan')
+                        ->where('p5.pajak_5_tahunan', true)
+                        ->whereNotNull('p5.tanggal_berakhir')
+                        ->whereBetween('p5.tanggal_berakhir', [$today, $batas])
+                        ->whereNotExists(function ($newer) {
+                            $newer->selectRaw(1)
+                                ->from('pajak_kendaraan as p5_newer')
+                                ->whereColumn('p5_newer.id_kendaraan', 'p5.id_kendaraan')
+                                ->where('p5_newer.pajak_5_tahunan', true)
+                                ->whereColumn('p5_newer.tanggal_berakhir', '>', 'p5.tanggal_berakhir');
+                        });
+                });
             });
         } elseif ($mode === 'pilih') {
             $ids = $this->validatedExportIds($request);
@@ -293,21 +350,28 @@ class KendaraanController extends Controller
 
         $headers = [
             'No.',
+            'Nomor Kartu Barang',
+            'Nama Kendaraan',
             'Jenis Kendaraan',
-            'Nomor Polisi Aktif',
+            'Merk',
+            'Tipe',
+            'Nomor Polisi',
             'No. Rangka',
             'No. Mesin',
             'Pemegang Kendaraan',
-            'Jatuh Tempo Pajak 1 Tahun',
-            'Jatuh Tempo Pajak 5 Tahun',
+            'SKPD / Unit Kerja',
+            'Kondisi Kendaraan',
+            'Status Aset',
+            'Jatuh Tempo Pajak Tahunan',
+            'Jatuh Tempo Pajak Lima Tahunan',
             'Nominal Pajak',
             'Total Pajak',
-            'Pajak 5 Tahunan',
-            'Keterangan / Status Pajak',
+            'Status Pajak',
+            'Jenis Pajak yang Segera Habis',
             'Dokumentasi',
         ];
         $sheet->fromArray($headers, null, 'A1');
-        $sheet->getStyle('A1:M1')->applyFromArray([
+        $sheet->getStyle('A1:T1')->applyFromArray([
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
             'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '047857']],
             'alignment' => [
@@ -317,43 +381,63 @@ class KendaraanController extends Controller
             ],
         ]);
 
+        $today = Carbon::today();
+        $batas = Carbon::today()->addDays(30);
+
         $rowNum = 2;
         foreach ($rows as $i => $k) {
             [$jt1, $jt5] = $this->pajakJatuhTempo($k);
             $utama = $this->pajakUtama($k);
 
+            // Pemegang: relasi resmi penempatan aktif, fallback teks bebas
+            $pemegangResmi = $k->aset?->pemegangSaatIni?->pegawai?->nama_pegawai;
+            $namaPemegang = $pemegangResmi ?: ($k->pemegang ?: '-');
+
+            // Evaluasi jenis pajak yang segera habis (inklusif hari ini s.d. 30 hari ke depan)
+            $segeraHabis = $this->jenisPajakSegeraHabis($jt1, $jt5, $today, $batas);
+
+            // Evaluasi status pajak tahunan dan 5 tahunan
+            $statusPajak = $this->statusPajakEvaluasi($jt1, $jt5, $today, $batas);
+
             $sheet->fromArray([
                 $i + 1,
-                $k->jenis_kendaraan ?: $k->namaTampil(),
+                $k->aset?->nomor_kartu_barang ?? '-',
+                $k->namaTampil(),
+                $k->jenis_kendaraan ?? '-',
+                $k->aset?->merk ?: ($k->merk ?: '-'),
+                $k->tipe ?? '-',
                 $k->platAktif?->nomor_plat ?? '-',
                 $k->nomor_rangka ?? '-',
                 $k->nomor_mesin ?? '-',
-                $k->pemegang ?? '-',
+                $namaPemegang,
+                $k->aset?->skpd?->nama_skpd ?? '-',
+                $k->aset?->kondisi ?? '-',
+                $k->aset?->status_aset ? ucfirst($k->aset->status_aset) : '-',
                 $jt1 ? $jt1->format('d/m/Y') : '-',
                 $jt5 ? $jt5->format('d/m/Y') : '-',
                 $utama && $utama->nominal !== null ? (float) $utama->nominal : '-',
                 $utama && $utama->total_pajak !== null ? (float) $utama->total_pajak : '-',
-                $utama ? ($utama->pajak_5_tahunan ? 'Ya' : 'Tidak') : '-',
-                $this->statusPajakText($utama),
+                $statusPajak,
+                $segeraHabis,
             ], null, "A{$rowNum}");
 
             if ($utama && $utama->nominal !== null) {
-                $sheet->getStyle("I{$rowNum}")->getNumberFormat()->setFormatCode('"Rp "#,##0');
+                $sheet->getStyle("P{$rowNum}")->getNumberFormat()->setFormatCode('"Rp "#,##0');
             }
             if ($utama && $utama->total_pajak !== null) {
-                $sheet->getStyle("J{$rowNum}")->getNumberFormat()->setFormatCode('"Rp "#,##0');
+                $sheet->getStyle("Q{$rowNum}")->getNumberFormat()->setFormatCode('"Rp "#,##0');
             }
 
-            $this->embedFotoKendaraan($sheet, $k, $rowNum);
+            $this->embedFotoKendaraan($sheet, $k, $rowNum, 'T');
 
             $rowNum++;
         }
 
-        foreach (range('A', 'L') as $col) {
+        foreach (range('A', 'S') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
         // Kolom Dokumentasi (gambar) diberi lebar tetap agar tabel tetap terbaca.
-        $sheet->getColumnDimension('M')->setWidth(18);
+        $sheet->getColumnDimension('T')->setWidth(18);
 
         $label = match ($mode) {
             'segera' => 'Segera-Habis-Pajak',
@@ -392,8 +476,8 @@ class KendaraanController extends Controller
     }
 
     /**
-     * Record pajak "utama" untuk kolom Nominal, Total, Pajak 5 Tahunan, dan
-     * Keterangan/Status: pajak yang berstatus Aktif; bila tidak ada yang
+     * Record pajak "utama" untuk kolom Nominal dan Total Pajak:
+     * prioritas pajak yang berstatus Aktif; bila tidak ada yang
      * aktif, record pajak terbaru (tanggal_berakhir terbesar). Null bila
      * kendaraan tidak punya pajak sama sekali.
      */
@@ -409,31 +493,57 @@ class KendaraanController extends Controller
     }
 
     /**
-     * Teks kolom "Keterangan / Status Pajak" dari record pajak utama:
-     * status (Aktif/Tidak Aktif) + kondisi relatif terhadap hari ini memakai
-     * ambang 30 hari yang sama dengan halaman Kendaraan.
+     * Menentukan jenis pajak yang mendekati jatuh tempo (rentang hari ini s.d. 30 hari ke depan).
      */
-    private function statusPajakText(?PajakKendaraan $pajak): string
+    private function jenisPajakSegeraHabis($jt1, $jt5, $today, $batas): string
     {
-        if (! $pajak) {
+        $p1Segera = $jt1 && $jt1->greaterThanOrEqualTo($today) && $jt1->lessThanOrEqualTo($batas);
+        $p5Segera = $jt5 && $jt5->greaterThanOrEqualTo($today) && $jt5->lessThanOrEqualTo($batas);
+
+        return match (true) {
+            $p1Segera && $p5Segera => 'Keduanya',
+            $p1Segera => 'Pajak Tahunan',
+            $p5Segera => 'Pajak Lima Tahunan',
+            default => '-',
+        };
+    }
+
+    /**
+     * Teks kolom "Status Pajak" yang mengevaluasi pajak tahunan dan lima tahunan.
+     */
+    private function statusPajakEvaluasi($jt1, $jt5, $today, $batas): string
+    {
+        if (! $jt1 && ! $jt5) {
             return '-';
         }
 
-        $status = $pajak->status ?: '-';
+        $terlambat1 = $jt1 && $jt1->lessThan($today);
+        $terlambat5 = $jt5 && $jt5->lessThan($today);
 
-        if (! $pajak->tanggal_berakhir) {
-            return $status;
+        if ($terlambat1 && $terlambat5) {
+            return 'Pajak Tahunan & 5 Tahunan Terlambat';
+        }
+        if ($terlambat1) {
+            return 'Pajak Tahunan Terlambat';
+        }
+        if ($terlambat5) {
+            return 'Pajak 5 Tahunan Terlambat';
         }
 
-        $diff = (int) Carbon::today()->diffInDays($pajak->tanggal_berakhir, false);
-        $kondisi = match (true) {
-            $diff < 0 => 'Terlambat',
-            $diff === 0 => 'Jatuh Tempo Hari Ini',
-            $diff <= 30 => 'Segera Habis Pajak',
-            default => 'Aman',
-        };
+        $segera1 = $jt1 && $jt1->greaterThanOrEqualTo($today) && $jt1->lessThanOrEqualTo($batas);
+        $segera5 = $jt5 && $jt5->greaterThanOrEqualTo($today) && $jt5->lessThanOrEqualTo($batas);
 
-        return $status.' - '.$kondisi;
+        if ($segera1 && $segera5) {
+            return 'Pajak Tahunan & 5 Tahunan Segera Habis';
+        }
+        if ($segera1) {
+            return 'Pajak Tahunan Segera Habis';
+        }
+        if ($segera5) {
+            return 'Pajak 5 Tahunan Segera Habis';
+        }
+
+        return 'Aman';
     }
 
     /**
@@ -441,7 +551,7 @@ class KendaraanController extends Controller
      * Dokumentasi. Rasio gambar dipertahankan; bila berkas tidak ada / bukan
      * gambar yang dikenali, sel dibiarkan kosong (tidak mengarang nilai).
      */
-    private function embedFotoKendaraan($sheet, Kendaraan $kendaraan, int $rowNum): void
+    private function embedFotoKendaraan($sheet, Kendaraan $kendaraan, int $rowNum, string $colCoord = 'T'): void
     {
         $foto = $kendaraan->foto;
         if (! $foto) {
@@ -466,7 +576,7 @@ class KendaraanController extends Controller
             $drawing->setHeight(50);
             $drawing->setOffsetX(4);
             $drawing->setOffsetY(4);
-            $drawing->setCoordinates('M'.$rowNum);
+            $drawing->setCoordinates($colCoord.$rowNum);
             $drawing->setWorksheet($sheet);
 
             $sheet->getRowDimension($rowNum)->setRowHeight(42);
@@ -478,8 +588,14 @@ class KendaraanController extends Controller
     /**
      * Detail satu kendaraan: info aset + riwayat plat + pajak kendaraan.
      */
-    public function show(Kendaraan $kendaraan)
+    public function show(Request $request, Kendaraan $kendaraan)
     {
+        abort_if(
+            ! auth()->user()->hasRole('Admin Aset'),
+            403,
+            'Hanya Admin Aset yang diperbolehkan mengakses halaman detail kendaraan.'
+        );
+
         $aset = $kendaraan->aset;
 
         abort_if(
@@ -497,8 +613,45 @@ class KendaraanController extends Controller
             'riwayatPlat' => fn ($q) => $q->orderByRaw("CASE WHEN status = 'Aktif' THEN 0 ELSE 1 END")
                 ->orderByDesc('created_at')
                 ->limit(3),
-            'pajak' => fn ($q) => $q->orderBy('tanggal_berakhir')->orderBy('id_pajak'),
         ]);
+
+        // Query riwayat transaksi pajak:
+        // 1. Status Aktif selalu paling atas (CASE WHEN status = 'Aktif' THEN 0 ELSE 1 END)
+        // 2. Status Tidak Aktif ditampilkan setelah Aktif
+        // 3. Untuk status yang sama, urutkan tanggal bayar terbaru lalu id_pajak terbaru
+        // 4. Pagination server-side maksimal 5 transaksi per halaman
+        $pajakQuery = $kendaraan->pajak()
+            ->orderByRaw("CASE WHEN status = 'Aktif' THEN 0 ELSE 1 END")
+            ->orderByDesc('tanggal_bayar')
+            ->orderByDesc('id_pajak');
+
+        if ($request->filled('pajak_tahun')) {
+            $pajakQuery->where('tahun', $request->pajak_tahun);
+        }
+
+        if ($request->filled('pajak_jenis')) {
+            if ($request->pajak_jenis === '5-tahunan') {
+                $pajakQuery->where('pajak_5_tahunan', true);
+            } elseif ($request->pajak_jenis === 'tahunan') {
+                $pajakQuery->where('pajak_5_tahunan', false);
+            }
+        }
+
+        $riwayatPajak = $pajakQuery->paginate(5, ['*'], 'pajak_page')
+            ->fragment('pajak-card')
+            ->withQueryString();
+
+        $kendaraan->setRelation('pajak', $riwayatPajak);
+
+        $daftarTahunPajak = $kendaraan->pajak()
+            ->select('tahun')
+            ->distinct()
+            ->whereNotNull('tahun')
+            ->pluck('tahun')
+            ->map(fn ($t) => (int) $t)
+            ->unique()
+            ->sortDesc()
+            ->values();
 
         $isAdminAset = auth()->user()?->role?->nama_role === 'Admin Aset';
 
@@ -510,7 +663,7 @@ class KendaraanController extends Controller
             ->orderByDesc('id_detail')
             ->get();
 
-        return view('kendaraan.show', compact('kendaraan', 'isAdminAset', 'riwayatMutasi'));
+        return view('kendaraan.show', compact('kendaraan', 'isAdminAset', 'riwayatMutasi', 'riwayatPajak', 'daftarTahunPajak'));
     }
 
     public function create()
@@ -699,13 +852,14 @@ class KendaraanController extends Controller
                 $platTerbaru = trim(mb_strtoupper($data['nomor_polisi']));
                 $platAktif = $kendaraan->platAktif;
                 if (! $platAktif || trim(mb_strtoupper($platAktif->nomor_plat)) !== $platTerbaru) {
+                    $tanggalBerlakuLama = $platAktif?->tanggal_berlaku;
                     if ($platAktif) {
                         $platAktif->update(['status' => 'Tidak Aktif']);
                     }
                     RiwayatPlat::create([
                         'id_kendaraan' => $kendaraan->id_kendaraan,
                         'nomor_plat' => $data['nomor_polisi'],
-                        'tanggal_berlaku' => null,
+                        'tanggal_berlaku' => $tanggalBerlakuLama,
                         'ganti_plat' => false,
                         'status' => 'Aktif',
                     ]);

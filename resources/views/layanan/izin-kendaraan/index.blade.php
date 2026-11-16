@@ -107,6 +107,7 @@
                             id="tanggal_berangkat"
                             name="tanggal_berangkat"
                             value="{{ old('tanggal_berangkat') }}"
+                            min="{{ date('Y-m-d') }}"
                             required
                             class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm transition hover:border-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400"
                         />
@@ -143,6 +144,7 @@
                             id="tanggal_kembali"
                             name="tanggal_kembali"
                             value="{{ old('tanggal_kembali') }}"
+                            min="{{ old('tanggal_berangkat', date('Y-m-d')) }}"
                             required
                             class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm transition hover:border-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400"
                         />
@@ -839,6 +841,16 @@
 
                     const startDt = new Date(tm + 'T' + (jm.length === 5 ? jm + ':00' : jm));
                     const endDt = new Date(ts + 'T' + (js.length === 5 ? js + ':00' : js));
+                    const now = new Date();
+                    const nowMinute = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes());
+
+                    if (startDt < nowMinute) {
+                        selectKendaraan.innerHTML = '<option value="">-- Jadwal mulai tidak boleh di masa lalu --</option>';
+                        selectKendaraan.disabled = true;
+                        setStatus('error', 'Perhatian: Jadwal mulai pemakaian tidak boleh sudah berlalu.');
+                        if (inputDurasi) inputDurasi.value = 'Jadwal tidak valid';
+                        return;
+                    }
 
                     if (endDt <= startDt) {
                         selectKendaraan.innerHTML = '<option value="">-- Waktu selesai harus lebih besar dari waktu mulai --</option>';
@@ -865,17 +877,19 @@
                             'X-Requested-With': 'XMLHttpRequest'
                         }
                     })
-                    .then(res => res.json())
-                    .then(data => {
+                    .then(res => res.json().then(data => ({ status: res.status, data })))
+                    .then(({ status, data }) => {
                         selectKendaraan.innerHTML = '';
                         if (data.durasi && inputDurasi) {
                             inputDurasi.value = data.durasi;
                         }
 
-                        if (!data.success || !data.kendaraan || data.kendaraan.length === 0) {
+                        if (!data.success || status >= 400 || !data.kendaraan || data.kendaraan.length === 0) {
                             selectKendaraan.innerHTML = '<option value="">-- Tidak ada kendaraan dinas yang tersedia pada jadwal ini --</option>';
                             selectKendaraan.disabled = true;
-                            setStatus('warning', data.message || 'Semua kendaraan sedang digunakan atau memiliki jadwal pada rentang ini.');
+                            const isErr = !data.success || status >= 400;
+                            setStatus(isErr ? 'error' : 'warning', data.message || 'Semua kendaraan sedang digunakan atau memiliki jadwal pada rentang ini.');
+                            if (!data.durasi && inputDurasi) inputDurasi.value = isErr ? 'Jadwal tidak valid' : '-';
                         } else {
                             selectKendaraan.disabled = false;
                             const defaultOpt = document.createElement('option');
@@ -908,6 +922,15 @@
                         setStatus('error', 'Terjadi kesalahan saat memuat ketersediaan kendaraan.');
                     });
                 }
+
+                tglMulai.addEventListener('change', function () {
+                    if (tglSelesai.value && tglSelesai.value < tglMulai.value) {
+                        tglSelesai.value = tglMulai.value;
+                    }
+                    if (tglMulai.value) {
+                        tglSelesai.min = tglMulai.value;
+                    }
+                });
 
                 selectKendaraan.addEventListener('change', function () {
                     currentVal = selectKendaraan.value;

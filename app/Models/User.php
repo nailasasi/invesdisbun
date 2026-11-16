@@ -58,9 +58,19 @@ class User extends Authenticatable
     }
 
     public function role()
-        {
-            return $this->belongsTo(Role::class, 'id_role', 'id_role');
-        }
+    {
+        return $this->belongsTo(Role::class, 'id_role', 'id_role');
+    }
+
+    /**
+     * Memeriksa apakah user memiliki salah satu dari role yang ditentukan.
+     */
+    public function hasRole(string ...$roles): bool
+    {
+        $roleName = $this->role?->nama_role;
+
+        return is_string($roleName) && in_array(trim($roleName), array_map('trim', $roles), true);
+    }
 
     /**
      * Jejak aktivitas yang dilakukan akun ini sebagai aktor (Admin Aset).

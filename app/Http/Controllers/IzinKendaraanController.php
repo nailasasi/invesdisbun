@@ -58,7 +58,7 @@ class IzinKendaraanController extends Controller
             try {
                 $start = Carbon::parse($oldMulaiTgl . ' ' . $oldMulaiJam);
                 $end = Carbon::parse($oldSelesaiTgl . ' ' . $oldSelesaiJam);
-                if ($end->greaterThan($start)) {
+                if ($end->greaterThan($start) && $start->greaterThanOrEqualTo(now()->startOfMinute())) {
                     $kendaraanOptions = $this->queryKendaraanTersedia($start, $end)->mapWithKeys(function (Kendaraan $k) {
                         $nama = $k->namaTampil();
                         $plat = $k->platAktif?->nomor_plat;
@@ -91,16 +91,19 @@ class IzinKendaraanController extends Controller
     public function ketersediaan(Request $request)
     {
         $validator = validator($request->all(), [
-            'tanggal_berangkat' => ['required', 'date'],
+            'tanggal_berangkat' => ['required', 'date', 'after_or_equal:today'],
             'waktu_berangkat' => ['required', 'string'],
-            'tanggal_kembali' => ['required', 'date'],
+            'tanggal_kembali' => ['required', 'date', 'after_or_equal:tanggal_berangkat'],
             'waktu_kembali' => ['required', 'string'],
+        ], [
+            'tanggal_berangkat.after_or_equal' => 'Tanggal mulai pemakaian tidak boleh lebih awal dari hari ini.',
+            'tanggal_kembali.after_or_equal' => 'Tanggal selesai pemakaian tidak boleh lebih awal dari tanggal mulai.',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Jadwal belum lengkap atau format tidak valid.',
+                'message' => $validator->errors()->first(),
                 'kendaraan' => [],
             ], 422);
         }
@@ -114,6 +117,14 @@ class IzinKendaraanController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Format tanggal atau jam pemakaian tidak valid.',
+                'kendaraan' => [],
+            ], 422);
+        }
+
+        if ($start->lessThan(now()->startOfMinute())) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Jadwal mulai pemakaian tidak boleh sudah berlalu.',
                 'kendaraan' => [],
             ], 422);
         }
@@ -209,20 +220,34 @@ class IzinKendaraanController extends Controller
      */
     public static function hitungDurasi(Carbon $start, Carbon $end): string
     {
-        if ($start->isSameDay($end)) {
-            $diffHours = $start->diffInMinutes($end) / 60;
-            $jamLabel = $start->format('H:i') . ' - ' . $end->format('H:i');
+        $totalMenit = (int) $start->diffInMinutes($end);
 
-            if ($diffHours <= 5) {
-                return 'Setengah Hari (' . $jamLabel . ')';
+        if ($totalMenit <= 300) {
+            $label = 'Setengah Hari';
+        } elseif ($totalMenit <= 1440) {
+            $label = '1 Hari';
+        } else {
+            $hariPenuh = intdiv($totalMenit, 1440);
+            $sisaMenit = $totalMenit % 1440;
+
+            if ($sisaMenit === 0) {
+                $label = "{$hariPenuh} Hari";
+            } elseif ($sisaMenit <= 300) {
+                $label = "{$hariPenuh} Hari + Setengah Hari";
+            } else {
+                $label = ($hariPenuh + 1) . ' Hari';
             }
-
-            return '1 Hari (' . $jamLabel . ')';
         }
 
-        $diffDays = (int) $start->copy()->startOfDay()->diffInDays($end->copy()->startOfDay());
-        $totalHari = $diffDays + 1;
-        return $totalHari . ' Hari (' . $start->translatedFormat('d M') . ' - ' . $end->translatedFormat('d M Y') . ')';
+        if ($start->isSameDay($end)) {
+            $rentang = $start->format('H:i') . ' - ' . $end->format('H:i');
+        } elseif ($start->year === $end->year) {
+            $rentang = $start->translatedFormat('H:i, d M') . ' - ' . $end->translatedFormat('H:i, d M Y');
+        } else {
+            $rentang = $start->translatedFormat('H:i, d M Y') . ' - ' . $end->translatedFormat('H:i, d M Y');
+        }
+
+        return "{$label} ({$rentang})";
     }
 
     /**
@@ -230,16 +255,36 @@ class IzinKendaraanController extends Controller
      */
     public function store(Request $request)
     {
+        $user = auth()->user();
+        if (! $user || ! $user->pegawai) {
+            throw ValidationException::withMessages([
+                'id_pegawai_pengaju' => 'Akun Anda belum terhubung dengan data pegawai. Silakan hubungi Admin Aset.',
+            ]);
+        }
+
         $data = $request->validate([
             'id_kendaraan' => ['required', 'exists:kendaraan,id_kendaraan'],
             'nama_pengemudi' => ['required', 'string', 'max:100'],
-            'id_pengurus_barang' => ['required', 'exists:pegawai,id_pegawai'],
+            'id_pengurus_barang' => [
+                'required',
+                Rule::exists('pegawai', 'id_pegawai')->where(function ($query) {
+                    $query->whereIn('id_ruangan', function ($subQuery) {
+                        $subQuery->select('id_ruangan')
+                            ->from('ruangan')
+                            ->where('nama_ruangan', 'Ruang Aset');
+                    });
+                }),
+            ],
             'tujuan' => ['required', 'string', 'max:500'],
-            'tanggal_berangkat' => ['required', 'date'],
+            'tanggal_berangkat' => ['required', 'date', 'after_or_equal:today'],
             'waktu_berangkat' => ['required', 'string'],
-            'tanggal_kembali' => ['required', 'date'],
+            'tanggal_kembali' => ['required', 'date', 'after_or_equal:tanggal_berangkat'],
             'waktu_kembali' => ['required', 'string'],
-            'durasi' => ['nullable', 'string', 'max:50'],
+            'durasi' => ['nullable', 'string', 'max:100'],
+        ], [
+            'id_pengurus_barang.exists' => 'Pengurus Barang harus merupakan pegawai yang bertugas di Ruang Aset.',
+            'tanggal_berangkat.after_or_equal' => 'Tanggal mulai pemakaian tidak boleh lebih awal dari hari ini.',
+            'tanggal_kembali.after_or_equal' => 'Tanggal selesai pemakaian tidak boleh lebih awal dari tanggal mulai.',
         ]);
 
         try {
@@ -250,6 +295,12 @@ class IzinKendaraanController extends Controller
         } catch (\Exception $e) {
             throw ValidationException::withMessages([
                 'waktu_berangkat' => 'Format tanggal atau jam pemakaian tidak valid.',
+            ]);
+        }
+
+        if ($startDateTime->lessThan(now()->startOfMinute())) {
+            throw ValidationException::withMessages([
+                'waktu_berangkat' => 'Jadwal mulai pemakaian tidak boleh sudah berlalu.',
             ]);
         }
 
@@ -338,6 +389,14 @@ class IzinKendaraanController extends Controller
     {
         abort_unless(auth()->user()?->role?->nama_role === 'Admin Aset', 403);
 
+        if ($izin->status_approval !== 'Menunggu') {
+            if ($request->expectsJson() || $request->wantsJson()) {
+                abort(422, 'Pengajuan ini sudah pernah diproses atau status sudah final.');
+            }
+            return redirect()->route('layanan.izin-kendaraan.index')
+                ->with('error', 'Pengajuan ini sudah pernah diproses atau status sudah final.');
+        }
+
         $rules = [
             'status_approval' => ['required', Rule::in(['Disetujui', 'Ditolak'])],
             'alasan_penolakan' => ['nullable', 'string', 'max:1000'],
@@ -349,7 +408,7 @@ class IzinKendaraanController extends Controller
 
         $data = $request->validate($rules);
 
-        return DB::transaction(function () use ($data, $izin) {
+        return DB::transaction(function () use ($data, $izin, $request) {
             // Kunci baris kendaraan dengan lockForUpdate untuk mencegah race condition (approval konkuren)
             $kendaraan = $izin->id_kendaraan ? Kendaraan::lockForUpdate()->find($izin->id_kendaraan) : null;
             abort_unless($kendaraan, 404, 'Kendaraan tidak ditemukan.');
@@ -357,6 +416,14 @@ class IzinKendaraanController extends Controller
             // Baca ulang permohonan terkini setelah lock diperoleh
             $izin = IzinKendaraan::lockForUpdate()->find($izin->id_izin);
             abort_unless($izin, 404, 'Permohonan izin tidak ditemukan.');
+
+            if ($izin->status_approval !== 'Menunggu') {
+                if ($request->expectsJson() || $request->wantsJson()) {
+                    abort(422, 'Pengajuan ini sudah pernah diproses atau status sudah final.');
+                }
+                return redirect()->route('layanan.izin-kendaraan.index')
+                    ->with('error', 'Pengajuan ini sudah pernah diproses atau status sudah final.');
+            }
 
             if ($data['status_approval'] === 'Disetujui') {
                 $tglBerangkat = $izin->tanggal_berangkat ? Carbon::parse($izin->tanggal_berangkat)->format('Y-m-d') : null;
@@ -550,7 +617,7 @@ class IzinKendaraanController extends Controller
             ->whereNotNull('file_path')
             ->first();
 
-        if ($template && Storage::disk('public')->exists($template->file_path)) {
+        if ($template && $template->fileExists()) {
             return $this->generateFromTemplate($izin, $template);
         }
 
@@ -597,7 +664,7 @@ class IzinKendaraanController extends Controller
         ];
 
         $tmpZip = sys_get_temp_dir().'/Surat_Izin_TPL_'.uniqid().'.docx';
-        copy(Storage::disk('public')->path($template->file_path), $tmpZip);
+        copy($template->realPath(), $tmpZip);
 
         $zip = new \ZipArchive;
 

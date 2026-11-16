@@ -78,7 +78,8 @@ class Kendaraan extends Model
     {
         return $this->hasOne(PajakKendaraan::class, 'id_kendaraan')
             ->where('pajak_5_tahunan', false)
-            ->where('status', 'Aktif');
+            ->where('status', 'Aktif')
+            ->latestOfMany('id_pajak');
     }
 
     /**
@@ -88,17 +89,124 @@ class Kendaraan extends Model
     {
         return $this->hasOne(PajakKendaraan::class, 'id_kendaraan')
             ->where('pajak_5_tahunan', true)
-            ->where('status', 'Aktif');
+            ->where('status', 'Aktif')
+            ->latestOfMany('id_pajak');
     }
 
     /**
-     * Alias backward-compatibility: merujuk ke pajak tahunan aktif.
+     * Relasi pajak aktif terkini (sumber informasi aktif untuk jatuh tempo PKB).
      */
     public function pajakAktif()
     {
         return $this->hasOne(PajakKendaraan::class, 'id_kendaraan')
-            ->where('pajak_5_tahunan', false)
-            ->where('status', 'Aktif');
+            ->where('status', 'Aktif')
+            ->latestOfMany('id_pajak');
+    }
+
+    /**
+     * Hitung status jatuh tempo PKB secara otomatis dan terpusat.
+     * Menggunakan transaksi aktif terbaru (pajakAktif).
+     */
+    public function statusPkb(?Carbon $now = null): array
+    {
+        $now = $now ?? Carbon::today();
+        $pajak = $this->pajakAktif;
+        $tgl = $pajak?->tanggal_berakhir;
+
+        if (! $tgl) {
+            return [
+                'status' => 'Belum Ada Data',
+                'label' => '-',
+                'class' => 'bg-slate-100 text-slate-600',
+                'tanggal' => null,
+                'diff' => null,
+            ];
+        }
+
+        $diff = $now->diffInDays($tgl, false);
+        if ($diff < 0) {
+            return [
+                'status' => 'Terlambat',
+                'label' => $tgl->format('d M Y') . ' (Terlambat)',
+                'class' => 'bg-red-100 text-red-700',
+                'tanggal' => $tgl,
+                'diff' => $diff,
+            ];
+        }
+
+        if ($diff <= 30) {
+            return [
+                'status' => 'Segera Jatuh Tempo',
+                'label' => $tgl->isSameDay($now)
+                    ? $tgl->format('d M Y') . ' (Jatuh Hari Ini)'
+                    : $tgl->format('d M Y') . ' (' . (int) round($diff) . ' hari lagi)',
+                'class' => 'bg-amber-100 text-amber-700',
+                'tanggal' => $tgl,
+                'diff' => $diff,
+            ];
+        }
+
+        return [
+            'status' => 'Aman',
+            'label' => $tgl->format('d M Y'),
+            'class' => 'bg-emerald-100 text-emerald-700',
+            'tanggal' => $tgl,
+            'diff' => $diff,
+        ];
+    }
+
+    /**
+     * Hitung status masa berlaku STNK (5 Tahunan) secara otomatis dan terpusat.
+     * Menggunakan tanggal_berakhir_stnk pada transaksi 5 Tahunan aktif,
+     * dengan fallback ke tanggal_berlaku pada plat aktif.
+     */
+    public function statusStnk(?Carbon $now = null): array
+    {
+        $now = $now ?? Carbon::today();
+        $pajak5 = $this->pajakLimaTahunanAktif;
+        $plat = $this->platAktif;
+        $tgl = $pajak5?->tanggal_berakhir_stnk ?? $plat?->tanggal_berlaku;
+
+        if (! $tgl) {
+            return [
+                'status' => 'Belum Ada Data',
+                'label' => '-',
+                'class' => 'bg-slate-100 text-slate-600',
+                'tanggal' => null,
+                'diff' => null,
+            ];
+        }
+
+        $diff = $now->diffInDays($tgl, false);
+        if ($diff < 0) {
+            return [
+                'status' => 'Terlambat',
+                'label' => $tgl->format('d M Y') . ' (Terlambat)',
+                'class' => 'bg-red-100 text-red-700',
+                'tanggal' => $tgl,
+                'diff' => $diff,
+            ];
+        }
+
+        if ($diff <= 30) {
+            return [
+                'status' => 'Segera Jatuh Tempo',
+                'label' => $tgl->isSameDay($now)
+                    ? $tgl->format('d M Y') . ' (Jatuh Hari Ini)'
+                    : $tgl->format('d M Y') . ' (' . (int) round($diff) . ' hari lagi)',
+                'class' => 'bg-amber-100 text-amber-700',
+                'tanggal' => $tgl,
+                'diff' => $diff,
+            ];
+        }
+
+        return [
+            'status' => 'Aman',
+            'label' => $tgl->format('d M Y'),
+            'class' => 'bg-emerald-100 text-emerald-700',
+            'tanggal' => $tgl,
+            'diff' => $diff,
+        ];
     }
 
     /**

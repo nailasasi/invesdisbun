@@ -50,23 +50,23 @@
                             <button type="button" id="btn-export-menu"
                                     class="inline-flex items-center justify-center gap-2 rounded-2xl border border-disbun-card-border bg-white px-3.5 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
                                 <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2M12 4v10"/></svg>
-                                <span>Ekspor</span>
+                                <span>Ekspor Data</span>
                             </button>
                             <div id="export-menu" class="absolute right-0 z-30 mt-2 hidden w-64 overflow-hidden rounded-2xl border border-slate-200 bg-white py-1 shadow-xl">
                                 <a href="{{ route('kendaraan.export', array_merge(request()->query(), ['mode' => 'semua'])) }}"
                                    class="block px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50">
                                     <span class="font-semibold">Semua Kendaraan</span>
-                                    <span class="block text-xs text-slate-400">Seluruh kendaraan sesuai filter aktif</span>
+                                    <span class="block text-xs text-slate-400">Seluruh kendaraan berstatus aktif</span>
                                 </a>
                                 <a href="{{ route('kendaraan.export', array_merge(request()->query(), ['mode' => 'segera'])) }}"
                                    class="block px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50">
                                     <span class="font-semibold">Segera Habis Pajak</span>
-                                    <span class="block text-xs text-slate-400">Terlambat atau jatuh tempo &le; 30 hari</span>
+                                    <span class="block text-xs text-slate-400">Jatuh tempo 1 atau 5 tahunan &le; 30 hari</span>
                                 </a>
                                 <button type="button" id="btn-export-selected"
                                         class="block w-full px-4 py-2.5 text-left text-sm text-slate-700 transition hover:bg-slate-50">
                                     <span class="font-semibold">Kendaraan Terpilih (<span id="export-selected-count">0</span>)</span>
-                                    <span class="block text-xs text-slate-400">Hanya kendaraan yang dicentang</span>
+                                    <span class="block text-xs text-slate-400">Hanya kendaraan aktif yang dicentang</span>
                                 </button>
                             </div>
                         </div>
@@ -120,38 +120,14 @@
                     @forelse ($kendaraanList as $index => $k)
                         @php
                             $platAktif = $k->platAktif;
-                            $pajakAktif = $k->pajakAktif;
-                            $now = \Carbon\Carbon::today();
-                            $pajakJatuh = $pajakAktif?->tanggal_berakhir;
-                            $platJatuh = $platAktif?->tanggal_berlaku;
-                            $diffPajak = $pajakJatuh ? $now->diffInDays($pajakJatuh, false) : null;
-                            $diffPlat = $platJatuh ? $now->diffInDays($platJatuh, false) : null;
-                            $pajakClass = match (true) {
-                                $diffPajak === null => 'bg-slate-100 text-slate-600',
-                                $diffPajak < 0 => 'bg-red-100 text-red-700',
-                                $diffPajak <= 30 => 'bg-amber-100 text-amber-700',
-                                default => 'bg-emerald-100 text-emerald-700',
-                            };
-                            $platClass = match (true) {
-                                $diffPlat === null => 'bg-slate-100 text-slate-600',
-                                $diffPlat < 0 => 'bg-red-100 text-red-700',
-                                $diffPlat <= 30 => 'bg-amber-100 text-amber-700',
-                                default => 'bg-emerald-100 text-emerald-700',
-                            };
-                            $pajakLabel = match (true) {
-                                $diffPajak === null => '-',
-                                $diffPajak < 0 => $pajakJatuh->format('d M Y') . ' (Terlambat)',
-                                $pajakJatuh->isSameDay($now) => $pajakJatuh->format('d M Y') . ' (Jatuh Hari Ini)',
-                                $diffPajak <= 30 => $pajakJatuh->format('d M Y') . ' (' . (int) round($diffPajak) . ' hari lagi)',
-                                default => $pajakJatuh->format('d M Y'),
-                            };
-                            $platLabel = match (true) {
-                                $diffPlat === null => '-',
-                                $diffPlat < 0 => $platJatuh->format('d M Y') . ' (Terlambat)',
-                                $platJatuh->isSameDay($now) => $platJatuh->format('d M Y') . ' (Jatuh Hari Ini)',
-                                $diffPlat <= 30 => $platJatuh->format('d M Y') . ' (' . (int) round($diffPlat) . ' hari lagi)',
-                                default => $platJatuh->format('d M Y'),
-                            };
+                            $stPkb = $k->statusPkb();
+                            $stStnk = $k->statusStnk();
+                            $pajakClass = $stPkb['class'];
+                            $pajakLabel = $stPkb['label'];
+                            $platClass = $stStnk['class'];
+                            $platLabel = $stStnk['label'];
+                            $pajakJatuh = $stPkb['tanggal'];
+                            $platJatuh = $stStnk['tanggal'];
                         @endphp
                         <tr class="transition hover:bg-slate-50">
                             @if ($isAdminAset || $isAdminUpt)
@@ -183,9 +159,15 @@
                                 @endif
                             </td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm">
-                                <a href="{{ route('kendaraan.show', $k->id_kendaraan) }}" class="font-medium text-disbun-700 hover:underline">
-                                    {{ $k->namaTampil() ?? 'Kendaraan' }}
-                                </a>
+                                @if ($isAdminAset)
+                                    <a href="{{ route('kendaraan.show', $k->id_kendaraan) }}" class="font-medium text-disbun-700 hover:underline">
+                                        {{ $k->namaTampil() ?? 'Kendaraan' }}
+                                    </a>
+                                @else
+                                    <span class="font-medium text-slate-800">
+                                        {{ $k->namaTampil() ?? 'Kendaraan' }}
+                                    </span>
+                                @endif
                                 <p class="text-xs text-slate-400">{{ $k->aset?->nomor_kartu_barang ?? '-' }}</p>
                             </td>
                             <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $k->jenis_kendaraan ?? '-' }}</td>

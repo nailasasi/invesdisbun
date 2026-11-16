@@ -240,9 +240,15 @@
                             <tr class="transition hover:bg-slate-50">
                                 <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-500">{{ $i + 1 }}</td>
                                 <td class="whitespace-nowrap px-6 py-4 text-sm">
-                                    <a href="{{ route('kendaraan.show', $k->id_kendaraan) }}" class="font-medium text-disbun-700 hover:underline">
-                                        {{ $k->namaTampil() ?? 'Kendaraan' }}
-                                    </a>
+                                    @if (auth()->user()?->hasRole('Admin Aset'))
+                                        <a href="{{ route('kendaraan.show', $k->id_kendaraan) }}" class="font-medium text-disbun-700 hover:underline">
+                                            {{ $k->namaTampil() ?? 'Kendaraan' }}
+                                        </a>
+                                    @else
+                                        <span class="font-medium text-slate-800">
+                                            {{ $k->namaTampil() ?? 'Kendaraan' }}
+                                        </span>
+                                    @endif
                                     <p class="text-xs text-slate-400">{{ $k->aset?->nomor_kartu_barang ?? '-' }}</p>
                                 </td>
                                 <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $k->jenis_kendaraan ?? '-' }}</td>

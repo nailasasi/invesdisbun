@@ -10,7 +10,6 @@ use App\Http\Controllers\DokumenSppbiController;
 use App\Http\Controllers\IzinKendaraanController;
 use App\Http\Controllers\InventarisRuanganController;
 use App\Http\Controllers\KendaraanController;
-use App\Http\Controllers\LaporanBulananController;
 use App\Http\Controllers\LaporanController;
 use App\Http\Controllers\MonitoringAsetController;
 use App\Http\Controllers\MutasiAsetController;
@@ -38,7 +37,7 @@ Route::middleware('guest')->group(function () {
         ->name('login.attempt');
 });
 
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', 'prevent-back-history'])->group(function () {
 
     Route::get('dashboard', [DashboardController::class, 'index'])
         ->name('dashboard');
@@ -196,9 +195,9 @@ Route::middleware('auth')->group(function () {
     });
 
     // ==========================================
-    // TEMPLATE DOKUMEN (Admin Aset & Admin UPT)
+    // TEMPLATE DOKUMEN (Eksklusif Admin Aset)
     // ==========================================
-    Route::middleware('role:Admin Aset,Admin UPT')->group(function () {
+    Route::middleware('role:Admin Aset')->group(function () {
         Route::get('template-dokumen', [TemplateDokumenController::class, 'index'])
             ->name('template-dokumen.index');
         Route::post('template-dokumen/{template}', [TemplateDokumenController::class, 'update'])
@@ -311,9 +310,9 @@ Route::middleware('auth')->group(function () {
 
     // ==========================================
     // USER MANAGEMENT (akun login milik pegawai yang sudah ada)
-    // Admin Aset & Admin UPT; controller membatasi Admin UPT ke UPT-nya.
+    // Eksklusif Admin Aset. Admin UPT, Admin Bidang, dan Pegawai tidak memiliki akses.
     // ==========================================
-    Route::prefix('user')->name('user.')->middleware('role:Admin Aset,Admin UPT')->group(function () {
+    Route::prefix('user')->name('user.')->middleware('role:Admin Aset')->group(function () {
         Route::get('', [UserController::class, 'index'])
             ->name('index');
         // Buat akun dari pegawai YANG SUDAH ADA (bukan membuat pegawai baru).
@@ -330,24 +329,22 @@ Route::middleware('auth')->group(function () {
     });
 
     // ==========================================
-    // MODUL LAPORAN EKSEKUTIF
+    // MODUL LAPORAN EKSEKUTIF (Eksklusif Admin Aset)
     // ==========================================
-    Route::get('laporan', [LaporanController::class, 'index'])
-        ->middleware('role:Admin Aset,Admin Bidang,Admin UPT,Pegawai')
-        ->name('laporan.index');
+    Route::middleware('role:Admin Aset')->group(function () {
+        Route::get('laporan', [LaporanController::class, 'index'])
+            ->name('laporan.index');
 
-    Route::get('laporan/export/excel', [LaporanController::class, 'exportExcel'])
-        ->middleware('role:Admin Aset,Admin Bidang,Admin UPT,Pegawai')
-        ->name('laporan.export.excel');
+        Route::get('laporan/export/excel', [LaporanController::class, 'exportExcel'])
+            ->name('laporan.export.excel');
 
-    Route::get('laporan/export/pdf', [LaporanController::class, 'exportPdf'])
-        ->middleware('role:Admin Aset,Admin Bidang,Admin UPT,Pegawai')
-        ->name('laporan.export.pdf');
+        Route::get('laporan/export/pdf', [LaporanController::class, 'exportPdf'])
+            ->name('laporan.export.pdf');
 
-    // Kompatibilitas mundur dengan route laporan.bulanan lama
-    Route::get('laporan/bulanan', [LaporanController::class, 'index'])
-        ->middleware('role:Admin Aset,Admin Bidang,Admin UPT,Pegawai')
-        ->name('laporan.bulanan');
+        // Kompatibilitas mundur dengan route laporan.bulanan lama
+        Route::get('laporan/bulanan', [LaporanController::class, 'index'])
+            ->name('laporan.bulanan');
+    });
 
     // ==========================================
     // RIWAYAT MUTASI ASET
@@ -438,10 +435,7 @@ Route::middleware('auth')->group(function () {
                 ->name('finalisasi-penempatan-massal');
         });
 
-        Route::get('{kendaraan}', [KendaraanController::class, 'show'])
-            ->name('show');
-
-        // Tindakan Penempatan & Finalisasi Kendaraan (Admin Aset & Admin UPT)
+        // Tindakan Penempatan & Finalisasi Kendaraan serta Unduh BAST (Admin Aset & Admin UPT)
         Route::middleware('role:Admin Aset,Admin UPT')->group(function () {
             Route::post('{kendaraan}/finalisasi-penempatan', [KendaraanController::class, 'finalisasiPenempatan'])
                 ->name('finalisasi-penempatan');
@@ -449,9 +443,17 @@ Route::middleware('auth')->group(function () {
                 ->name('verifikasi-finalisasi');
             Route::post('{kendaraan}/edit-pemegang-penempatan', [KendaraanController::class, 'editPemegangPenempatan'])
                 ->name('edit-pemegang-penempatan');
+
+            // Unduh Berita Acara Serah Terima (BAST) Kendaraan (Admin Aset global, Admin UPT dibatasi scope)
+            Route::get('{kendaraan}/mutasi/{id_mutasi}/bast', [MutasiAsetController::class, 'downloadBASTKendaraan'])
+                ->name('mutasi.bast.download');
+            Route::get('mutasi/{id_mutasi}/bast', [MutasiAsetController::class, 'downloadBASTKendaraanById'])
+                ->name('bast.download');
         });
 
         Route::middleware('role:Admin Aset')->group(function () {
+            Route::get('{kendaraan}', [KendaraanController::class, 'show'])
+                ->name('show');
             Route::post('import', [KendaraanController::class, 'import'])
                 ->name('import');
             Route::get('create/data', [KendaraanController::class, 'create'])
@@ -474,14 +476,10 @@ Route::middleware('auth')->group(function () {
 
             Route::get('{kendaraan}/mutasi/{id_mutasi}/sppkd', [MutasiAsetController::class, 'downloadSPPKD'])
                 ->name('mutasi.sppkd.download');
-            Route::get('{kendaraan}/mutasi/{id_mutasi}/bast', [MutasiAsetController::class, 'downloadBASTKendaraan'])
-                ->name('mutasi.bast.download');
 
             // Unduh dokumen mutasi kendaraan cukup dengan id_mutasi (dipakai modal sukses & menu Mutasi Aset).
             Route::get('mutasi/{id_mutasi}/sppkd', [MutasiAsetController::class, 'downloadSPPKDById'])
                 ->name('sppkd.download');
-            Route::get('mutasi/{id_mutasi}/bast', [MutasiAsetController::class, 'downloadBASTKendaraanById'])
-                ->name('bast.download');
 
             // SPPKD untuk pemegang yang sedang tercantum pada tabel utama Kendaraan.
             // Tidak memakai record mutasi; nama diambil dari `kendaraan.pemegang`

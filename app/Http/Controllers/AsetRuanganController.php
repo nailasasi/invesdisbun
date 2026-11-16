@@ -221,22 +221,22 @@ class AsetRuanganController extends Controller
 
         $asetMelekat = $basisPenempatan()
             ->whereDoesntHave('aset.pemegangSaatIni')
-            ->get()
-            ->map(function (PenempatanAset $p) use ($kolomFinalisasi) {
-                $aset = $p->aset;
+            ->paginate(10)
+            ->withQueryString();
 
-                if ($aset) {
-                    $aset->setAttribute('is_finalized', $p->is_finalized);
-                    $aset->setAttribute(
-                        'boleh_mutasi_ruangan',
-                        AsetPenempatan::bolehMutasiFinalisasi($p, $kolomFinalisasi)
-                    );
-                }
+        $asetMelekat->through(function (PenempatanAset $p) use ($kolomFinalisasi) {
+            $aset = $p->aset;
 
-                return $aset;
-            })
-            ->filter()
-            ->values();
+            if ($aset) {
+                $aset->setAttribute('is_finalized', $p->is_finalized);
+                $aset->setAttribute(
+                    'boleh_mutasi_ruangan',
+                    AsetPenempatan::bolehMutasiFinalisasi($p, $kolomFinalisasi)
+                );
+            }
+
+            return $aset;
+        });
 
         // Barang dipegang: aset nonkendaraan dengan pemegang aktif. Ruangannya
         // mengikuti ruangan kerja pemegang, jadi ditampilkan baca-saja.
@@ -728,12 +728,12 @@ class AsetRuanganController extends Controller
         }
 
         $template = TemplateDokumen::where('kode_template', 'label')->first();
-        if (!$template || !$template->file_path || !Storage::disk('public')->exists($template->file_path)) {
+        if (!$template || !$template->fileExists()) {
             return back()->with('error', 'File template label belum diunggah.');
         }
 
         try {
-            $spreadsheet = IOFactory::load(Storage::disk('public')->path($template->file_path));
+            $spreadsheet = IOFactory::load($template->realPath());
 
             // Hapus sheet tambahan jika template punya lebih dari 1 sheet bawaan.
             while ($spreadsheet->getSheetCount() > 1) {
@@ -788,7 +788,7 @@ class AsetRuanganController extends Controller
                 // Path gambar dari worksheet hasil load berbentuk zip://...#xl/media/xxx
                 // yang tidak bisa dipakai langsung, jadi ekstrak biner media ke file sementara.
                 if (str_starts_with($logoPath, 'zip://') && preg_match('/#(xl\/media\/.+)$/', $logoPath, $mediaMatch)) {
-                    $xlsxPath = Storage::disk('public')->path($template->file_path);
+                    $xlsxPath = $template->realPath();
                     $zip = new \ZipArchive();
 
                     if ($zip->open($xlsxPath) === true) {
@@ -1012,11 +1012,11 @@ class AsetRuanganController extends Controller
 
         // 5. Load Template Word KIR
         $templateDoc = TemplateDokumen::where('kode_template', 'kir')->first();
-        if (!$templateDoc || !$templateDoc->file_path || !Storage::disk('public')->exists($templateDoc->file_path)) {
+        if (!$templateDoc || !$templateDoc->fileExists()) {
             return back()->with('error', 'File template KIR belum diunggah. Silakan unggah di menu Pengaturan Template Dokumen.');
         }
 
-        $templatePath = storage_path('app/public/' . $templateDoc->file_path);
+        $templatePath = $templateDoc->realPath();
         $phpWord = new TemplateProcessor($templatePath);
 
         // 6. Set Header Ruangan, Lokasi, SKPD & Tanggal

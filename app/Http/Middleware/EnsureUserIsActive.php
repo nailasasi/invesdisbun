@@ -21,6 +21,21 @@ class EnsureUserIsActive
         $user = $request->user();
 
         if ($user && ! $user->isAktif()) {
+            try {
+                app(\App\Services\ActivityLogger::class)->log(
+                    'auth.logout',
+                    $user,
+                    [],
+                    [
+                        'username' => $user->username,
+                        'keterangan' => 'Sesi diputus otomatis karena akun dinonaktifkan',
+                    ],
+                    'Logout Otomatis (Akun Nonaktif)'
+                );
+            } catch (\Throwable) {
+                // Abaikan jika logger gagal agar penghentian sesi tetap berjalan tuntas
+            }
+
             Auth::logout();
 
             $request->session()->invalidate();

@@ -19,11 +19,16 @@ class PajakKendaraanController extends Controller
     }
 
     /**
-     * Object-level: kendaraan harus dalam cakupan user (route pajak sudah
-     * `role:Admin Aset`, dicek ulang agar tetap aman bila role diperluas).
+     * Object-level: kendaraan harus dalam cakupan user dan user harus Admin Aset.
      */
     private function authorizeKendaraan(Kendaraan $kendaraan): void
     {
+        abort_if(
+            ! auth()->user()->hasRole('Admin Aset'),
+            403,
+            'Hanya Admin Aset yang diperbolehkan mengelola pajak kendaraan.'
+        );
+
         abort_if(
             ! $kendaraan->aset || ! $this->scope->bolehAksesAset($kendaraan->aset),
             403,
@@ -32,37 +37,50 @@ class PajakKendaraanController extends Controller
     }
 
     /**
-     * Simpan pajak kendaraan baru.
+     * Simpan transaksi pajak kendaraan baru (Tahunan atau 5 Tahunan).
      *
-     * Tanggal jatuh tempo (`tanggal_berakhir`) adalah input manual Admin
-     * sesuai bukti/STNK dan disimpan persis apa adanya - tanpa hitung otomatis.
-     * Bila checkbox "Pajak 5 Tahunan / Ganti Plat" dicentang, nomor plat baru
-     * wajib diisi; plat aktif lama di-demosi dan plat baru dibuat dalam satu
-     * transaksi atomik (gagal = rollback total).
+     * Tanggal jatuh tempo adalah input manual Admin sesuai bukti/STNK resmi Samsat.
+     * Tidak menggunakan kalkulasi penambahan tanggal otomatis.
      */
     public function store(Request $request, Kendaraan $kendaraan)
     {
         $this->authorizeKendaraan($kendaraan);
 
-        $data = $request->validate([
-            'jenis_pajak' => ['required', 'string', 'max:50'],
-            'tahun' => ['nullable', 'integer', 'min:2000', 'max:2100'],
-            'tanggal_bayar' => ['nullable', 'date'],
-            'tanggal_berakhir' => ['required', 'date'],
-            'nominal' => ['nullable', 'numeric', 'min:0'],
-            'total_pajak' => ['nullable', 'numeric', 'min:0'],
+        $limaTahunan = (bool) $request->input('pajak_5_tahunan', false);
+
+        $rules = [
+            'tahun' => ['required', 'integer', 'min:2000', 'max:2100'],
+            'tanggal_bayar' => ['required', 'date'],
+            'tanggal_berakhir' => ['required', 'date'], // Tanggal Jatuh Tempo PKB Berikutnya
+            'nominal' => ['required', 'numeric', 'min:0'], // Nominal Total Pembayaran
             'pajak_5_tahunan' => ['nullable', 'boolean'],
-            'nomor_plat_baru' => ['required_if:pajak_5_tahunan,1', 'nullable', 'string', 'max:20'],
-            'status' => ['nullable', Rule::in(['Aktif', 'Tidak Aktif'])],
             'bukti_pajak' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx', 'max:5120'],
+        ];
+
+        if ($limaTahunan) {
+            $rules['tanggal_berakhir_stnk'] = ['required', 'date'];
+            $rules['nomor_plat_baru'] = ['required', 'string', 'max:20'];
+        }
+
+        $data = $request->validate($rules, [
+            'tahun.required' => 'Tahun pajak wajib diisi.',
+            'tanggal_bayar.required' => 'Tanggal pembayaran wajib diisi.',
+            'tanggal_berakhir.required' => 'Tanggal jatuh tempo PKB wajib diisi.',
+            'nominal.required' => 'Nominal total pembayaran wajib diisi.',
+            'tanggal_berakhir_stnk.required' => 'Tanggal berakhir STNK (5 tahunan) wajib diisi untuk Pajak 5 Tahunan.',
+            'nomor_plat_baru.required' => 'Nomor plat setelah pembayaran wajib diisi untuk Pajak 5 Tahunan.',
+            'bukti_pajak.required' => 'Bukti pembayaran pajak wajib diunggah.',
+            'bukti_pajak.max' => 'Ukuran berkas bukti pembayaran maksimal 5 MB.',
+            'bukti_pajak.mimes' => 'Format berkas bukti pembayaran harus JPG, PNG, PDF, DOC/DOCX, atau XLS/XLSX.',
         ]);
 
-        $status = $data['status'] ?? 'Aktif';
-        $limaTahunan = (bool) ($data['pajak_5_tahunan'] ?? false);
-        $berakhir = Carbon::parse($data['tanggal_berakhir']);
+        $berakhirPkb = Carbon::parse($data['tanggal_berakhir']);
+        $berakhirStnk = $limaTahunan && ! empty($data['tanggal_berakhir_stnk'])
+            ? Carbon::parse($data['tanggal_berakhir_stnk'])
+            : null;
+        $tanggalBayar = Carbon::parse($data['tanggal_bayar']);
+        $nominalTotal = $data['nominal'];
 
-        // Bukti disimpan lebih dulu di luar transaksi agar tidak ada berkas
-        // yatim bila transaksi gagal (dibersihkan pada blok catch).
         $buktiPath = null;
         $buktiNama = null;
         $file = $request->file('bukti_pajak');
@@ -72,39 +90,91 @@ class PajakKendaraanController extends Controller
         }
 
         try {
-            DB::transaction(function () use ($kendaraan, $data, $status, $limaTahunan, $berakhir, $buktiPath, $buktiNama) {
-                if ($status === 'Aktif') {
+            DB::transaction(function () use (
+                $kendaraan,
+                $data,
+                $limaTahunan,
+                $berakhirPkb,
+                $berakhirStnk,
+                $tanggalBayar,
+                $nominalTotal,
+                $buktiPath,
+                $buktiNama
+            ) {
+                if ($limaTahunan) {
+                    // Pajak 5 Tahunan:
+                    // 1. Menonaktifkan transaksi 5 Tahunan aktif sebelumnya.
                     PajakKendaraan::where('id_kendaraan', $kendaraan->id_kendaraan)
-                        ->where('pajak_5_tahunan', $limaTahunan)
-                        ->where('status', 'Aktif')
-                        ->update(['status' => 'Tidak Aktif']);
-                }
-
-                PajakKendaraan::create([
-                    'id_kendaraan' => $kendaraan->id_kendaraan,
-                    'jenis_pajak' => $data['jenis_pajak'],
-                    'tahun' => $data['tahun'] ?? $berakhir->year,
-                    'tanggal_bayar' => ! empty($data['tanggal_bayar']) ? Carbon::parse($data['tanggal_bayar']) : null,
-                    'tanggal_berakhir' => $berakhir,
-                    'nominal' => $data['nominal'] ?? null,
-                    'total_pajak' => $data['total_pajak'] ?? null,
-                    'pajak_5_tahunan' => $limaTahunan,
-                    'status' => $status,
-                    'bukti_pajak_path' => $buktiPath,
-                    'bukti_pajak_nama' => $buktiNama,
-                ]);
-
-                if ($limaTahunan && $status === 'Aktif') {
-                    RiwayatPlat::where('id_kendaraan', $kendaraan->id_kendaraan)
+                        ->where('pajak_5_tahunan', true)
                         ->where('status', 'Aktif')
                         ->update(['status' => 'Tidak Aktif']);
 
-                    RiwayatPlat::create([
+                    // 2. Menonaktifkan transaksi Tahunan aktif sebelumnya.
+                    // Pajak 5 Tahunan menjadi sumber informasi terbaru untuk jatuh tempo PKB dan STNK.
+                    PajakKendaraan::where('id_kendaraan', $kendaraan->id_kendaraan)
+                        ->where('pajak_5_tahunan', false)
+                        ->where('status', 'Aktif')
+                        ->update(['status' => 'Tidak Aktif']);
+
+                    // 3. Simpan record Pajak 5 Tahunan baru.
+                    PajakKendaraan::create([
                         'id_kendaraan' => $kendaraan->id_kendaraan,
-                        'nomor_plat' => $data['nomor_plat_baru'],
-                        'tanggal_berlaku' => $berakhir,
-                        'ganti_plat' => true,
+                        'jenis_pajak' => '5 Tahunan',
+                        'tahun' => (int) $data['tahun'],
+                        'tanggal_bayar' => $tanggalBayar,
+                        'tanggal_berakhir' => $berakhirPkb,
+                        'tanggal_berakhir_stnk' => $berakhirStnk,
+                        'nominal' => $nominalTotal,
+                        'total_pajak' => $nominalTotal,
+                        'pajak_5_tahunan' => true,
                         'status' => 'Aktif',
+                        'bukti_pajak_path' => $buktiPath,
+                        'bukti_pajak_nama' => $buktiNama,
+                    ]);
+
+                    // 4. Update data plat aktif yang sudah ada (in-place) tanpa membuat baris baru/duplikat.
+                    $nomorPlatBaru = trim($data['nomor_plat_baru']);
+                    $platAktif = RiwayatPlat::where('id_kendaraan', $kendaraan->id_kendaraan)
+                        ->where('status', 'Aktif')
+                        ->first();
+
+                    if ($platAktif) {
+                        $platAktif->update([
+                            'nomor_plat' => $nomorPlatBaru,
+                            'tanggal_berlaku' => $berakhirStnk,
+                            'status' => 'Aktif',
+                        ]);
+                    } else {
+                        RiwayatPlat::create([
+                            'id_kendaraan' => $kendaraan->id_kendaraan,
+                            'nomor_plat' => $nomorPlatBaru,
+                            'tanggal_berlaku' => $berakhirStnk,
+                            'status' => 'Aktif',
+                            'ganti_plat' => false,
+                        ]);
+                    }
+                } else {
+                    // Pajak Tahunan:
+                    // 1. Menonaktifkan transaksi Tahunan aktif sebelumnya.
+                    PajakKendaraan::where('id_kendaraan', $kendaraan->id_kendaraan)
+                        ->where('pajak_5_tahunan', false)
+                        ->where('status', 'Aktif')
+                        ->update(['status' => 'Tidak Aktif']);
+
+                    // 2. Simpan record Pajak Tahunan baru.
+                    PajakKendaraan::create([
+                        'id_kendaraan' => $kendaraan->id_kendaraan,
+                        'jenis_pajak' => 'Tahunan',
+                        'tahun' => (int) $data['tahun'],
+                        'tanggal_bayar' => $tanggalBayar,
+                        'tanggal_berakhir' => $berakhirPkb,
+                        'tanggal_berakhir_stnk' => null,
+                        'nominal' => $nominalTotal,
+                        'total_pajak' => $nominalTotal,
+                        'pajak_5_tahunan' => false,
+                        'status' => 'Aktif',
+                        'bukti_pajak_path' => $buktiPath,
+                        'bukti_pajak_nama' => $buktiNama,
                     ]);
                 }
             });
@@ -117,18 +187,15 @@ class PajakKendaraanController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Data pajak berhasil ditambahkan.',
-            'tanggal_berakhir' => $berakhir->format('Y-m-d'),
+            'message' => 'Transaksi pajak berhasil ditambahkan.',
         ]);
     }
 
     /**
-     * Lengkapi/perbarui data pajak yang sudah ada tanpa membuat record baru.
+     * Edit transaksi pajak yang berstatus Aktif.
      *
-     * HANYA mengubah jenis pajak, tahun, tanggal bayar, tanggal jatuh tempo,
-     * nominal, total pajak, dan bukti pembayaran. Status aktif, flag 5 tahunan,
-     * dan Riwayat Plat TIDAK disentuh agar riwayat tetap utuh dan tidak ada
-     * duplikasi nilai ke record lain.
+     * Transaksi Tidak Aktif ditolak dari pengeditan.
+     * Jenis transaksi tidak boleh diubah.
      */
     public function update(Request $request, Kendaraan $kendaraan, PajakKendaraan $pajak)
     {
@@ -138,20 +205,46 @@ class PajakKendaraanController extends Controller
 
         $this->authorizeKendaraan($kendaraan);
 
-        $data = $request->validate([
-            'jenis_pajak' => ['required', 'string', 'max:50'],
-            'tahun' => ['nullable', 'integer', 'min:2000', 'max:2100'],
-            'tanggal_bayar' => ['nullable', 'date'],
+        // Edit hanya diperbolehkan untuk transaksi dengan status Aktif
+        if ($pajak->status !== 'Aktif') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Hanya transaksi dengan status Aktif yang dapat diedit.',
+            ], 422);
+        }
+
+        $isLimaTahunan = (bool) $pajak->pajak_5_tahunan;
+
+        $rules = [
+            'tahun' => ['required', 'integer', 'min:2000', 'max:2100'],
+            'tanggal_bayar' => ['required', 'date'],
             'tanggal_berakhir' => ['required', 'date'],
-            'nominal' => ['nullable', 'numeric', 'min:0'],
-            'total_pajak' => ['nullable', 'numeric', 'min:0'],
+            'nominal' => ['required', 'numeric', 'min:0'],
             'bukti_pajak' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx', 'max:5120'],
+        ];
+
+        if ($isLimaTahunan) {
+            $rules['tanggal_berakhir_stnk'] = ['required', 'date'];
+            $rules['nomor_plat_baru'] = ['required', 'string', 'max:20'];
+        }
+
+        $data = $request->validate($rules, [
+            'tahun.required' => 'Tahun pajak wajib diisi.',
+            'tanggal_bayar.required' => 'Tanggal pembayaran wajib diisi.',
+            'tanggal_berakhir.required' => 'Tanggal jatuh tempo PKB wajib diisi.',
+            'nominal.required' => 'Nominal total pembayaran wajib diisi.',
+            'tanggal_berakhir_stnk.required' => 'Tanggal berakhir STNK wajib diisi untuk Pajak 5 Tahunan.',
+            'nomor_plat_baru.required' => 'Nomor plat aktif wajib diisi untuk Pajak 5 Tahunan.',
+            'bukti_pajak.max' => 'Ukuran berkas bukti pembayaran maksimal 5 MB.',
+            'bukti_pajak.mimes' => 'Format berkas bukti pembayaran harus JPG, PNG, PDF, DOC/DOCX, atau XLS/XLSX.',
         ]);
 
-        // Tahun TIDAK diturunkan otomatis dari tanggal bayar/jatuh tempo; nilai
-        // sesuai input admin. Bila dikosongkan, nilai tersimpan dipertahankan.
-        $tahunBaru = ! empty($data['tahun']) ? (int) $data['tahun'] : $pajak->tahun;
-        $berakhirBaru = Carbon::parse($data['tanggal_berakhir']);
+        $berakhirPkb = Carbon::parse($data['tanggal_berakhir']);
+        $berakhirStnk = $isLimaTahunan && ! empty($data['tanggal_berakhir_stnk'])
+            ? Carbon::parse($data['tanggal_berakhir_stnk'])
+            : null;
+        $tanggalBayar = Carbon::parse($data['tanggal_bayar']);
+        $nominalTotal = $data['nominal'];
 
         $buktiBaruPath = null;
         $buktiBaruNama = null;
@@ -164,17 +257,58 @@ class PajakKendaraanController extends Controller
         $buktiLama = $pajak->bukti_pajak_path;
 
         try {
-            DB::transaction(function () use ($pajak, $data, $tahunBaru, $berakhirBaru, $buktiBaruPath, $buktiBaruNama) {
-                $pajak->update([
-                    'jenis_pajak' => $data['jenis_pajak'],
-                    'tahun' => $tahunBaru,
-                    'tanggal_bayar' => ! empty($data['tanggal_bayar']) ? Carbon::parse($data['tanggal_bayar']) : null,
-                    'tanggal_berakhir' => $berakhirBaru,
-                    'nominal' => $data['nominal'] ?? null,
-                    'total_pajak' => $data['total_pajak'] ?? null,
-                    'bukti_pajak_path' => $buktiBaruPath ?? $pajak->bukti_pajak_path,
-                    'bukti_pajak_nama' => $buktiBaruNama ?? $pajak->bukti_pajak_nama,
-                ]);
+            DB::transaction(function () use (
+                $kendaraan,
+                $pajak,
+                $data,
+                $isLimaTahunan,
+                $berakhirPkb,
+                $berakhirStnk,
+                $tanggalBayar,
+                $nominalTotal,
+                $buktiBaruPath,
+                $buktiBaruNama
+            ) {
+                $payload = [
+                    'tahun' => (int) $data['tahun'],
+                    'tanggal_bayar' => $tanggalBayar,
+                    'tanggal_berakhir' => $berakhirPkb,
+                    'nominal' => $nominalTotal,
+                    'total_pajak' => $nominalTotal,
+                ];
+
+                if ($buktiBaruPath) {
+                    $payload['bukti_pajak_path'] = $buktiBaruPath;
+                    $payload['bukti_pajak_nama'] = $buktiBaruNama;
+                }
+
+                if ($isLimaTahunan) {
+                    $payload['tanggal_berakhir_stnk'] = $berakhirStnk;
+
+                    // Sinkronisasi data plat aktif in-place
+                    $nomorPlatBaru = trim($data['nomor_plat_baru']);
+                    $platAktif = RiwayatPlat::where('id_kendaraan', $kendaraan->id_kendaraan)
+                        ->where('status', 'Aktif')
+                        ->first();
+
+                    if ($platAktif) {
+                        $platAktif->update([
+                            'nomor_plat' => $nomorPlatBaru,
+                            'tanggal_berlaku' => $berakhirStnk,
+                            'status' => 'Aktif',
+                        ]);
+                    } else {
+                        RiwayatPlat::create([
+                            'id_kendaraan' => $kendaraan->id_kendaraan,
+                            'nomor_plat' => $nomorPlatBaru,
+                            'tanggal_berlaku' => $berakhirStnk,
+                            'status' => 'Aktif',
+                            'ganti_plat' => false,
+                        ]);
+                    }
+                }
+
+                $pajak->update($payload);
             });
         } catch (\Throwable $e) {
             if ($buktiBaruPath) {
@@ -183,19 +317,19 @@ class PajakKendaraanController extends Controller
             throw $e;
         }
 
-        // Berkas lama baru dihapus setelah transaksi sukses.
+        // Hapus file bukti lama setelah file baru berhasil disimpan dan transaksi commit
         if ($buktiBaruPath && $buktiLama && $buktiLama !== $buktiBaruPath) {
             Storage::disk('public')->delete($buktiLama);
         }
 
         return response()->json([
             'success' => true,
-            'message' => 'Data pajak berhasil diperbarui.',
+            'message' => 'Data transaksi pajak berhasil diperbarui.',
         ]);
     }
 
     /**
-     * Unduh/lihat bukti pembayaran pajak.
+     * Unduh bukti pembayaran pajak.
      */
     public function downloadBukti(Kendaraan $kendaraan, PajakKendaraan $pajak)
     {
@@ -216,10 +350,7 @@ class PajakKendaraanController extends Controller
     }
 
     /**
-     * Sajikan bukti pembayaran secara INLINE untuk pratinjau di modal
-     * (gambar/PDF). Otorisasi & kepemilikan kendaraan tetap dicek; path
-     * penyimpanan tidak pernah dibocorkan ke client. Unduhan tetap lewat
-     * route `kendaraan.pajak.bukti`.
+     * Sajikan bukti pembayaran secara INLINE untuk pratinjau di modal (gambar/PDF).
      */
     public function previewBukti(Kendaraan $kendaraan, PajakKendaraan $pajak)
     {
@@ -240,84 +371,11 @@ class PajakKendaraanController extends Controller
     }
 
     /**
-     * Hapus pajak. Bila pajak ini adalah Pajak 5 Tahunan yang menciptakan plat
-     * aktif saat ini, plat tersebut dihapus dan plat yang sebelumnya aktif
-     * (didemosi oleh transaksi tersebut) dipulihkan — semuanya atomik. Tanpa
-     * langkah ini, menghapus pajak akan meninggalkan plat yatim sehingga
-     * transaksi 5 Tahunan berikutnya menciptakan plat ganda.
-     *
-     * Pemetaan pajak -> plat TIDAK ada FK-nya. Tanda stabil yang dipakai saat
-     * `store` membuat plat adalah: ganti_plat = true, tanggal_berlaku sama
-     * dengan tanggal_berakhir pajak, dan status Aktif. Syarat status Aktif
-     * juga memastikan hanya transaksi 5 Tahunan TERKINI yang di-revert: pajak
-     * lama yang platnya sudah tersisih tidak boleh menyentuh riwayat plat
-     * (historinya harus tetap utuh).
+     * Penghapusan transaksi pajak dinonaktifkan sepenuhnya sesuai aturan bisnis.
+     * Permintaan DELETE langsung melalui URL atau API wajib ditolak (403 Forbidden).
      */
     public function destroy(Kendaraan $kendaraan, PajakKendaraan $pajak)
     {
-        if ($pajak->id_kendaraan !== $kendaraan->id_kendaraan) {
-            return response()->json(['success' => false, 'message' => 'Data tidak valid.'], 422);
-        }
-
-        $this->authorizeKendaraan($kendaraan);
-
-        $isLimaTahunan = (bool) $pajak->pajak_5_tahunan;
-        $isAktif = strcasecmp((string) $pajak->status, 'Aktif') === 0;
-
-        $platDibuat = null;
-        $platSebelumnya = null;
-
-        // A. Hanya Pajak 5 Tahunan berstatus AKTIF yang dapat memicu pemulihan plat lama.
-        // Pajak 5 Tahunan historis/tidak aktif dan Pajak Tahunan TIDAK boleh memengaruhi Riwayat Plat.
-        if ($isLimaTahunan && $isAktif) {
-            $tgl = $pajak->tanggal_berakhir ? $pajak->tanggal_berakhir->format('Y-m-d') : null;
-
-            if ($tgl) {
-                $platDibuat = RiwayatPlat::where('id_kendaraan', $kendaraan->id_kendaraan)
-                    ->where('ganti_plat', true)
-                    ->where('status', 'Aktif')
-                    ->whereDate('tanggal_berlaku', $tgl)
-                    ->first();
-            }
-
-            // Jika relasi plat aktif tidak dapat ditentukan dengan pasti, jangan gunakan fallback berisiko!
-            // Batalkan proses penghapusan secara aman agar tidak merusak plat aktif kendaraan.
-            if (! $platDibuat) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Penghapusan pajak dibatalkan: Relasi riwayat plat aktif terkait tidak dapat ditentukan secara pasti.',
-                ], 422);
-            }
-
-            // Cari plat yang sebelumnya aktif (didemosi oleh transaksi pajak ini)
-            $platSebelumnya = RiwayatPlat::where('id_kendaraan', $kendaraan->id_kendaraan)
-                ->where('status', 'Tidak Aktif')
-                ->where('id_plat', '<', $platDibuat->id_plat)
-                ->orderByDesc('id_plat')
-                ->first();
-        }
-
-        $buktiLama = $pajak->bukti_pajak_path;
-
-        DB::transaction(function () use ($pajak, $platDibuat, $platSebelumnya) {
-            // Hapus data pajak
-            $pajak->delete();
-
-            // Jika ada plat aktif terkait yang sah: hapus plat tersebut dan aktifkan kembali plat sebelumnya
-            if ($platDibuat) {
-                $platDibuat->delete();
-
-                if ($platSebelumnya) {
-                    $platSebelumnya->update(['status' => 'Aktif']);
-                }
-            }
-        });
-
-        // Bersihkan berkas bukti fisik setelah transaksi database berhasil commit
-        if ($buktiLama && Storage::disk('public')->exists($buktiLama)) {
-            Storage::disk('public')->delete($buktiLama);
-        }
-
-        return response()->json(['success' => true, 'message' => 'Data pajak berhasil dihapus.']);
+        abort(403, 'Penghapusan transaksi pajak tidak diperbolehkan.');
     }
 }

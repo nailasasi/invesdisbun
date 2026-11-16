@@ -331,16 +331,31 @@ class AsetScope
             return true;
         }
 
-        $idLokasi = $this->idLokasi();
-
-        if (! $idLokasi || ! $aset) {
+        if (! $aset) {
             return false;
         }
 
-        // Aset tanpa lokasi fisik (belum ditempatkan) tidak terlihat oleh
-        // user UPT — fail closed.
-        return $aset->id_lokasi !== null
-            && in_array((int) $aset->id_lokasi, $idLokasi, true);
+        $idLokasi = $this->idLokasi();
+
+        // 1. Cek berdasarkan lokasi fisik aset jika tersedia
+        if ($aset->id_lokasi !== null && $idLokasi && in_array((int) $aset->id_lokasi, $idLokasi, true)) {
+            return true;
+        }
+
+        // 2. Cek berdasarkan lokasi ruangan penempatan aktif jika ada
+        $penempatanLokasiId = $aset->penempatanAktif?->ruangan?->id_lokasi;
+        if ($penempatanLokasiId !== null && $idLokasi && in_array((int) $penempatanLokasiId, $idLokasi, true)) {
+            return true;
+        }
+
+        // 3. Khusus Admin UPT: boleh mengakses aset tanpa id_lokasi jika id_skpd sesuai cakupan SKPD/UPT miliknya
+        if ($this->isAdminUpt() && $aset->id_lokasi === null && $this->skpdId() !== null) {
+            if ((int) $aset->id_skpd === (int) $this->skpdId()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

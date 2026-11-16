@@ -49,7 +49,7 @@ class DokumenSppbiController extends Controller
         );
 
         $template = TemplateDokumen::where('kode_template', 'sppbi')->first();
-        if (! $template || ! $template->file_path || ! Storage::disk('public')->exists($template->file_path)) {
+        if (! $template || ! $template->fileExists()) {
             return back()->with('error', 'Template dokumen SPPBI belum diunggah di Pengaturan Dokumen.');
         }
 
@@ -102,7 +102,7 @@ class DokumenSppbiController extends Controller
             $values[$token] = $data[$key];
         }
 
-        $filePath = WordTemplateFiller::make(storage_path('app/public/'.$template->file_path))->render(
+        $filePath = WordTemplateFiller::make($template->realPath())->render(
             values: $values,
             rows: [],
             options: [

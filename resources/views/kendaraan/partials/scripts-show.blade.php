@@ -43,28 +43,29 @@
         modal.querySelectorAll('[data-modal-close]').forEach(x => x.addEventListener('click', () => closeModal(modal)));
     }
 
-    // Filter tabel Pajak Kendaraan (hanya tampilan; tidak mengubah data).
+    // Filter tabel Pajak Kendaraan (server-side query melalui parameter URL).
     const pajakFilterTahun = document.getElementById('pajak-filter-tahun');
     const pajakFilterJenis = document.getElementById('pajak-filter-jenis');
-    const pajakRows = Array.from(document.querySelectorAll('#pajak-kendaraan tbody tr[data-tahun]'));
-    const pajakFilterEmpty = document.getElementById('pajak-filter-empty');
 
     if (pajakFilterTahun && pajakFilterJenis) {
-        const applyPajakFilter = () => {
-            let visible = 0;
-            pajakRows.forEach(row => {
-                const okTahun = !pajakFilterTahun.value || String(row.dataset.tahun) === pajakFilterTahun.value;
-                const okJenis = !pajakFilterJenis.value || row.dataset.jenis === pajakFilterJenis.value;
-                const show = okTahun && okJenis;
-                row.classList.toggle('hidden', !show);
-                if (show) visible++;
-            });
-            if (pajakFilterEmpty) {
-                pajakFilterEmpty.classList.toggle('hidden', !(pajakRows.length > 0 && visible === 0));
+        const handlePajakFilterChange = () => {
+            const url = new URL(window.location.href);
+            if (pajakFilterTahun.value) {
+                url.searchParams.set('pajak_tahun', pajakFilterTahun.value);
+            } else {
+                url.searchParams.delete('pajak_tahun');
             }
+            if (pajakFilterJenis.value) {
+                url.searchParams.set('pajak_jenis', pajakFilterJenis.value);
+            } else {
+                url.searchParams.delete('pajak_jenis');
+            }
+            url.searchParams.delete('pajak_page'); // Reset ke halaman 1 saat filter berubah
+            url.hash = 'pajak-card';
+            window.location.href = url.toString();
         };
-        pajakFilterTahun.addEventListener('change', applyPajakFilter);
-        pajakFilterJenis.addEventListener('change', applyPajakFilter);
+        pajakFilterTahun.addEventListener('change', handlePajakFilterChange);
+        pajakFilterJenis.addEventListener('change', handlePajakFilterChange);
     }
 
     async function ensureDropdowns() {
@@ -163,40 +164,73 @@
     const pajakForm = document.getElementById('pajak-form');
     const pajakModalTitle = document.getElementById('pajak-modal-title');
     const pajakMethod = document.getElementById('pajak-method');
-    const cb5Tahunan = document.getElementById('pajak-5tahunan-ganti');
-    const platBaruWrap = document.getElementById('plat-baru-wrap');
-    const platBaruInput = document.getElementById('plat-baru');
-    const block5Tahunan = document.getElementById('pajak-5thn-block');
+    const radioTahunan = document.getElementById('pajak-tipe-tahunan');
+    const radio5Tahunan = document.getElementById('pajak-tipe-5tahunan');
+    const wrap5Tahunan = document.getElementById('wrap-5tahunan');
+    const inputBerakhirStnk = document.getElementById('pajak-berakhir-stnk');
+    const inputPlatBaru = document.getElementById('plat-baru');
+    const noteLockedType = document.getElementById('pajak-jenis-locked-note');
     const buktiInput = document.getElementById('pajak-bukti');
     const buktiWajib = document.getElementById('pajak-bukti-wajib');
     const buktiHint = document.getElementById('pajak-bukti-hint');
     const buktiExisting = document.getElementById('pajak-bukti-existing');
 
-    function togglePlatBaru() {
-        if (!cb5Tahunan || !platBaruWrap || !platBaruInput) return;
-        const on = cb5Tahunan.checked;
-        platBaruWrap.classList.toggle('hidden', !on);
-        platBaruInput.required = on;
-        if (!on) platBaruInput.value = '';
+    function syncTypeVisibility() {
+        const is5 = radio5Tahunan && radio5Tahunan.checked;
+        if (wrap5Tahunan) {
+            wrap5Tahunan.classList.toggle('hidden', !is5);
+        }
+        if (inputBerakhirStnk) {
+            inputBerakhirStnk.required = is5;
+        }
+        if (inputPlatBaru) {
+            inputPlatBaru.required = is5;
+        }
     }
-    if (cb5Tahunan) {
-        cb5Tahunan.addEventListener('change', togglePlatBaru);
+
+    if (radioTahunan) radioTahunan.addEventListener('change', syncTypeVisibility);
+    if (radio5Tahunan) radio5Tahunan.addEventListener('change', syncTypeVisibility);
+
+    function clearPajakErrors() {
+        if (!pajakForm) return;
+        pajakForm.querySelectorAll('.field-error').forEach(el => {
+            el.textContent = '';
+            el.classList.add('hidden');
+        });
+        const alertEl = document.getElementById('pajak-form-alert');
+        if (alertEl) {
+            alertEl.textContent = '';
+            alertEl.classList.add('hidden');
+        }
     }
 
     function resetPajakForm() {
         if (!pajakForm) return;
         pajakForm.reset();
+        clearPajakErrors();
+        const modalBody = document.getElementById('pajak-modal-body');
+        if (modalBody) {
+            modalBody.scrollTop = 0;
+        }
         if (pajakMethod) pajakMethod.value = '';
         pajakForm.action = pajakStoreUrl.replace('__ID__', kendaraanId);
-        if (pajakModalTitle) pajakModalTitle.textContent = 'Kelola Pajak Kendaraan';
-        const jenisEl = document.getElementById('pajak-jenis');
-        if (jenisEl) jenisEl.value = 'PKB';
+        if (pajakModalTitle) pajakModalTitle.textContent = 'Tambah Transaksi Pajak';
+
+        if (radioTahunan) {
+            radioTahunan.disabled = false;
+            radioTahunan.checked = true;
+        }
+        if (radio5Tahunan) {
+            radio5Tahunan.disabled = false;
+            radio5Tahunan.checked = false;
+        }
+        if (noteLockedType) noteLockedType.classList.add('hidden');
+
         const tahunEl = document.getElementById('pajak-tahun');
-        if (tahunEl) tahunEl.disabled = false;
-        const berakhirEl = document.getElementById('pajak-berakhir');
-        if (berakhirEl) berakhirEl.disabled = false;
-        if (block5Tahunan) block5Tahunan.classList.remove('hidden');
-        if (cb5Tahunan) cb5Tahunan.disabled = false;
+        if (tahunEl) tahunEl.value = new Date().getFullYear();
+        const bayarEl = document.getElementById('pajak-bayar');
+        if (bayarEl) bayarEl.value = new Date().toISOString().split('T')[0];
+
         if (buktiInput) buktiInput.required = true;
         if (buktiWajib) buktiWajib.classList.remove('hidden');
         if (buktiHint) buktiHint.textContent = 'Wajib diunggah. Format JPG, PNG, PDF, DOC/DOCX, atau XLS/XLSX. Maksimal 5 MB.';
@@ -204,7 +238,8 @@
             buktiExisting.classList.add('hidden');
             buktiExisting.textContent = '';
         }
-        togglePlatBaru();
+
+        syncTypeVisibility();
     }
 
     document.querySelectorAll('[data-pajak-modal]').forEach(b => b.addEventListener('click', () => {
@@ -216,37 +251,38 @@
         btn.addEventListener('click', () => {
             const d = btn.dataset;
             resetPajakForm();
-            if (pajakModalTitle) pajakModalTitle.textContent = 'Edit Pajak Kendaraan';
+            if (pajakModalTitle) pajakModalTitle.textContent = 'Edit Transaksi Pajak';
             if (pajakForm) {
                 pajakForm.action = pajakUpdateBase.replace('__ID__', kendaraanId).replace('__PAJAK__', d.editPajak);
             }
             if (pajakMethod) pajakMethod.value = 'PUT';
 
-            const jenisEl = document.getElementById('pajak-jenis');
-            if (jenisEl) jenisEl.value = d.jenis ?? '';
-
-            // Tahun awal dihitung dari tanggal jatuh tempo (TIDAK dari nilai
-            // tersimpan): Tahunan = tahun(tanggal_berakhir) - 1, 5 Tahunan
-            // = tahun(tanggal_berakhir) - 5. Fallback ke nilai tersimpan
-            // hanya bila tanggal jatuh tempo kosong.
-            const berakhirY = d.berakhir ? parseInt(d.berakhir.slice(0, 4), 10) : NaN;
-            const tahunAwal = Number.isInteger(berakhirY) ? berakhirY - (d.is5tahunan === '1' ? 5 : 1) : (d.tahun ?? '');
             const tahunEl = document.getElementById('pajak-tahun');
-            if (tahunEl) tahunEl.value = tahunAwal ?? '';
+            if (tahunEl) tahunEl.value = d.tahun ?? '';
             const berakhirEl = document.getElementById('pajak-berakhir');
             if (berakhirEl) berakhirEl.value = d.berakhir ?? '';
             const bayarEl = document.getElementById('pajak-bayar');
             if (bayarEl) bayarEl.value = d.bayar ?? '';
             const nominalEl = document.getElementById('pajak-nominal');
-            if (nominalEl) nominalEl.value = d.nominal ?? '';
-            const totalEl = document.getElementById('pajak-total');
-            if (totalEl) totalEl.value = d.total ?? '';
+            if (nominalEl) nominalEl.value = d.nominal || d.total || '';
 
-            // Seluruh field pajak dapat dikoreksi di sini (jenis, tahun,
-            // tanggal bayar/jatuh tempo, nominal, total, bukti). Blok
-            // 5 Tahunan/Ganti Plat sengaja tidak ditampilkan saat edit:
-            // perubahan ke/dari 5 tahunan diatur lewat Tambah atau Hapus.
-            if (block5Tahunan) block5Tahunan.classList.add('hidden');
+            const is5 = d.is5tahunan === '1';
+            if (is5) {
+                if (radio5Tahunan) radio5Tahunan.checked = true;
+                if (radioTahunan) radioTahunan.checked = false;
+                if (inputBerakhirStnk) inputBerakhirStnk.value = d.berakhirStnk ?? '';
+                if (inputPlatBaru) inputPlatBaru.value = d.plat ?? '';
+            } else {
+                if (radioTahunan) radioTahunan.checked = true;
+                if (radio5Tahunan) radio5Tahunan.checked = false;
+            }
+
+            // Kunci jenis transaksi saat edit (tidak boleh diubah)
+            if (radioTahunan) radioTahunan.disabled = true;
+            if (radio5Tahunan) radio5Tahunan.disabled = true;
+            if (noteLockedType) noteLockedType.classList.remove('hidden');
+
+            syncTypeVisibility();
 
             if (buktiInput) buktiInput.required = false;
             if (buktiWajib) buktiWajib.classList.add('hidden');
@@ -263,20 +299,99 @@
     if (pajakForm) {
         pajakForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const fd = new FormData(e.target);
-            const res = await fetch(pajakForm.action, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken }, body: fd });
-            if (res.ok || res.status === 422) { window.location.reload(); }
+            clearPajakErrors();
+
+            const btnSubmit = document.getElementById('pajak-btn-submit');
+            const originalText = btnSubmit ? btnSubmit.textContent : 'Simpan';
+            if (btnSubmit) {
+                btnSubmit.disabled = true;
+                btnSubmit.textContent = 'Menyimpan...';
+            }
+
+            const fd = new FormData(pajakForm);
+
+            // Karena radio disabled tidak dikirim oleh browser secara default,
+            // pastikan pajak_5_tahunan tetap terkirim saat edit.
+            if (pajakMethod && pajakMethod.value === 'PUT') {
+                const is5 = radio5Tahunan && radio5Tahunan.checked ? '1' : '0';
+                fd.set('pajak_5_tahunan', is5);
+            }
+
+            const alertEl = document.getElementById('pajak-form-alert');
+
+            try {
+                const res = await fetch(pajakForm.action, {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken,
+                    },
+                    body: fd,
+                });
+
+                if (res.status === 422) {
+                    const data = await res.json().catch(() => ({}));
+                    if (data.errors) {
+                        for (const [field, messages] of Object.entries(data.errors)) {
+                            const errorEl = pajakForm.querySelector(`[data-error-for="${field}"]`);
+                            if (errorEl) {
+                                errorEl.textContent = Array.isArray(messages) ? messages[0] : messages;
+                                errorEl.classList.remove('hidden');
+                            }
+                        }
+                    }
+                    if (data.message && alertEl) {
+                        alertEl.textContent = data.message;
+                        alertEl.classList.remove('hidden');
+                    }
+                    const modalBody = document.getElementById('pajak-modal-body');
+                    if (modalBody) {
+                        modalBody.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                    if (btnSubmit) {
+                        btnSubmit.disabled = false;
+                        btnSubmit.textContent = originalText;
+                    }
+                    return; // JANGAN reload saat validasi 422 gagal
+                }
+
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    if (alertEl) {
+                        alertEl.textContent = data.message || 'Terjadi kesalahan sistem (status ' + res.status + ').';
+                        alertEl.classList.remove('hidden');
+                    } else {
+                        alert(data.message || 'Terjadi kesalahan sistem.');
+                    }
+                    if (btnSubmit) {
+                        btnSubmit.disabled = false;
+                        btnSubmit.textContent = originalText;
+                    }
+                    return; // JANGAN reload saat request gagal
+                }
+
+                // Sukses: arahkan ke halaman 1 tanpa filter agar transaksi aktif baru langsung tampil paling atas
+                const url = new URL(window.location.href);
+                url.searchParams.delete('pajak_page');
+                url.searchParams.delete('pajak_tahun');
+                url.searchParams.delete('pajak_jenis');
+                url.hash = 'pajak-card';
+                window.location.href = url.toString();
+            } catch (err) {
+                if (alertEl) {
+                    alertEl.textContent = 'Gagal terhubung ke server. Periksa koneksi Anda.';
+                    alertEl.classList.remove('hidden');
+                } else {
+                    alert('Koneksi bermasalah.');
+                }
+                if (btnSubmit) {
+                    btnSubmit.disabled = false;
+                    btnSubmit.textContent = originalText;
+                }
+            }
         });
     }
-
-    document.querySelectorAll('[data-delete-pajak]').forEach(b => {
-        b.addEventListener('click', async () => {
-            const pajakId = b.dataset.deletePajak;
-            if (!confirm('Hapus pajak ' + b.dataset.pajakName + '?')) return;
-            const res = await fetch(pajakDeleteBase.replace('__ID__', kendaraanId).replace('__PAJAK__', pajakId), { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken } });
-            if (res.ok) window.location.reload();
-        });
-    });
 
     // Pratinjau bukti pajak (modal, bukan unduh langsung).
     const buktiModal = document.getElementById('bukti-modal');

@@ -490,7 +490,7 @@ class MutasiAsetTahap2Test extends TestCase
     }
 
     /**
-     * Skenario 14: Admin UPT tidak dapat membuka tab atau data mutasi kendaraan.
+     * Skenario 14: Admin UPT dapat membuka tab kendaraan dengan data dibatasi cakupan UPT.
      */
     public function test_admin_upt_tidak_dapat_membuka_tab_atau_data_mutasi_kendaraan(): void
     {
@@ -503,15 +503,15 @@ class MutasiAsetTahap2Test extends TestCase
         $response = $this->get(route('mutasi-aset.index', ['kategori' => 'kendaraan']));
         $response->assertStatus(200);
 
-        // Kategori wajib dipaksa menjadi 'barang'
-        $this->assertEquals('barang', $response->viewData('kategori'));
+        // Kategori kendaraan diizinkan
+        $this->assertEquals('kendaraan', $response->viewData('kategori'));
 
-        // Tab Kendaraan tidak boleh dirender di Blade
-        $response->assertDontSee('href="' . route('mutasi-aset.index', ['kategori' => 'kendaraan']) . '"', false);
+        // Tab Kendaraan dirender di Blade
+        $response->assertSee('href="' . route('mutasi-aset.index', ['kategori' => 'kendaraan']) . '"', false);
     }
 
     /**
-     * Skenario 15: Admin UPT tidak dapat mengunduh dokumen mutasi kendaraan (SPPKD & BAST).
+     * Skenario 15: Admin UPT tidak dapat mengunduh SPPKD dan BAST mutasi di luar cakupan UPT.
      */
     public function test_admin_upt_tidak_dapat_mengunduh_dokumen_mutasi_kendaraan(): void
     {
@@ -520,12 +520,12 @@ class MutasiAsetTahap2Test extends TestCase
 
         $this->loginSebagai($adminP2btp);
 
-        // Coba unduh SPPKD via id_mutasi
+        // Coba unduh SPPKD via id_mutasi (harus tetap 403 Forbidden)
         $resSppkd = $this->get('/kendaraan/mutasi/1/sppkd');
         $this->assertEquals(403, $resSppkd->status());
 
-        // Coba unduh BAST Kendaraan via id_mutasi
-        $resBast = $this->get('/kendaraan/mutasi/1/bast');
+        // Coba unduh BAST Kendaraan milik UPT PSBP (#259) oleh Admin P2BTP (harus 403 Forbidden)
+        $resBast = $this->get('/kendaraan/mutasi/259/bast');
         $this->assertEquals(403, $resBast->status());
     }
 

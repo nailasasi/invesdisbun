@@ -8,6 +8,7 @@ use App\Services\ActivityLogger;
 use App\Services\AsetScope;
 use App\Services\PeriodeSensus;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -61,8 +62,16 @@ class SensusAsetController extends Controller
             'lokasi',
         ]);
 
-        $periodeAktif = PeriodeSensus::periodeAktif();
+        $periodeAktif = PeriodeSensus::periodeAktif(null, $aset);
         $periodeDipilih = PeriodeSensus::normalisasi($request->query('periode', $periodeAktif));
+
+        if (PeriodeSensus::periodeSudahBerakhir($periodeDipilih, null, $aset)) {
+            abort(403, "Periode sensus {$periodeDipilih} telah berakhir dan terkunci. Pengubahan data sensus hanya dapat dilakukan pada periode yang sedang berlangsung.");
+        }
+
+        if (PeriodeSensus::periodeBelumDimulai($periodeDipilih, null, $aset)) {
+            abort(403, "Periode sensus {$periodeDipilih} belum dimulai. Sensus hanya dapat dicatat pada periode yang sedang berlangsung.");
+        }
 
         $sensus = SensusAset::where('id_aset', $aset->id_aset)
             ->where('periode', $periodeDipilih)
@@ -74,10 +83,7 @@ class SensusAsetController extends Controller
             ->orderByDesc('tanggal_sensus')
             ->get();
 
-        $daftarPeriode = PeriodeSensus::daftarPeriode(1, 2);
-        if (! in_array($periodeDipilih, $daftarPeriode, true)) {
-            array_unshift($daftarPeriode, $periodeDipilih);
-        }
+        $daftarPeriode = [$periodeAktif];
 
         return view('monitoring-aset.sensus', compact(
             'aset',
@@ -111,13 +117,19 @@ class SensusAsetController extends Controller
 
         $periode = PeriodeSensus::normalisasi($validated['periode']);
 
-        if (! PeriodeSensus::valid($periode)) {
+        if (! PeriodeSensus::valid($periode, $aset)) {
             throw ValidationException::withMessages([
-                'periode' => 'Format periode tidak valid atau tidak sesuai dengan siklus 3 tahunan (contoh: 2025–2028).',
+                'periode' => 'Format periode tidak valid atau tidak sesuai dengan siklus 3 tahunan aset ini (contoh: ' . PeriodeSensus::periodeAktif(null, $aset) . ').',
             ]);
         }
 
-        if (! PeriodeSensus::bolehDiisi($periode)) {
+        if (PeriodeSensus::periodeSudahBerakhir($periode, null, $aset)) {
+            throw ValidationException::withMessages([
+                'periode' => "Periode sensus {$periode} telah berakhir dan terkunci. Pengubahan atau penambahan data hanya dapat dilakukan pada periode yang sedang berlangsung.",
+            ]);
+        }
+
+        if (PeriodeSensus::periodeBelumDimulai($periode, null, $aset)) {
             throw ValidationException::withMessages([
                 'periode' => "Periode sensus {$periode} berada di masa depan dan belum dapat diisi sebelum waktunya.",
             ]);
@@ -139,18 +151,27 @@ class SensusAsetController extends Controller
             'catatan' => $validated['catatan'] ?? null,
         ];
 
-        $sensus = SensusAset::updateOrCreate(
-            [
-                'id_aset' => $aset->id_aset,
-                'periode' => $periode,
-            ],
-            [
-                'hasil_sensus' => $validated['hasil_sensus'],
-                'tanggal_sensus' => $validated['tanggal_sensus'],
-                'catatan' => $validated['catatan'] ?? null,
-                'id_user' => auth()->id(),
-            ]
-        );
+        $sensus = DB::transaction(function () use ($aset, $periode, $validated) {
+            $record = SensusAset::updateOrCreate(
+                [
+                    'id_aset' => $aset->id_aset,
+                    'periode' => $periode,
+                ],
+                [
+                    'hasil_sensus' => $validated['hasil_sensus'],
+                    'tanggal_sensus' => $validated['tanggal_sensus'],
+                    'catatan' => $validated['catatan'] ?? null,
+                    'id_user' => auth()->id(),
+                ]
+            );
+
+            // Perbarui kondisi pada tabel master aset
+            $aset->update([
+                'kondisi' => $validated['hasil_sensus'],
+            ]);
+
+            return $record;
+        });
 
         $action = $existing ? 'Memperbarui' : 'Mencatat';
         $logType = $existing ? 'sensus_aset.updated' : 'sensus_aset.created';
@@ -209,7 +230,7 @@ class SensusAsetController extends Controller
             ->orderByDesc('tanggal_sensus')
             ->get();
 
-        $periodeAktif = PeriodeSensus::periodeAktif();
+        $periodeAktif = PeriodeSensus::periodeAktif(null, $aset);
 
         return view('monitoring-aset.riwayat', compact(
             'aset',

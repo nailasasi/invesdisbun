@@ -44,10 +44,16 @@ class ActivityLogger
         ?Model $subject = null,
         array $oldValues = [],
         array $newValues = [],
-        ?string $description = null
+        ?string $description = null,
+        ?User $actor = null,
+        ?string $actorName = null
     ): ActivityLog {
         $old = $this->sanitize($oldValues);
         $new = $this->sanitize($newValues);
+
+        $userId = $actor?->getKey() ?? Auth::id();
+        $finalActorName = $actorName
+            ?: ($actor ? ($actor->pegawai?->nama_pegawai ?: $actor->username) : $this->namaAktor());
 
         try {
             return ActivityLog::create([
@@ -55,8 +61,8 @@ class ActivityLogger
                 'description' => $description ? mb_substr($description, 0, 255) : null,
                 'subject_type' => $subject ? $subject::class : null,
                 'subject_id' => $subject?->getKey(),
-                'id_user' => Auth::id(),
-                'nama_aktor' => $this->namaAktor(),
+                'id_user' => $userId,
+                'nama_aktor' => $finalActorName ? mb_substr((string) $finalActorName, 0, 100) : null,
                 'old_values' => $old ?: null,
                 'new_values' => $new ?: null,
                 'ip_address' => $this->ipAddress(),

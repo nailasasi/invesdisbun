@@ -15,7 +15,7 @@
                class="rounded-2xl px-4 py-2 text-sm font-bold transition {{ $kategori === 'barang' ? 'bg-disbun-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100' }}">
                 Aset Barang
             </a>
-            @if (auth()->user()?->role?->nama_role === 'Admin Aset')
+            @if (in_array(auth()->user()?->role?->nama_role, ['Admin Aset', 'Admin UPT'], true))
                 <a href="{{ route('mutasi-aset.index', array_filter(['kategori' => 'kendaraan', 'search' => request('search'), 'jenis_mutasi' => request('jenis_mutasi'), 'tanggal_mulai' => request('tanggal_mulai'), 'tanggal_akhir' => request('tanggal_akhir')])) }}"
                    class="rounded-2xl px-4 py-2 text-sm font-bold transition {{ $kategori === 'kendaraan' ? 'bg-disbun-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100' }}">
                     Kendaraan
@@ -106,7 +106,7 @@
                             <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Pemegang Baru</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Nomor Surat</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Diinput Oleh</th>
-                            <th scope="col" class="px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Aksi Dokumen</th>
+                            <th scope="col" class="w-32 px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Dokumen BAST</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100 bg-white">
@@ -127,7 +127,11 @@
                                 <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $mutasi->tanggal_mutasi?->format('d M Y') ?? '-' }}</td>
                                 <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">
                                     @if ($knd)
-                                        <a href="{{ route('kendaraan.show', $knd->id_kendaraan) }}" class="text-slate-900 transition hover:text-disbun-700 hover:underline">{{ $knd->namaTampil() }}</a>
+                                        @if (auth()->user()?->hasRole('Admin Aset'))
+                                            <a href="{{ route('kendaraan.show', $knd->id_kendaraan) }}" class="text-slate-900 transition hover:text-disbun-700 hover:underline">{{ $knd->namaTampil() }}</a>
+                                        @else
+                                            <span class="text-slate-900 font-medium">{{ $knd->namaTampil() }}</span>
+                                        @endif
                                         @if ($platAktif?->nomor_plat)
                                             <span class="block text-xs font-normal text-slate-400">{{ $platAktif->nomor_plat }}</span>
                                         @endif
@@ -144,20 +148,23 @@
                                 <td class="whitespace-nowrap px-6 py-4 text-sm text-slate-600">{{ $mutasi->userPenginput?->pegawai?->nama_pegawai ?? $mutasi->userPenginput?->username ?? '-' }}</td>
                                 <td class="whitespace-nowrap px-6 py-4 text-center">
                                     @if ($detail && $mutasi->jenis_mutasi == 'Ganti Pemegang')
-                                        <div class="flex items-center justify-center gap-1.5">
-                                            <a href="{{ route('kendaraan.sppkd.download', $mutasi->id_mutasi) }}"
-                                               class="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
-                                               title="Unduh Dokumen SPPKD">
-                                                SPPKD
-                                            </a>
+                                        @if ($mutasi->bisa_unduh_bast ?? true)
                                             <a href="{{ route('kendaraan.bast.download', $mutasi->id_mutasi) }}"
-                                               class="inline-flex items-center gap-1 rounded-xl border border-disbun-100 bg-disbun-50 px-2 py-1 text-xs font-semibold text-disbun-800 transition hover:bg-disbun-100"
-                                               title="Unduh BAST Kendaraan">
-                                                BAST
+                                               class="inline-flex items-center gap-1.5 rounded-xl border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
+                                               title="Unduh Berkas BAST">
+                                                <svg class="h-3.5 w-3.5 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                                </svg>
+                                                <span>Unduh BAST</span>
                                             </a>
-                                        </div>
+                                        @else
+                                            <span class="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-400"
+                                                  title="Dokumen BAST memuat aset di luar cakupan kewenangan UPT Anda">
+                                                Akses Terbatas
+                                            </span>
+                                        @endif
                                     @else
-                                        <span class="text-xs italic text-slate-300">-</span>
+                                        <span class="text-xs italic text-slate-300" title="Pemindahan ruangan tercatat di KIR Ruangan">-</span>
                                     @endif
                                 </td>
                             </tr>

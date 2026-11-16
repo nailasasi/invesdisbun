@@ -37,15 +37,10 @@ class MutasiAsetController extends Controller
     {
         $scope = $this->scope();
 
-        // Kategori: Admin UPT secara mutlak hanya memiliki akses aset barang.
-        // Kendaraan dinas dikelola terpusat di Dinas dan eksklusif untuk Admin Aset.
-        if ($scope->isAdminUpt()) {
-            $kategori = 'barang';
-        } else {
-            $kategori = in_array($request->query('kategori'), ['barang', 'kendaraan'], true)
-                ? $request->query('kategori')
-                : 'barang';
-        }
+        // Kategori: Admin Aset & Admin UPT dapat mengakses tab barang maupun kendaraan (dengan batasan scope UPT).
+        $kategori = in_array($request->query('kategori'), ['barang', 'kendaraan'], true)
+            ? $request->query('kategori')
+            : 'barang';
 
         // Validasi input filter & pencarian
         $validator = Validator::make($request->all(), [
@@ -85,8 +80,8 @@ class MutasiAsetController extends Controller
             'details.aset.barang',
             'details.aset.kendaraan.platAktif',
             'details.inventaris',
-            'details.pegawaiLama',
-            'details.pegawaiBaru',
+            'details.pegawaiLama.ruangan',
+            'details.pegawaiBaru.ruangan',
             'details.ruanganLama.lokasi',
             'details.ruanganBaru.lokasi',
             'userPenginput.pegawai',
@@ -103,20 +98,83 @@ class MutasiAsetController extends Controller
             });
         }
 
-        // Pembatasan cakupan Admin UPT: hanya mutasi yang secara historis pernah
-        // melibatkan lokasi fisik UPT miliknya (ruanganLama ATAU ruanganBaru).
+        // Pembatasan cakupan Admin UPT:
+        // Untuk kendaraan: mutasi masuk, mutasi keluar, internal UPT, serta kepemilikan aset UPT.
+        // Untuk barang: tetap menggunakan mekanisme yang sudah berjalan (ruanganLama atau ruanganBaru).
         $idLokasiUpt = $scope->isAdminUpt() ? ($scope->idLokasi() ?: []) : null;
         if ($scope->isAdminUpt()) {
-            // Fail-closed: Jika identitas UPT atau lokasi fisik tidak sah, hasilkan 0 data.
-            if (empty($idLokasiUpt)) {
-                $query->whereRaw('1 = 0');
-            } else {
-                $query->whereHas('details', function ($dq) use ($idLokasiUpt) {
-                    $dq->where(function ($w) use ($idLokasiUpt) {
-                        $w->whereHas('ruanganLama', fn ($r) => $r->whereIn('id_lokasi', $idLokasiUpt))
-                          ->orWhereHas('ruanganBaru', fn ($r) => $r->whereIn('id_lokasi', $idLokasiUpt));
+            $skpdId = $scope->skpdId();
+
+            if ($kategori === 'kendaraan') {
+                if (! $skpdId && empty($idLokasiUpt)) {
+                    $query->whereRaw('1 = 0');
+                } else {
+                    $query->whereHas('details', function ($dq) use ($skpdId, $idLokasiUpt) {
+                        $dq->where(function ($sub) use ($skpdId, $idLokasiUpt) {
+                            $sub->whereHas('aset', function ($aq) use ($skpdId, $idLokasiUpt) {
+                                $aq->where(function ($a) use ($skpdId, $idLokasiUpt) {
+                                    if ($skpdId) {
+                                        $a->where('id_skpd', $skpdId);
+                                    }
+                                    if (! empty($idLokasiUpt)) {
+                                        if ($skpdId) {
+                                            $a->orWhereIn('id_lokasi', $idLokasiUpt);
+                                        } else {
+                                            $a->whereIn('id_lokasi', $idLokasiUpt);
+                                        }
+                                    }
+                                });
+                            })
+                            ->orWhereHas('pegawaiLama', function ($pq) use ($skpdId, $idLokasiUpt) {
+                                $pq->where(function ($p) use ($skpdId, $idLokasiUpt) {
+                                    if ($skpdId) {
+                                        $p->where('id_skpd', $skpdId);
+                                    }
+                                    if (! empty($idLokasiUpt)) {
+                                        $pCondition = fn ($r) => $r->whereIn('id_lokasi', $idLokasiUpt);
+                                        if ($skpdId) {
+                                            $p->orWhereHas('ruangan', $pCondition);
+                                        } else {
+                                            $p->whereHas('ruangan', $pCondition);
+                                        }
+                                    }
+                                });
+                            })
+                            ->orWhereHas('pegawaiBaru', function ($pq) use ($skpdId, $idLokasiUpt) {
+                                $pq->where(function ($p) use ($skpdId, $idLokasiUpt) {
+                                    if ($skpdId) {
+                                        $p->where('id_skpd', $skpdId);
+                                    }
+                                    if (! empty($idLokasiUpt)) {
+                                        $pCondition = fn ($r) => $r->whereIn('id_lokasi', $idLokasiUpt);
+                                        if ($skpdId) {
+                                            $p->orWhereHas('ruangan', $pCondition);
+                                        } else {
+                                            $p->whereHas('ruangan', $pCondition);
+                                        }
+                                    }
+                                });
+                            });
+
+                            if (! empty($idLokasiUpt)) {
+                                $sub->orWhereHas('ruanganLama', fn ($r) => $r->whereIn('id_lokasi', $idLokasiUpt))
+                                    ->orWhereHas('ruanganBaru', fn ($r) => $r->whereIn('id_lokasi', $idLokasiUpt));
+                            }
+                        });
                     });
-                });
+                }
+            } else {
+                // Tab Barang: tetap menggunakan mekanisme yang sudah berjalan
+                if (empty($idLokasiUpt)) {
+                    $query->whereRaw('1 = 0');
+                } else {
+                    $query->whereHas('details', function ($dq) use ($idLokasiUpt) {
+                        $dq->where(function ($w) use ($idLokasiUpt) {
+                            $w->whereHas('ruanganLama', fn ($r) => $r->whereIn('id_lokasi', $idLokasiUpt))
+                              ->orWhereHas('ruanganBaru', fn ($r) => $r->whereIn('id_lokasi', $idLokasiUpt));
+                        });
+                    });
+                }
             }
         }
 
@@ -151,12 +209,69 @@ class MutasiAsetController extends Controller
                 }
 
                 $q->orWhereHas('details', function ($dq) use ($search, $scope, $idLokasiUpt, $kategori) {
-                    // Prioritas Keamanan: Admin UPT wajib terikat pada lokasi fisik UPT-nya pada detail yang sama
+                    // Prioritas Keamanan: Admin UPT wajib terikat pada unit/lokasi UPT-nya pada detail yang sama
                     if ($scope->isAdminUpt()) {
-                        $dq->where(function ($scopeCheck) use ($idLokasiUpt) {
-                            $scopeCheck->whereHas('ruanganLama', fn ($r) => $r->whereIn('id_lokasi', $idLokasiUpt))
-                                       ->orWhereHas('ruanganBaru', fn ($r) => $r->whereIn('id_lokasi', $idLokasiUpt));
-                        });
+                        $skpdId = $scope->skpdId();
+                        $idLokasiUpt = $scope->idLokasi() ?: [];
+
+                        if ($kategori === 'kendaraan') {
+                            $dq->where(function ($scopeCheck) use ($skpdId, $idLokasiUpt) {
+                                $scopeCheck->whereHas('aset', function ($aq) use ($skpdId, $idLokasiUpt) {
+                                    $aq->where(function ($a) use ($skpdId, $idLokasiUpt) {
+                                        if ($skpdId) {
+                                            $a->where('id_skpd', $skpdId);
+                                        }
+                                        if (! empty($idLokasiUpt)) {
+                                            if ($skpdId) {
+                                                $a->orWhereIn('id_lokasi', $idLokasiUpt);
+                                            } else {
+                                                $a->whereIn('id_lokasi', $idLokasiUpt);
+                                            }
+                                        }
+                                    });
+                                })
+                                ->orWhereHas('pegawaiLama', function ($pq) use ($skpdId, $idLokasiUpt) {
+                                    $pq->where(function ($p) use ($skpdId, $idLokasiUpt) {
+                                        if ($skpdId) {
+                                            $p->where('id_skpd', $skpdId);
+                                        }
+                                        if (! empty($idLokasiUpt)) {
+                                            $pCond = fn ($r) => $r->whereIn('id_lokasi', $idLokasiUpt);
+                                            if ($skpdId) {
+                                                $p->orWhereHas('ruangan', $pCond);
+                                            } else {
+                                                $p->whereHas('ruangan', $pCond);
+                                            }
+                                        }
+                                    });
+                                })
+                                ->orWhereHas('pegawaiBaru', function ($pq) use ($skpdId, $idLokasiUpt) {
+                                    $pq->where(function ($p) use ($skpdId, $idLokasiUpt) {
+                                        if ($skpdId) {
+                                            $p->where('id_skpd', $skpdId);
+                                        }
+                                        if (! empty($idLokasiUpt)) {
+                                            $pCond = fn ($r) => $r->whereIn('id_lokasi', $idLokasiUpt);
+                                            if ($skpdId) {
+                                                $p->orWhereHas('ruangan', $pCond);
+                                            } else {
+                                                $p->whereHas('ruangan', $pCond);
+                                            }
+                                        }
+                                    });
+                                });
+
+                                if (! empty($idLokasiUpt)) {
+                                    $scopeCheck->orWhereHas('ruanganLama', fn ($r) => $r->whereIn('id_lokasi', $idLokasiUpt))
+                                               ->orWhereHas('ruanganBaru', fn ($r) => $r->whereIn('id_lokasi', $idLokasiUpt));
+                                }
+                            });
+                        } else {
+                            $dq->where(function ($scopeCheck) use ($idLokasiUpt) {
+                                $scopeCheck->whereHas('ruanganLama', fn ($r) => $r->whereIn('id_lokasi', $idLokasiUpt))
+                                           ->orWhereHas('ruanganBaru', fn ($r) => $r->whereIn('id_lokasi', $idLokasiUpt));
+                            });
+                        }
                     }
 
                     $dq->where(function ($sub) use ($search, $kategori) {
@@ -185,47 +300,70 @@ class MutasiAsetController extends Controller
             ->paginate(10)
             ->withQueryString();
 
-        $idLokasiUpt = $scope->isAdminUpt() ? ($scope->idLokasi() ?: []) : null;
-
         // Siapkan detail yang diizinkan untuk setiap mutasi (Anti-Leakage untuk Admin UPT)
         // dan tentukan kelayakan unduh BAST historis tanpa N+1 query.
-        $mutasiList->getCollection()->transform(function ($mutasi) use ($scope, $idLokasiUpt) {
+        $mutasiList->getCollection()->transform(function ($mutasi) use ($scope, $kategori) {
             if ($scope->isAdminUpt()) {
-                // Filter detail yang melibatkan lokasi fisik UPT pengguna
-                $visible = $mutasi->details->filter(function ($d) use ($idLokasiUpt) {
-                    $asal = $d->ruanganLama?->id_lokasi ? (int) $d->ruanganLama->id_lokasi : null;
-                    $tujuan = $d->ruanganBaru?->id_lokasi ? (int) $d->ruanganBaru->id_lokasi : null;
+                $skpdId = $scope->skpdId();
+                $idLokasiUpt = $scope->idLokasi() ?: [];
 
-                    $cocokAsal = $asal !== null && in_array($asal, $idLokasiUpt, true);
-                    $cocokTujuan = $tujuan !== null && in_array($tujuan, $idLokasiUpt, true);
+                if ($kategori === 'kendaraan') {
+                    // Filter detail yang berkaitan dengan cakupan UPT
+                    $visible = $mutasi->details->filter(function ($d) use ($skpdId, $idLokasiUpt) {
+                        return $this->isDetailInUptScope($d, $skpdId, $idLokasiUpt);
+                    })->values();
 
-                    return $cocokAsal || $cocokTujuan;
-                })->values();
-
-                // Evaluasi hak unduh BAST: seluruh detail dalam transaksi mutasi
-                // wajib memenuhi syarat lokasi historis UPT (sama persis dengan downloadBAST).
-                $bisaUnduh = true;
-                if ($mutasi->details->isEmpty()) {
-                    $bisaUnduh = false;
-                } else {
-                    foreach ($mutasi->details as $d) {
-                        if (! $d->aset) {
-                            $bisaUnduh = false;
-                            break;
-                        }
-                        $asal = $d->ruanganLama?->id_lokasi ? (int) $d->ruanganLama->id_lokasi : null;
-                        $tujuan = $d->ruanganBaru?->id_lokasi ? (int) $d->ruanganBaru->id_lokasi : null;
-                        $cocokAsal = $asal !== null && in_array($asal, $idLokasiUpt, true);
-                        $cocokTujuan = $tujuan !== null && in_array($tujuan, $idLokasiUpt, true);
-                        if (! $cocokAsal && ! $cocokTujuan) {
-                            $bisaUnduh = false;
-                            break;
+                    $bisaUnduh = true;
+                    if ($mutasi->details->isEmpty()) {
+                        $bisaUnduh = false;
+                    } else {
+                        foreach ($mutasi->details as $d) {
+                            if (! $this->isDetailInUptScope($d, $skpdId, $idLokasiUpt)) {
+                                $bisaUnduh = false;
+                                break;
+                            }
                         }
                     }
-                }
 
-                $mutasi->setRelation('visible_details', $visible);
-                $mutasi->bisa_unduh_bast = $bisaUnduh;
+                    $mutasi->setRelation('visible_details', $visible);
+                    $mutasi->bisa_unduh_bast = $bisaUnduh;
+                } else {
+                    // Filter detail barang yang melibatkan lokasi fisik UPT pengguna
+                    $visible = $mutasi->details->filter(function ($d) use ($idLokasiUpt) {
+                        $asal = $d->ruanganLama?->id_lokasi ? (int) $d->ruanganLama->id_lokasi : null;
+                        $tujuan = $d->ruanganBaru?->id_lokasi ? (int) $d->ruanganBaru->id_lokasi : null;
+
+                        $cocokAsal = $asal !== null && in_array($asal, $idLokasiUpt, true);
+                        $cocokTujuan = $tujuan !== null && in_array($tujuan, $idLokasiUpt, true);
+
+                        return $cocokAsal || $cocokTujuan;
+                    })->values();
+
+                    // Evaluasi hak unduh BAST: seluruh detail dalam transaksi mutasi
+                    // wajib memenuhi syarat lokasi historis UPT (sama persis dengan downloadBAST).
+                    $bisaUnduh = true;
+                    if ($mutasi->details->isEmpty()) {
+                        $bisaUnduh = false;
+                    } else {
+                        foreach ($mutasi->details as $d) {
+                            if (! $d->aset) {
+                                $bisaUnduh = false;
+                                break;
+                            }
+                            $asal = $d->ruanganLama?->id_lokasi ? (int) $d->ruanganLama->id_lokasi : null;
+                            $tujuan = $d->ruanganBaru?->id_lokasi ? (int) $d->ruanganBaru->id_lokasi : null;
+                            $cocokAsal = $asal !== null && in_array($asal, $idLokasiUpt, true);
+                            $cocokTujuan = $tujuan !== null && in_array($tujuan, $idLokasiUpt, true);
+                            if (! $cocokAsal && ! $cocokTujuan) {
+                                $bisaUnduh = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    $mutasi->setRelation('visible_details', $visible);
+                    $mutasi->bisa_unduh_bast = $bisaUnduh;
+                }
             } else {
                 // Admin Aset memiliki akses global ke seluruh detail dan dokumen BAST
                 $mutasi->setRelation('visible_details', $mutasi->details);
@@ -300,11 +438,11 @@ class MutasiAsetController extends Controller
         }
 
         $template = TemplateDokumen::where('kode_template', 'bast_barang')->first();
-        if (! $template || ! $template->file_path || ! Storage::disk('public')->exists($template->file_path)) {
+        if (! $template || ! $template->fileExists()) {
             return back()->with('error', 'Template BAST Barang belum diunggah di Pengaturan Dokumen.');
         }
 
-        $phpWord = new TemplateProcessor(storage_path('app/public/' . $template->file_path));
+        $phpWord = new TemplateProcessor($template->realPath());
 
         // Waktu dalam Bahasa Indonesia
         $tgl = \Carbon\Carbon::parse($mutasi->tanggal_mutasi ?? now())->locale('id');
@@ -388,10 +526,21 @@ class MutasiAsetController extends Controller
      */
     public function downloadBASTKendaraan(Kendaraan $kendaraan, $id_mutasi)
     {
-        abort_unless($this->scope()->isAdminAset(), 403, 'Hanya Admin Aset yang berwenang mengunduh dokumen mutasi kendaraan.');
+        $scope = $this->scope();
+        abort_unless(
+            $scope->isAdminAset() || $scope->isAdminUpt(),
+            403,
+            'Anda tidak memiliki hak akses untuk mengunduh BAST kendaraan.'
+        );
 
-        $mutasi = MutasiAset::with(['details', 'details.aset.barang', 'details.pegawaiLama', 'details.pegawaiBaru'])
-            ->findOrFail($id_mutasi);
+        $mutasi = MutasiAset::with([
+            'details',
+            'details.aset.barang',
+            'details.pegawaiLama.ruangan',
+            'details.pegawaiBaru.ruangan',
+            'details.ruanganLama',
+            'details.ruanganBaru',
+        ])->findOrFail($id_mutasi);
 
         if ($mutasi->jenis_mutasi !== 'Ganti Pemegang') {
             return back()->with('error', 'Dokumen BAST hanya tersedia untuk mutasi Ganti Pemegang.');
@@ -402,12 +551,32 @@ class MutasiAsetController extends Controller
             return back()->with('error', 'Detail mutasi tidak ditemukan untuk kendaraan ini.');
         }
 
+        // Verifikasi cakupan hak akses Admin UPT di backend (Fail-closed)
+        if ($scope->isAdminUpt()) {
+            $skpdId = $scope->skpdId();
+            $idLokasiUpt = $scope->idLokasi() ?: [];
+
+            if (! $skpdId && empty($idLokasiUpt)) {
+                abort(403, 'Dokumen BAST kendaraan ini berada di luar cakupan kewenangan UPT Anda.');
+            }
+
+            if ($mutasi->details->isEmpty()) {
+                abort(403, 'Dokumen BAST kendaraan ini berada di luar cakupan kewenangan UPT Anda.');
+            }
+
+            foreach ($mutasi->details as $d) {
+                if (! $this->isDetailInUptScope($d, $skpdId, $idLokasiUpt)) {
+                    abort(403, 'Dokumen BAST kendaraan ini berada di luar cakupan kewenangan UPT Anda.');
+                }
+            }
+        }
+
         $template = TemplateDokumen::where('kode_template', 'bast_kendaraan')->first();
-        if (!$template || !$template->file_path || !Storage::disk('public')->exists($template->file_path)) {
+        if (!$template || !$template->fileExists()) {
             return back()->with('error', 'Template BAST Kendaraan belum diunggah di Pengaturan Dokumen.');
         }
 
-        $phpWord = new TemplateProcessor(storage_path('app/public/' . $template->file_path));
+        $phpWord = new TemplateProcessor($template->realPath());
 
         $tgl = \Carbon\Carbon::parse($mutasi->tanggal_mutasi ?? now())->locale('id');
 
@@ -482,11 +651,11 @@ class MutasiAsetController extends Controller
         }
 
         $template = TemplateDokumen::where('kode_template', 'sppkd')->first();
-        if (!$template || !$template->file_path || !Storage::disk('public')->exists($template->file_path)) {
+        if (!$template || !$template->fileExists()) {
             return back()->with('error', 'Template SPPKD belum diunggah di Pengaturan Dokumen.');
         }
 
-        $phpWord = new TemplateProcessor(storage_path('app/public/' . $template->file_path));
+        $phpWord = new TemplateProcessor($template->realPath());
 
         $tgl = \Carbon\Carbon::parse($mutasi->tanggal_mutasi ?? now())->locale('id');
 
@@ -597,7 +766,7 @@ class MutasiAsetController extends Controller
         }
 
         $template = TemplateDokumen::where('kode_template', 'sppkd')->first();
-        if (! $template || ! $template->file_path || ! Storage::disk('public')->exists($template->file_path)) {
+        if (! $template || ! $template->fileExists()) {
             return back()->with('error', 'Template SPPKD belum diunggah di Pengaturan Dokumen.');
         }
 
@@ -631,7 +800,7 @@ class MutasiAsetController extends Controller
             'no_mesin'        => 'no_mesin',
         ];
 
-        $filePath = WordTemplateFiller::make(storage_path('app/public/' . $template->file_path))->render(
+        $filePath = WordTemplateFiller::make($template->realPath())->render(
             values: $values,
             rows: $rows,
             options: [
@@ -673,7 +842,12 @@ class MutasiAsetController extends Controller
      */
     public function downloadBASTKendaraanById($id_mutasi)
     {
-        abort_unless($this->scope()->isAdminAset(), 403, 'Hanya Admin Aset yang berwenang mengunduh dokumen mutasi kendaraan.');
+        $scope = $this->scope();
+        abort_unless(
+            $scope->isAdminAset() || $scope->isAdminUpt(),
+            403,
+            'Anda tidak memiliki hak akses untuk mengunduh BAST kendaraan.'
+        );
 
         $detail = DetailMutasiAset::where('id_mutasi', $id_mutasi)->first();
         if (!$detail) {
@@ -686,6 +860,74 @@ class MutasiAsetController extends Controller
         }
 
         return $this->downloadBASTKendaraan($kendaraan, $id_mutasi);
+    }
+
+    /**
+     * Memeriksa apakah detail mutasi kendaraan berkaitan dengan cakupan UPT.
+     * Keterkaitan mencakup aset UPT, mutasi masuk/keluar pegawai UPT, dan ruangan UPT.
+     */
+    private function isDetailInUptScope(DetailMutasiAset $d, ?int $skpdId, array $idLokasiUpt): bool
+    {
+        if (! $skpdId && empty($idLokasiUpt)) {
+            return false;
+        }
+
+        // 1. Keterkaitan Aset Kendaraan (SKPD penanggung jawab atau Lokasi fisik)
+        if ($d->aset) {
+            $asetSkpd = $d->aset->id_skpd ? (int) $d->aset->id_skpd : null;
+            $asetLokasi = $d->aset->id_lokasi ? (int) $d->aset->id_lokasi : null;
+
+            if ($skpdId && $asetSkpd === $skpdId) {
+                return true;
+            }
+            if (! empty($idLokasiUpt) && $asetLokasi !== null && in_array($asetLokasi, $idLokasiUpt, true)) {
+                return true;
+            }
+        }
+
+        // 2. Keterkaitan Pegawai Lama (Mutasi Keluar / Internal UPT)
+        if ($d->pegawaiLama) {
+            $pLamaSkpd = $d->pegawaiLama->id_skpd ? (int) $d->pegawaiLama->id_skpd : null;
+            $pLamaLokasi = $d->pegawaiLama->ruangan?->id_lokasi ? (int) $d->pegawaiLama->ruangan->id_lokasi : null;
+
+            if ($skpdId && $pLamaSkpd === $skpdId) {
+                return true;
+            }
+            if (! empty($idLokasiUpt) && $pLamaLokasi !== null && in_array($pLamaLokasi, $idLokasiUpt, true)) {
+                return true;
+            }
+        }
+
+        // 3. Keterkaitan Pegawai Baru (Mutasi Masuk / Internal UPT)
+        if ($d->pegawaiBaru) {
+            $pBaruSkpd = $d->pegawaiBaru->id_skpd ? (int) $d->pegawaiBaru->id_skpd : null;
+            $pBaruLokasi = $d->pegawaiBaru->ruangan?->id_lokasi ? (int) $d->pegawaiBaru->ruangan->id_lokasi : null;
+
+            if ($skpdId && $pBaruSkpd === $skpdId) {
+                return true;
+            }
+            if (! empty($idLokasiUpt) && $pBaruLokasi !== null && in_array($pBaruLokasi, $idLokasiUpt, true)) {
+                return true;
+            }
+        }
+
+        // 4. Keterkaitan Ruangan Lama
+        if ($d->ruanganLama && ! empty($idLokasiUpt)) {
+            $rLamaLokasi = $d->ruanganLama->id_lokasi ? (int) $d->ruanganLama->id_lokasi : null;
+            if ($rLamaLokasi !== null && in_array($rLamaLokasi, $idLokasiUpt, true)) {
+                return true;
+            }
+        }
+
+        // 5. Keterkaitan Ruangan Baru
+        if ($d->ruanganBaru && ! empty($idLokasiUpt)) {
+            $rBaruLokasi = $d->ruanganBaru->id_lokasi ? (int) $d->ruanganBaru->id_lokasi : null;
+            if ($rBaruLokasi !== null && in_array($rBaruLokasi, $idLokasiUpt, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

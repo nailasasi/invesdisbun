@@ -1487,12 +1487,12 @@ class AsetBarangController extends Controller
         }
 
         $template = TemplateDokumen::where('kode_template', 'label')->first();
-        if (! $template || ! $template->file_path || ! Storage::disk('public')->exists($template->file_path)) {
+        if (! $template || ! $template->fileExists()) {
             return back()->with('error', 'File template label belum diunggah.');
         }
 
         try {
-            $spreadsheet = IOFactory::load(Storage::disk('public')->path($template->file_path));
+            $spreadsheet = IOFactory::load($template->realPath());
 
             // Hapus sheet tambahan jika template punya lebih dari 1 sheet bawaan.
             while ($spreadsheet->getSheetCount() > 1) {
@@ -1551,7 +1551,7 @@ class AsetBarangController extends Controller
                 // Path gambar dari worksheet hasil load berbentuk zip://...#xl/media/xxx
                 // yang tidak bisa dipakai langsung, jadi ekstrak biner media ke file sementara.
                 if (str_starts_with($logoPath, 'zip://') && preg_match('/#(xl\/media\/.+)$/', $logoPath, $mediaMatch)) {
-                    $xlsxPath = Storage::disk('public')->path($template->file_path);
+                    $xlsxPath = $template->realPath();
                     $zip = new \ZipArchive;
 
                     if ($zip->open($xlsxPath) === true) {
@@ -1687,12 +1687,12 @@ class AsetBarangController extends Controller
         $this->authorizeAset($aset, 'mencetak label aset');
 
         $template = TemplateDokumen::where('kode_template', 'label')->first();
-        if (! $template || ! $template->file_path || ! Storage::disk('public')->exists($template->file_path)) {
+        if (! $template || ! $template->fileExists()) {
             return back()->with('error', 'File template label belum diunggah.');
         }
 
         try {
-            $spreadsheet = IOFactory::load(Storage::disk('public')->path($template->file_path));
+            $spreadsheet = IOFactory::load($template->realPath());
             while ($spreadsheet->getSheetCount() > 1) {
                 $spreadsheet->removeSheetByIndex(1);
             }

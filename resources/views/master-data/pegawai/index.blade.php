@@ -187,110 +187,112 @@
                                         </svg>
                                     </button>
 
-                                    @if ($user)
-                                        {{-- 3. Ubah Role (Hanya bila sudah punya akun) --}}
-                                        @if ($isSelf)
-                                            <button type="button" disabled
-                                                    title="Anda tidak dapat mengubah role akun sendiri"
-                                                    aria-label="Ubah role akun (akun sendiri tidak dapat diubah)"
-                                                    class="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-lg bg-slate-100 text-slate-300">
-                                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-                                                </svg>
-                                            </button>
+                                    @if ($isAdminAset)
+                                        @if ($user)
+                                            {{-- 3. Ubah Role (Hanya bila sudah punya akun) --}}
+                                            @if ($isSelf)
+                                                <button type="button" disabled
+                                                        title="Anda tidak dapat mengubah role akun sendiri"
+                                                        aria-label="Ubah role akun (akun sendiri tidak dapat diubah)"
+                                                        class="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-lg bg-slate-100 text-slate-300">
+                                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                                    </svg>
+                                                </button>
+                                            @else
+                                                <button type="button"
+                                                        data-ubah-role
+                                                        data-pegawai-id="{{ $pegawai->id_pegawai }}"
+                                                        data-nama="{{ $pegawai->nama_pegawai }}"
+                                                        data-nip="{{ $pegawai->nip ?? '-' }}"
+                                                        data-skpd="{{ $pegawai->skpd?->nama_skpd ?? '-' }}"
+                                                        data-jenis-skpd="{{ $pegawai->skpd?->jenis_skpd ?? '' }}"
+                                                        data-current-role-id="{{ $user->id_role }}"
+                                                        data-action="{{ route('user.role.update', $pegawai) }}"
+                                                        title="Ubah Role"
+                                                        aria-label="Ubah role akun {{ $pegawai->nama_pegawai }}"
+                                                        class="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 transition hover:bg-indigo-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+                                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                                    </svg>
+                                                </button>
+                                            @endif
+
+                                            {{-- 4. Nonaktifkan / Aktifkan Akun (Saling eksklusif) --}}
+                                            @if ($isAktif)
+                                                {{-- Akun Aktif -> Ikon Nonaktifkan Akun --}}
+                                                @if ($isSelf)
+                                                    <button type="button" disabled
+                                                            title="Anda tidak dapat menonaktifkan akun sendiri"
+                                                            aria-label="Nonaktifkan akun (akun sendiri tidak dapat dinonaktifkan)"
+                                                            class="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-lg bg-slate-100 text-slate-300">
+                                                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6"/>
+                                                        </svg>
+                                                    </button>
+                                                @else
+                                                    <button type="button"
+                                                            data-ubah-status
+                                                            data-pegawai-id="{{ $pegawai->id_pegawai }}"
+                                                            data-nama="{{ $pegawai->nama_pegawai }}"
+                                                            data-username="{{ $user->username }}"
+                                                            data-target-status="nonaktif"
+                                                            data-action="{{ route('user.status.update', $pegawai) }}"
+                                                            title="Nonaktifkan Akun"
+                                                            aria-label="Nonaktifkan akun {{ $pegawai->nama_pegawai }}"
+                                                            class="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-50 text-amber-600 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500">
+                                                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6"/>
+                                                        </svg>
+                                                    </button>
+                                                @endif
+                                            @else
+                                                {{-- Akun Nonaktif -> Ikon Aktifkan Akun --}}
+                                                @if ($isSelf)
+                                                    <button type="button" disabled
+                                                            title="Anda tidak dapat mengaktifkan akun sendiri"
+                                                            aria-label="Aktifkan akun"
+                                                            class="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-lg bg-slate-100 text-slate-300">
+                                                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7zM17 11l2 2 4-4"/>
+                                                        </svg>
+                                                    </button>
+                                                @else
+                                                    <button type="button"
+                                                            data-ubah-status
+                                                            data-pegawai-id="{{ $pegawai->id_pegawai }}"
+                                                            data-nama="{{ $pegawai->nama_pegawai }}"
+                                                            data-username="{{ $user->username }}"
+                                                            data-target-status="aktif"
+                                                            data-action="{{ route('user.status.update', $pegawai) }}"
+                                                            title="Aktifkan Akun"
+                                                            aria-label="Aktifkan akun {{ $pegawai->nama_pegawai }}"
+                                                            class="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                                                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7zM17 11l2 2 4-4"/>
+                                                        </svg>
+                                                    </button>
+                                                @endif
+                                            @endif
                                         @else
+                                            {{-- 3. Buat Akun (Hanya bila belum punya akun) --}}
                                             <button type="button"
-                                                    data-ubah-role
+                                                    data-buat-akun
                                                     data-pegawai-id="{{ $pegawai->id_pegawai }}"
                                                     data-nama="{{ $pegawai->nama_pegawai }}"
-                                                    data-nip="{{ $pegawai->nip ?? '-' }}"
+                                                    data-nip="{{ $pegawai->nip ?? '' }}"
+                                                    data-jabatan="{{ $pegawai->jabatan ?? '-' }}"
                                                     data-skpd="{{ $pegawai->skpd?->nama_skpd ?? '-' }}"
                                                     data-jenis-skpd="{{ $pegawai->skpd?->jenis_skpd ?? '' }}"
-                                                    data-current-role-id="{{ $user->id_role }}"
-                                                    data-action="{{ route('user.role.update', $pegawai) }}"
-                                                    title="Ubah Role"
-                                                    aria-label="Ubah role akun {{ $pegawai->nama_pegawai }}"
-                                                    class="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 transition hover:bg-indigo-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+                                                    data-action="{{ route('user.akun.store', $pegawai) }}"
+                                                    title="Buat Akun"
+                                                    aria-label="Buat akun pengguna untuk {{ $pegawai->nama_pegawai }}"
+                                                    class="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 transition hover:bg-emerald-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                                                 <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
                                                 </svg>
                                             </button>
                                         @endif
-
-                                        {{-- 4. Nonaktifkan / Aktifkan Akun (Saling eksklusif) --}}
-                                        @if ($isAktif)
-                                            {{-- Akun Aktif -> Ikon Nonaktifkan Akun --}}
-                                            @if ($isSelf)
-                                                <button type="button" disabled
-                                                        title="Anda tidak dapat menonaktifkan akun sendiri"
-                                                        aria-label="Nonaktifkan akun (akun sendiri tidak dapat dinonaktifkan)"
-                                                        class="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-lg bg-slate-100 text-slate-300">
-                                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6"/>
-                                                    </svg>
-                                                </button>
-                                            @else
-                                                <button type="button"
-                                                        data-ubah-status
-                                                        data-pegawai-id="{{ $pegawai->id_pegawai }}"
-                                                        data-nama="{{ $pegawai->nama_pegawai }}"
-                                                        data-username="{{ $user->username }}"
-                                                        data-target-status="nonaktif"
-                                                        data-action="{{ route('user.status.update', $pegawai) }}"
-                                                        title="Nonaktifkan Akun"
-                                                        aria-label="Nonaktifkan akun {{ $pegawai->nama_pegawai }}"
-                                                        class="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-50 text-amber-600 transition hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500">
-                                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6"/>
-                                                    </svg>
-                                                </button>
-                                            @endif
-                                        @else
-                                            {{-- Akun Nonaktif -> Ikon Aktifkan Akun --}}
-                                            @if ($isSelf)
-                                                <button type="button" disabled
-                                                        title="Anda tidak dapat mengaktifkan akun sendiri"
-                                                        aria-label="Aktifkan akun"
-                                                        class="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-lg bg-slate-100 text-slate-300">
-                                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7zM17 11l2 2 4-4"/>
-                                                    </svg>
-                                                </button>
-                                            @else
-                                                <button type="button"
-                                                        data-ubah-status
-                                                        data-pegawai-id="{{ $pegawai->id_pegawai }}"
-                                                        data-nama="{{ $pegawai->nama_pegawai }}"
-                                                        data-username="{{ $user->username }}"
-                                                        data-target-status="aktif"
-                                                        data-action="{{ route('user.status.update', $pegawai) }}"
-                                                        title="Aktifkan Akun"
-                                                        aria-label="Aktifkan akun {{ $pegawai->nama_pegawai }}"
-                                                        class="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
-                                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7zM17 11l2 2 4-4"/>
-                                                    </svg>
-                                                </button>
-                                            @endif
-                                        @endif
-                                    @else
-                                        {{-- 3. Buat Akun (Hanya bila belum punya akun) --}}
-                                        <button type="button"
-                                                data-buat-akun
-                                                data-pegawai-id="{{ $pegawai->id_pegawai }}"
-                                                data-nama="{{ $pegawai->nama_pegawai }}"
-                                                data-nip="{{ $pegawai->nip ?? '' }}"
-                                                data-jabatan="{{ $pegawai->jabatan ?? '-' }}"
-                                                data-skpd="{{ $pegawai->skpd?->nama_skpd ?? '-' }}"
-                                                data-jenis-skpd="{{ $pegawai->skpd?->jenis_skpd ?? '' }}"
-                                                data-action="{{ route('user.akun.store', $pegawai) }}"
-                                                title="Buat Akun"
-                                                aria-label="Buat akun pengguna untuk {{ $pegawai->nama_pegawai }}"
-                                                class="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 transition hover:bg-emerald-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
-                                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
-                                            </svg>
-                                        </button>
                                     @endif
                                 </div>
                             </td>
@@ -365,6 +367,7 @@
         </div>
     </div>
 
+    @if ($isAdminAset)
     {{-- Modal Ubah Role --}}
     <div id="modal-ubah-role" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
         <div class="fixed inset-0" data-role-modal-close></div>
@@ -441,6 +444,7 @@
             </form>
         </div>
     </div>
+    @endif
 
     {{-- Modal Tambah Pegawai --}}
     <div id="modal-tambah-pegawai" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
@@ -512,6 +516,7 @@
         </div>
     </div>
 
+    @if ($isAdminAset)
     {{-- Modal Buat Akun --}}
     <div id="modal-buat-akun" class="fixed inset-0 z-50 hidden flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-xs">
         <div class="fixed inset-0" data-buat-akun-close></div>
@@ -544,15 +549,12 @@
 
                     <div class="space-y-4">
                         <div class="space-y-1.5">
-                            <label for="ba-role" class="block text-sm font-medium text-slate-700">Role <span class="text-red-500">*</span></label>
-                            <select id="ba-role" name="id_role" required
-                                    class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:border-disbun-500 focus:outline-none focus:ring-2 focus:ring-disbun-400 transition">
-                                @foreach ($roleList as $role)
-                                    <option value="{{ $role->id_role }}" data-role-nama="{{ $role->nama_role }}">{{ $role->nama_role }}</option>
-                                @endforeach
-                            </select>
-                            <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_role"></p>
-                            <p class="text-[11px] text-slate-400">Pilihan role otomatis disesuaikan dengan jenis SKPD pegawai.</p>
+                            <label class="block text-sm font-medium text-slate-700">Role Awal</label>
+                            <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-sm text-slate-700">
+                                <span class="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/20">Pegawai</span>
+                                <span class="text-xs text-slate-500">Ditetapkan otomatis oleh sistem</span>
+                            </div>
+                            <p class="text-[11px] text-slate-400">Role dapat disesuaikan kemudian melalui menu Ubah Role setelah akun dibuat.</p>
                         </div>
 
                         <div class="space-y-1.5">
@@ -565,12 +567,12 @@
 
                         <div class="space-y-1.5">
                             <label for="ba-password" class="block text-sm font-medium text-slate-700">
-                                Password
-                                <span id="ba-password-required-mark" class="hidden text-xs font-semibold text-amber-600">*</span>
+                                Password <span class="text-xs font-normal text-slate-400">(Opsional)</span>
                             </label>
                             <input type="password" id="ba-password" name="password" autocomplete="new-password"
+                                   placeholder="Kosongkan untuk menggunakan NIP sebagai password awal"
                                    class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:border-disbun-500 focus:outline-none focus:ring-2 focus:ring-disbun-400 transition">
-                            <p id="ba-password-hint" class="text-[11px] text-slate-400"></p>
+                            <p id="ba-password-hint" class="text-[11px] text-slate-400">Default: NIP pegawai (minimal 8 karakter jika diisi manual).</p>
                             <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="password"></p>
                             <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="nip"></p>
                             <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="pegawai"></p>
@@ -585,6 +587,7 @@
             </form>
         </div>
     </div>
+    @endif
     @endpush
 
     @push('scripts')
@@ -843,7 +846,7 @@
 
             function applySync(keepRuanganId) {
                 const opt = skpdSelect.options[skpdSelect.selectedIndex];
-                const lokasiId = opt?.dataset.lokasiId || '';
+                const lokasiId = opt?.dataset.lokasiId ? String(opt.dataset.lokasiId) : '';
                 const lokasiNama = opt?.dataset.lokasiNama || '';
 
                 if (lokasiInput) {
@@ -856,15 +859,16 @@
                         rOpt.style.display = '';
                         return;
                     }
-                    const match = rOpt.dataset.shared === '1' || (lokasiId && rOpt.dataset.lokasi === lokasiId);
+                    // Filter berbasis lokasi: hanya ruangan yang memiliki id_lokasi sama dengan SKPD terpilih
+                    const match = lokasiId !== '' && String(rOpt.dataset.lokasi) === lokasiId;
                     rOpt.style.display = match ? '' : 'none';
                     if (match) hasOption = true;
                 });
 
-                const keep = keepRuanganId || '';
-                const keepOpt = Array.from(ruanganSelect.options).find(o => o.value === String(keep));
+                const keep = keepRuanganId ? String(keepRuanganId) : '';
+                const keepOpt = Array.from(ruanganSelect.options).find(o => o.value === keep);
                 if (keep && keepOpt && keepOpt.style.display !== 'none') {
-                    ruanganSelect.value = String(keep);
+                    ruanganSelect.value = keep;
                 } else {
                     ruanganSelect.value = '';
                 }
@@ -1116,7 +1120,6 @@
         const baCardNip = document.getElementById('ba-card-nip');
         const baCardJabatan = document.getElementById('ba-card-jabatan');
         const baCardSkpd = document.getElementById('ba-card-skpd');
-        const baRoleSelect = document.getElementById('ba-role');
         const baUsernameInput = document.getElementById('ba-username');
         const baPasswordInput = document.getElementById('ba-password');
         const baPasswordHint = document.getElementById('ba-password-hint');
@@ -1125,39 +1128,30 @@
         const btnSubmitBuatAkun = document.getElementById('btn-submit-buat-akun');
 
         function openBuatAkunModal(btn) {
+            if (!buatAkunModal || !buatAkunForm) return;
+
             const action = btn.dataset.action || '';
             const nama = btn.dataset.nama || '';
             const nip = btn.dataset.nip || '';
             const jabatan = btn.dataset.jabatan || '-';
             const skpd = btn.dataset.skpd || '-';
-            const jenisSkpd = btn.dataset.jenisSkpd || '';
 
             buatAkunForm.action = action;
-            baCardNama.textContent = nama;
-            baCardNip.textContent = nip || '-';
-            baCardJabatan.textContent = jabatan;
-            baCardSkpd.textContent = skpd;
+            if (baCardNama) baCardNama.textContent = nama;
+            if (baCardNip) baCardNip.textContent = nip || '-';
+            if (baCardJabatan) baCardJabatan.textContent = jabatan;
+            if (baCardSkpd) baCardSkpd.textContent = skpd;
 
-            baUsernameInput.value = nip;
-            baPasswordInput.value = '';
-
-            const nipLength = (nip || '').trim().length;
-            if (nipLength >= 8) {
+            if (baUsernameInput) baUsernameInput.value = nip;
+            if (baPasswordInput) {
+                baPasswordInput.value = '';
                 baPasswordInput.required = false;
-                baPasswordInput.placeholder = 'Minimal 8 karakter (opsional, default: NIP)';
-                if (baPasswordRequiredMark) baPasswordRequiredMark.classList.add('hidden');
-                if (baPasswordHint) {
-                    baPasswordHint.textContent = 'Opsional: kosongkan jika ingin menggunakan NIP sebagai password awal.';
-                    baPasswordHint.className = 'text-[11px] text-slate-400';
-                }
-            } else {
-                baPasswordInput.required = true;
-                baPasswordInput.placeholder = 'Minimal 8 karakter (wajib diisi)';
-                if (baPasswordRequiredMark) baPasswordRequiredMark.classList.remove('hidden');
-                if (baPasswordHint) {
-                    baPasswordHint.textContent = '* Wajib diisi karena NIP pegawai kurang dari 8 karakter.';
-                    baPasswordHint.className = 'text-[11px] font-semibold text-amber-600';
-                }
+                baPasswordInput.placeholder = 'Kosongkan untuk menggunakan NIP sebagai password awal';
+            }
+            if (baPasswordRequiredMark) baPasswordRequiredMark.classList.add('hidden');
+            if (baPasswordHint) {
+                baPasswordHint.textContent = 'Default: NIP pegawai (minimal 8 karakter jika diisi manual).';
+                baPasswordHint.className = 'text-[11px] text-slate-400';
             }
 
             clearFieldErrors(buatAkunForm);
@@ -1166,36 +1160,13 @@
                 buatAkunGeneralError.classList.add('hidden');
             }
 
-            // Filter role sesuai jenis SKPD pegawai
-            Array.from(baRoleSelect.options).forEach(opt => {
-                const roleNama = opt.dataset.roleNama;
-                let allowed = false;
-                if (roleNama === 'Pegawai') {
-                    allowed = true;
-                } else if (roleNama === 'Admin Aset' && jenisSkpd === 'Sekretariat') {
-                    allowed = true;
-                } else if (roleNama === 'Admin Bidang' && jenisSkpd === 'Bidang') {
-                    allowed = true;
-                } else if (roleNama === 'Admin UPT' && jenisSkpd === 'UPT') {
-                    allowed = true;
-                }
-
-                opt.hidden = !allowed;
-                opt.disabled = !allowed;
-            });
-
-            const defaultRoleOpt = Array.from(baRoleSelect.options).find(o => !o.disabled && o.dataset.roleNama === 'Pegawai')
-                || Array.from(baRoleSelect.options).find(o => !o.disabled);
-            if (defaultRoleOpt) {
-                baRoleSelect.value = defaultRoleOpt.value;
-            }
-
             buatAkunModal.classList.remove('hidden');
             buatAkunModal.classList.add('flex');
             document.body.classList.add('overflow-hidden');
         }
 
         function closeBuatAkunModal() {
+            if (!buatAkunModal) return;
             buatAkunModal.classList.add('hidden');
             buatAkunModal.classList.remove('flex');
             document.body.classList.remove('overflow-hidden');

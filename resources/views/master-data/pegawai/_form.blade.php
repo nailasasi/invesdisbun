@@ -30,21 +30,29 @@
         if (!fieldSkpd || !fieldRuangan) { return; }
 
         function applyRuanganFilter(keepValue) {
-            const lokasiId = fieldSkpd.options[fieldSkpd.selectedIndex]?.dataset.lokasiId || '';
+            const lokasiId = fieldSkpd.options[fieldSkpd.selectedIndex]?.dataset.lokasiId ? String(fieldSkpd.options[fieldSkpd.selectedIndex].dataset.lokasiId) : '';
             let hasOption = false;
 
             fieldRuangan.querySelectorAll('option').forEach(opt => {
                 if (!opt.value) { opt.style.display = ''; return; }
-                const match = opt.dataset.shared === '1' || (lokasiId && opt.dataset.lokasi === lokasiId);
+                const match = lokasiId !== '' && String(opt.dataset.lokasi) === lokasiId;
                 opt.style.display = match ? '' : 'none';
                 if (match) hasOption = true;
             });
 
-            const keep = keepValue || '';
-            fieldRuangan.value = keep && hasOption ? keep : '';
-            fieldRuangan.querySelector('option[value=""]').textContent = hasOption
-                ? '-- Pilih Ruangan --'
-                : (lokasiId ? '-- Tidak ada ruangan untuk lokasi ini --' : '-- Pilih SKPD dulu --');
+            const keep = keepValue ? String(keepValue) : '';
+            const keepOpt = Array.from(fieldRuangan.options).find(o => o.value === keep);
+            if (keep && keepOpt && keepOpt.style.display !== 'none') {
+                fieldRuangan.value = keep;
+            } else {
+                fieldRuangan.value = '';
+            }
+            const placeholder = fieldRuangan.querySelector('option[value=""]');
+            if (placeholder) {
+                placeholder.textContent = hasOption
+                    ? '-- Pilih Ruangan --'
+                    : (lokasiId ? '-- Tidak ada ruangan untuk lokasi ini --' : '-- Pilih SKPD dulu --');
+            }
         }
 
         function applyLokasiDisplay() {

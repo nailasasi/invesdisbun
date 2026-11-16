@@ -68,7 +68,7 @@
             </div>
             <div>
                 <p class="text-xs font-medium uppercase tracking-wider text-slate-400">Barang Melekat</p>
-                <p class="mt-1 text-sm font-semibold text-slate-800">{{ $asetMelekat->count() }} aset</p>
+                <p class="mt-1 text-sm font-semibold text-slate-800">{{ method_exists($asetMelekat, 'total') ? $asetMelekat->total() : $asetMelekat->count() }} aset</p>
             </div>
             <div>
                 <p class="text-xs font-medium uppercase tracking-wider text-slate-400">Dipegang Pegawai</p>

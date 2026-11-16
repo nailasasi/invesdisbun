@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Aset;
+use App\Models\SensusAset;
 use App\Models\UsulanPenghapusan;
 use App\Services\AsetScope;
 use App\Services\MasaPakaiAset;
@@ -32,8 +33,20 @@ class MonitoringAsetController extends Controller
      */
     public function index(Request $request)
     {
+        $daftarPeriode = PeriodeSensus::daftarPeriodeMonitoring();
+        $periodeAktifList = PeriodeSensus::daftarPeriodeAktifList();
+
         $periodeAktif = PeriodeSensus::periodeAktif();
-        $periodeDipilih = PeriodeSensus::normalisasi($request->query('periode', $periodeAktif));
+        $periodeDipilih = $request->filled('periode')
+            ? PeriodeSensus::normalisasi($request->query('periode'))
+            : $periodeAktif;
+
+        if (! in_array($periodeDipilih, $daftarPeriode, true)) {
+            [$m, $s] = PeriodeSensus::urai($periodeDipilih);
+            if ($s - $m === 2) {
+                array_unshift($daftarPeriode, $periodeDipilih);
+            }
+        }
 
         $query = $this->applyFilters($request, $periodeDipilih);
 
@@ -48,6 +61,9 @@ class MonitoringAsetController extends Controller
 
         [$totalNilaiBuku, $asetHabisCount, $asetKritisCount] = $this->ringkasan($queryKpi->get());
 
+        // Card Aset Belum Disensus: menghitung aset yang belum disensus pada periode aktifnya masing-masing
+        $asetBelumDisensusCount = PeriodeSensus::hitungAsetBelumDisensusAktif($query);
+
         $tahunList = Aset::query()
             ->selectRaw('YEAR(tanggal_pengadaan) as tahun')
             ->whereNotNull('tanggal_pengadaan')
@@ -57,11 +73,6 @@ class MonitoringAsetController extends Controller
             ->orderByDesc('tahun')
             ->pluck('tahun');
 
-        $daftarPeriode = PeriodeSensus::daftarPeriode(1, 2);
-        if (! in_array($periodeDipilih, $daftarPeriode, true)) {
-            array_unshift($daftarPeriode, $periodeDipilih);
-        }
-
         $pendingAsetIds = UsulanPenghapusan::where('status_usulan', 'diajukan')->pluck('id_aset');
 
         $asetList = $query->orderByDesc('id_aset')->paginate(10)->withQueryString();
@@ -70,8 +81,8 @@ class MonitoringAsetController extends Controller
         ));
 
         return view('monitoring-aset.index', compact(
-            'asetList', 'totalNilaiBuku', 'asetHabisCount', 'asetKritisCount', 'tahunList',
-            'periodeAktif', 'periodeDipilih', 'daftarPeriode'
+            'asetList', 'totalNilaiBuku', 'asetHabisCount', 'asetKritisCount', 'asetBelumDisensusCount', 'tahunList',
+            'periodeAktif', 'periodeDipilih', 'daftarPeriode', 'periodeAktifList'
         ));
     }
 
@@ -177,9 +188,11 @@ class MonitoringAsetController extends Controller
         $penempatan = trim((string) $request->query('penempatan'));
 
         $with = ['barang', 'kendaraan.platAktif', 'penempatanAktif.ruangan.lokasi', 'pemegangSaatIni.pegawai', 'skpd', 'lokasi'];
-        if ($periode) {
-            $with['sensus'] = fn ($q) => $q->where('periode', $periode);
-        }
+        $relevantPeriods = array_values(array_unique(array_filter(array_merge(
+            $periode ? [$periode] : [],
+            PeriodeSensus::daftarPeriodeAktifList()
+        ))));
+        $with['sensus'] = fn ($q) => $q->whereIn('periode', $relevantPeriods);
 
         return Aset::query()
             ->with($with)
@@ -263,12 +276,29 @@ class MonitoringAsetController extends Controller
             $periodeDipilih = PeriodeSensus::periodeAktif();
         }
 
-        $sensus = $aset->relationLoaded('sensus')
-            ? $aset->sensus->first()
+        $periodeAktifAset = PeriodeSensus::periodeAktif(null, $aset);
+
+        // Sensus untuk periode yang sedang difilter pada tabel (untuk kolom Hasil Sensus)
+        $sensusFilter = $aset->relationLoaded('sensus')
+            ? $aset->sensus->firstWhere('periode', $periodeDipilih)
             : $aset->sensusPeriode($periodeDipilih)->first();
 
-        $hasilSensus = $sensus?->hasil_sensus ?? 'Belum Disensus';
-        $sudahDisensus = $sensus !== null;
+        $hasilSensus = $sensusFilter?->hasil_sensus ?? 'Belum Disensus';
+        $sudahDisensus = $sensusFilter !== null;
+
+        // Sensus untuk periode aktif aset itu sendiri (untuk aksi tombol Tambah / Edit Sensus)
+        $sensusAktif = ($periodeDipilih === $periodeAktifAset && $sensusFilter !== null)
+            ? $sensusFilter
+            : ($aset->relationLoaded('sensus')
+                ? $aset->sensus->firstWhere('periode', $periodeAktifAset)
+                : $aset->sensusPeriode($periodeAktifAset)->first());
+
+        $sudahDisensusAktif = $sensusAktif !== null;
+        $hasilSensusAktif = $sensusAktif?->hasil_sensus;
+        $tanggalSensusAktif = $sensusAktif?->tanggal_sensus
+            ? Carbon::parse($sensusAktif->tanggal_sensus)->format('Y-m-d')
+            : date('Y-m-d');
+        $catatanSensusAktif = $sensusAktif?->catatan ?? '';
 
         // Fallback pemegang: relasi pemegang aktif -> nama_pegawai, atau kolom kendaraan.pemegang
         $pemegangNama = $aset->pemegangSaatIni?->pegawai?->nama_pegawai;
@@ -314,8 +344,15 @@ class MonitoringAsetController extends Controller
             'hasil_sensus' => $hasilSensus,
             'sudah_disensus' => $sudahDisensus,
             'periode_sensus' => $periodeDipilih,
-            'catatan_sensus' => $sensus?->catatan ?? '',
-            'tanggal_sensus' => $sensus?->tanggal_sensus ? Carbon::parse($sensus->tanggal_sensus)->format('Y-m-d') : date('Y-m-d'),
+            'periode_sensus_aktif' => $periodeAktifAset,
+            'sudah_disensus_aktif' => $sudahDisensusAktif,
+            'hasil_sensus_aktif' => $hasilSensusAktif,
+            'tanggal_sensus_aktif' => $tanggalSensusAktif,
+            'catatan_sensus_aktif' => $catatanSensusAktif,
+            'periode_berlangsung' => true,
+            'daftar_periode_sensus' => [$periodeAktifAset],
+            'catatan_sensus' => $sensusFilter?->catatan ?? '',
+            'tanggal_sensus' => $sensusFilter?->tanggal_sensus ? Carbon::parse($sensusFilter->tanggal_sensus)->format('Y-m-d') : date('Y-m-d'),
             'bisa_usul' => $this->scope->isAdminAset()
                 && $aset->status_aset === 'aktif'
                 && ! $dalamAntrean,

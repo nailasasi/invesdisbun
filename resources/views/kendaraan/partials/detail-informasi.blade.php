@@ -42,10 +42,24 @@
         </div>
         <div class="space-y-1">
             <dt class="text-xs font-medium uppercase tracking-wider text-slate-500">Plat Aktif</dt>
-            <dd class="text-sm font-medium text-slate-900">{{ $platAktif->nomor_plat ?? '-' }}
-                @if ($platAktif?->tanggal_berlaku)
-                    <span class="block text-xs font-normal text-slate-400">Masa aktif: {{ $platAktif->tanggal_berlaku->format('d M Y') }}</span>
-                @endif
+            <dd class="text-sm font-medium text-slate-900">{{ $platAktif->nomor_plat ?? '-' }}</dd>
+        </div>
+        <div class="space-y-1">
+            <dt class="text-xs font-medium uppercase tracking-wider text-slate-500">Jatuh Tempo PKB</dt>
+            @php $stPkb = $kendaraan->statusPkb(); @endphp
+            <dd class="text-sm">
+                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {{ $stPkb['class'] }}">
+                    {{ $stPkb['label'] }}
+                </span>
+            </dd>
+        </div>
+        <div class="space-y-1">
+            <dt class="text-xs font-medium uppercase tracking-wider text-slate-500">Masa Berlaku STNK (5 Thn)</dt>
+            @php $stStnk = $kendaraan->statusStnk(); @endphp
+            <dd class="text-sm">
+                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {{ $stStnk['class'] }}">
+                    {{ $stStnk['label'] }}
+                </span>
             </dd>
         </div>
         <div class="space-y-1">

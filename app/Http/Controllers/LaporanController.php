@@ -27,6 +27,8 @@ class LaporanController extends Controller
      */
     public function index(Request $request)
     {
+        abort_unless($this->scope->isAdminAset(), 403, 'Hanya Admin Aset yang berwenang mengakses Modul Laporan.');
+
         $data = $this->resolveReportContext($request);
 
         return view('laporan.index', [
@@ -50,6 +52,8 @@ class LaporanController extends Controller
      */
     public function exportExcel(Request $request)
     {
+        abort_unless($this->scope->isAdminAset(), 403, 'Hanya Admin Aset yang berwenang mengekspor Laporan.');
+
         $data = $this->resolveReportContext($request);
 
         $spreadsheet = $this->exporter->generateExcel(
@@ -76,6 +80,8 @@ class LaporanController extends Controller
      */
     public function exportPdf(Request $request)
     {
+        abort_unless($this->scope->isAdminAset(), 403, 'Hanya Admin Aset yang berwenang mengekspor Laporan.');
+
         $data = $this->resolveReportContext($request);
 
         $pdfBinary = $this->exporter->renderPdf(
@@ -100,6 +106,8 @@ class LaporanController extends Controller
      */
     private function resolveReportContext(Request $request): array
     {
+        abort_unless($this->scope->isAdminAset(), 403, 'Hanya Admin Aset yang berwenang mengakses data Modul Laporan.');
+
         $jenis = strtolower(trim((string) $request->query('jenis', 'bulanan')));
         if (! in_array($jenis, ['bulanan', 'tahunan'], true)) {
             $jenis = 'bulanan';
