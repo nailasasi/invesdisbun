@@ -12,6 +12,7 @@ use App\Models\PemegangAset;
 use App\Models\PenempatanAset;
 use App\Models\RiwayatPlat;
 use App\Models\Ruangan;
+use App\Models\UsulanPenghapusan;
 use App\Services\AsetPenempatan;
 use App\Services\AsetScope;
 use App\Services\TanggalAset;
@@ -886,51 +887,61 @@ class KendaraanController extends Controller
         $aset = $kendaraan->aset;
 
         if (! $aset) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Data aset kendaraan tidak ditemukan.',
-            ], 422);
+            $msg = 'Data aset kendaraan tidak ditemukan.';
+            if (request()->expectsJson() || request()->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $msg,
+                ], 422);
+            }
+
+            return back()->with('error', $msg);
         }
 
         if ($aset->status_aset !== 'aktif') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Hanya kendaraan berstatus aktif yang dapat diusulkan penghapusan.',
-            ], 422);
+            $msg = 'Hanya kendaraan berstatus aktif yang dapat diusulkan penghapusan.';
+            if (request()->expectsJson() || request()->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $msg,
+                ], 422);
+            }
+
+            return back()->with('error', $msg);
         }
 
         if (UsulanPenghapusan::where('id_aset', $aset->id_aset)->where('status_usulan', 'diajukan')->exists()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Kendaraan sudah memiliki usulan penghapusan yang aktif.',
-            ], 422);
+            $msg = 'Kendaraan sudah memiliki usulan penghapusan yang aktif.';
+            if (request()->expectsJson() || request()->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $msg,
+                ], 422);
+            }
+
+            return back()->with('error', $msg);
         }
 
         // Bukan hard delete (SOP BMD): kendaraan & aset tetap tersimpan, hanya
         // status aset berubah sehingga hilang dari daftar aktif dan kondisi
-        // ditandai Rusak Berat. Perubahan status + pencatatan usulan dibungkus
-        // SATU transaksi supaya bila salah satu langkah gagal tidak pernah
-        // tertinggal kondisi aset berubah tanpa usulan (atau sebaliknya).
-        DB::transaction(function () use ($aset) {
-            $aset->update([
-                'status_aset' => 'diusulkan_hapus',
-                'kondisi' => 'Rusak Berat',
-            ]);
+        // ditandai Rusak Berat. Perubahan status + pencatatan usulan didelegasikan
+        // ke UsulanPenghapusanService (atomik dengan concurrency lock).
+        $this->usulan()->usulkan(
+            $aset,
+            alasan: 'Lainnya',
+            keterangan: 'Diusulkan melalui tombol hapus pada daftar kendaraan.',
+            jadikanRusakBerat: true,
+        );
 
-            UsulanPenghapusan::create([
-                'id_aset' => $aset->id_aset,
-                'id_pegawai_penghapus' => auth()->user()?->pegawai?->id_pegawai,
-                'tanggal_usulan' => now()->toDateString(),
-                'alasan_penghapusan' => 'Lainnya',
-                'status_usulan' => 'diajukan',
-                'keterangan' => 'Diusulkan melalui tombol hapus pada daftar kendaraan.',
+        $msg = 'Kendaraan diusulkan penghapusan dan dikeluarkan dari daftar aktif.';
+        if (request()->expectsJson() || request()->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => $msg,
             ]);
-        });
+        }
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Kendaraan diusulkan penghapusan dan dikeluarkan dari daftar aktif.',
-        ]);
+        return redirect()->route('kendaraan.index')->with('success', $msg);
     }
 
     /**

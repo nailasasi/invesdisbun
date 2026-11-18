@@ -466,6 +466,8 @@ Route::middleware(['auth', 'prevent-back-history'])->group(function () {
                 ->name('update');
             Route::delete('{kendaraan}', [KendaraanController::class, 'destroy'])
                 ->name('destroy');
+            Route::post('{kendaraan}/usulkan-penghapusan', [KendaraanController::class, 'destroy'])
+                ->name('usulkan-penghapusan');
 
             // Penempatan awal kendaraan
             Route::post('{kendaraan}/penempatan-awal', [KendaraanController::class, 'penempatanAwal'])
