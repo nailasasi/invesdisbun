@@ -51,7 +51,7 @@
                 </a>
                 <div>
                     <div class="flex flex-wrap items-center gap-2">
-                        <h1 class="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">{{ $usulan->nama_barang }}</h1>
+                        <h1 class="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">{{ $usulan->nama_barang ?: '-' }}</h1>
                         <span class="rounded-lg bg-slate-100 px-2.5 py-0.5 font-mono text-xs font-semibold text-slate-600">#{{ $usulan->id_usulan }}</span>
                     </div>
                     <p class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500 sm:text-sm">
@@ -224,12 +224,12 @@
             </div>
             <div>
                 <span class="block text-[11px] font-semibold text-slate-400">Nama Barang</span>
-                <span class="mt-1 block text-sm font-bold text-slate-900">{{ $usulan->nama_barang }}</span>
+                <span class="mt-1 block text-sm font-bold text-slate-900">{{ $usulan->nama_barang ?: '-' }}</span>
             </div>
             <div>
                 <span class="block text-[11px] font-semibold text-slate-400">Jumlah Kebutuhan</span>
                 <span class="mt-1 block text-lg font-extrabold text-slate-900">
-                    {{ $usulan->jumlah }} <span class="text-xs font-semibold text-slate-500">{{ $usulan->satuan }}</span>
+                    {{ $usulan->jumlah ?? '-' }} @if ($usulan->satuan)<span class="text-xs font-semibold text-slate-500">{{ $usulan->satuan }}</span>@endif
                 </span>
             </div>
         </div>
@@ -244,7 +244,10 @@
                         <span class="text-[10px] text-slate-400">Standar Kebutuhan</span>
                     </div>
                     <p class="mt-1 text-2xl font-extrabold text-slate-800">
-                        {{ $usulan->kebutuhan_maksimum ?? 0 }} <span class="text-xs font-semibold text-slate-500">{{ $usulan->satuan }}</span>
+                        {{ $usulan->kebutuhan_maksimum !== null ? $usulan->kebutuhan_maksimum : '-' }}
+                        @if ($usulan->kebutuhan_maksimum !== null && $usulan->satuan)
+                            <span class="text-xs font-semibold text-slate-500">{{ $usulan->satuan }}</span>
+                        @endif
                     </p>
                     <p class="mt-1 text-[11px] text-slate-500">Batas maksimum kepemilikan BMD sesuai standar sarana &amp; prasarana.</p>
                 </div>
@@ -254,7 +257,10 @@
                         <span class="text-[10px] font-semibold text-emerald-600">Hasil Analisis</span>
                     </div>
                     <p class="mt-1 text-2xl font-extrabold text-emerald-700">
-                        {{ $usulan->kebutuhan_riil ?? 0 }} <span class="text-xs font-semibold text-emerald-600">{{ $usulan->satuan }}</span>
+                        {{ $usulan->kebutuhan_riil !== null ? $usulan->kebutuhan_riil : '-' }}
+                        @if ($usulan->kebutuhan_riil !== null && $usulan->satuan)
+                            <span class="text-xs font-semibold text-emerald-600">{{ $usulan->satuan }}</span>
+                        @endif
                     </p>
                     <p class="mt-1 text-[11px] text-emerald-700/80">Kebutuhan riil setelah dikurangi barang eksisting yang dapat dioptimalkan.</p>
                 </div>

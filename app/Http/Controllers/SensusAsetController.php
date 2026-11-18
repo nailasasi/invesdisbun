@@ -7,6 +7,7 @@ use App\Models\SensusAset;
 use App\Services\ActivityLogger;
 use App\Services\AsetScope;
 use App\Services\PeriodeSensus;
+use App\Services\UsulanPenghapusanService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -17,7 +18,7 @@ use Illuminate\Validation\ValidationException;
  * Aturan bisnis:
  * - Siklus 3 tahunan dari tahun dasar 2025.
  * - Nilai hasil sensus: Baik, Rusak Ringan, Rusak Berat.
- * - Rusak Berat tidak otomatis membuat usulan penghapusan.
+ * - Hasil sensus Rusak Berat otomatis membuat satu usulan penghapusan (status_aset = diusulkan_hapus).
  * - Satu catatan per aset per periode, tidak menimpa periode historis.
  * - Otorisasi AsetScope: Admin Aset penuh, Admin UPT dibatasi UPT-nya.
  */
@@ -30,8 +31,14 @@ class SensusAsetController extends Controller
     public function __construct(
         private readonly AsetScope $scope,
         ?ActivityLogger $logger = null,
+        private readonly ?UsulanPenghapusanService $usulanService = null,
     ) {
         $this->logger = $logger ?? app(ActivityLogger::class);
+    }
+
+    private function usulan(): UsulanPenghapusanService
+    {
+        return $this->usulanService ?? app(UsulanPenghapusanService::class);
     }
 
     /**
@@ -170,6 +177,14 @@ class SensusAsetController extends Controller
                 'kondisi' => $validated['hasil_sensus'],
             ]);
 
+            // Jika hasil sensus Rusak Berat, otomatis masukkan ke antrean Usulan Penghapusan (atomik dalam transaksi yang sama)
+            if ($validated['hasil_sensus'] === UsulanPenghapusanService::KONDISI_RUSAK_BERAT) {
+                $this->usulan()->usulkanKarenaRusakBerat(
+                    $aset,
+                    sprintf('Otomatis: hasil sensus Rusak Berat periode %s.', $periode)
+                );
+            }
+
             return $record;
         });
 
@@ -197,15 +212,19 @@ class SensusAsetController extends Controller
             ]);
         }
 
+        $pesan = $validated['hasil_sensus'] === UsulanPenghapusanService::KONDISI_RUSAK_BERAT
+            ? "Hasil sensus aset periode {$periode} berhasil disimpan sebagai Rusak Berat dan otomatis masuk ke antrean Usulan Penghapusan."
+            : "Hasil sensus aset periode {$periode} berhasil disimpan.";
+
         if ($request->input('redirect_to') === 'monitoring') {
             return redirect()
                 ->route('monitoring-aset.index', ['periode' => $periode])
-                ->with('success', "Hasil sensus aset periode {$periode} berhasil disimpan.");
+                ->with('success', $pesan);
         }
 
         return redirect()
             ->route('monitoring-aset.sensus.edit', ['aset' => $aset->id_aset, 'periode' => $periode])
-            ->with('success', "Hasil sensus aset periode {$periode} berhasil disimpan.");
+            ->with('success', $pesan);
     }
 
     /**

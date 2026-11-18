@@ -340,7 +340,6 @@ class MonitoringAsetMasaPakaiTest extends TestCase
         $this->buatAset($dasar + [
             'nomor_kartu_barang' => $kartuKritis1,
             'tanggal_habis_pakai' => '2026-11-11',
-            'status_aset' => null,
         ]);
         $this->buatAset($dasar + [
             'nomor_kartu_barang' => $kartuKritis30,

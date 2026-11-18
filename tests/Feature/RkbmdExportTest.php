@@ -6,24 +6,13 @@ use App\Models\MasterKegiatanRkbmd;
 use App\Models\Pegawai;
 use App\Models\Role;
 use App\Models\Skpd;
+use App\Models\TemplateDokumen;
 use App\Models\User;
 use App\Models\UsulanRkbmd;
 use Illuminate\Support\Facades\DB;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\TestCase;
 
-/**
- * Pengujian Fitur Export Excel RKBMD (31 Kolom, 1 Sheet Berjenjang Tanpa ID Usulan):
- *
- * 1. Tombol Export Excel hanya terlihat oleh Admin Aset dan Super Admin.
- * 2. Tombol Import Excel tidak tampil pada halaman (telah dihapus dari aksi RKBMD).
- * 3. Admin Bidang dan Admin UPT tidak melihat tombol dan ditolak HTTP 403 saat akses URL langsung.
- * 4. File Excel memiliki tepat 31 kolom (A sampai AE) dengan 2 baris header berjenjang dan tanpa kolom ID Usulan.
- * 5. Data usulan berstatus Draf tidak ikut diekspor.
- * 6. Kode Barang dan NIP diekspor utuh sebagai tipe teks/string.
- * 7. Catatan Pengurus Barang dan Alasan Penolakan dipisahkan sesuai status usulan.
- * 8. Filter Tahun Anggaran, Jenis Usulan, dan Unit Kerja berfungsi pada hasil ekspor.
- */
 class RkbmdExportTest extends TestCase
 {
     private const PASSWORD = 'password-testing-123';
@@ -89,9 +78,9 @@ class RkbmdExportTest extends TestCase
             'jenis_usulan' => 'Pengadaan',
             'id_kegiatan' => $kegiatan?->id_kegiatan,
             'bidang_urusan' => $kegiatan?->bidang_urusan,
-            'nama_program' => $kegiatan?->nama_program,
-            'nama_sub_kegiatan' => $kegiatan?->nama_sub_kegiatan,
-            'program_kegiatan' => $kegiatan ? "{$kegiatan->bidang_urusan} - {$kegiatan->nama_program} - {$kegiatan->nama_sub_kegiatan}" : 'Program Uji',
+            'nama_program' => $kegiatan?->nama_program ?: 'Program Perkebunan',
+            'nama_sub_kegiatan' => $kegiatan?->nama_sub_kegiatan ?: 'Sub Kegiatan Perkebunan',
+            'program_kegiatan' => 'Program Uji Perkebunan',
             'nama_barang' => 'Laptop Testing ' . uniqid(),
             'kode_barang' => '1.3.2.10.02.001',
             'spesifikasi' => 'Core i7, RAM 16GB, SSD 512GB',
@@ -111,298 +100,697 @@ class RkbmdExportTest extends TestCase
         ], $override));
     }
 
-    /**
-     * 1. Tombol Export Excel hanya terlihat oleh Admin Aset dan Super Admin.
-     */
-    public function test_visibilitas_tombol_export_excel_hanya_untuk_admin(): void
+    private function loadExportSheet($response)
     {
-        $superAdmin = $this->buatUser('Super Admin', null, 'super_export_view');
-        $adminAset = $this->buatUser('Admin Aset', null, 'admin_aset_export_view');
-        $skpdBidang = $this->buatSkpd('Bidang Perkebunan View Test', 'Bidang');
-        $adminBidang = $this->buatUser('Admin Bidang', $skpdBidang, 'bidang_export_view');
-        $skpdUpt = $this->buatSkpd('UPT Perkebunan View Test', 'UPT');
-        $adminUpt = $this->buatUser('Admin UPT', $skpdUpt, 'upt_export_view');
-
-        // Super Admin melihat tombol Export Excel dan TIDAK melihat Import Excel
-        $resSuper = $this->actingAs($superAdmin)->get(route('rkbmd.index'));
-        $resSuper->assertOk();
-        $resSuper->assertSee('Export Excel');
-        $resSuper->assertSee(route('rkbmd.export'), false);
-        $resSuper->assertDontSee('Import Excel');
-
-        // Admin Aset melihat tombol Export Excel dan TIDAK melihat Import Excel
-        $resAset = $this->actingAs($adminAset)->get(route('rkbmd.index'));
-        $resAset->assertOk();
-        $resAset->assertSee('Export Excel');
-        $resAset->assertDontSee('Import Excel');
-
-        // Admin Bidang TIDAK melihat tombol Export Excel maupun Import Excel
-        $resBidang = $this->actingAs($adminBidang)->get(route('rkbmd.index'));
-        $resBidang->assertOk();
-        $resBidang->assertDontSee('Export Excel');
-        $resBidang->assertDontSee('Import Excel');
-
-        // Admin UPT TIDAK melihat tombol Export Excel maupun Import Excel
-        $resUpt = $this->actingAs($adminUpt)->get(route('rkbmd.index'));
-        $resUpt->assertOk();
-        $resUpt->assertDontSee('Export Excel');
-        $resUpt->assertDontSee('Import Excel');
-    }
-
-    /**
-     * 2. Admin Bidang dan Admin UPT ditolak HTTP 403 saat akses URL ekspor secara langsung.
-     */
-    public function test_admin_bidang_dan_upt_ditolak_403_saat_akses_url_export(): void
-    {
-        $skpdBidang = $this->buatSkpd('Bidang Direct Test', 'Bidang');
-        $adminBidang = $this->buatUser('Admin Bidang', $skpdBidang, 'bidang_direct_export');
-        $skpdUpt = $this->buatSkpd('UPT Direct Test', 'UPT');
-        $adminUpt = $this->buatUser('Admin UPT', $skpdUpt, 'upt_direct_export');
-
-        // Direct GET oleh Admin Bidang -> 403
-        $resBidang = $this->actingAs($adminBidang)->get(route('rkbmd.export'));
-        $resBidang->assertForbidden();
-
-        // Direct GET oleh Admin UPT -> 403
-        $resUpt = $this->actingAs($adminUpt)->get(route('rkbmd.export'));
-        $resUpt->assertForbidden();
-    }
-
-    /**
-     * 3. Struktur workbook memiliki tepat 31 kolom tanpa kolom ID Usulan.
-     */
-    public function test_struktur_workbook_memiliki_tepat_31_kolom_tanpa_id_usulan(): void
-    {
-        $superAdmin = $this->buatUser('Super Admin', null, 'super_structure_test');
-        $skpd = $this->buatSkpd('Bidang Struktur 31 Kolom', 'Bidang');
-        $pengusul = $this->buatUser('Admin Bidang', $skpd, 'pengusul_struktur_31');
-
-        $usulan = $this->buatUsulan($skpd, $pengusul, [
-            'nama_barang' => 'Drone Pertanian Precision 31',
-            'kode_barang' => '1.3.2.10.02.001',
-            'spesifikasi' => 'Kamera Multispektral 4K, Baterai 5000mAh',
-            'jumlah' => 3,
-            'kebutuhan_maksimum' => 5,
-            'kebutuhan_riil' => 3,
-            'status_usulan' => 'Diajukan',
-        ]);
-
-        $response = $this->actingAs($superAdmin)->get(route('rkbmd.export', ['bidang' => [$skpd->id_skpd]]));
-        $response->assertSuccessful();
-
-        $tmp = tempnam(sys_get_temp_dir(), 'rkbmd31_');
+        $tmp = tempnam(sys_get_temp_dir(), 'rkbmd_test_');
         file_put_contents($tmp, $response->streamedContent());
         $sheet = IOFactory::load($tmp)->getActiveSheet();
         @unlink($tmp);
 
-        $data = $sheet->toArray(null, true, true, true);
-
-        // Baris 1: Header Kategori
-        $this->assertSame('A. IDENTITAS USULAN', $data[1]['A']);
-        $this->assertSame('B. PROGRAM & KEGIATAN RKBMD', $data[1]['I']);
-        $this->assertSame('C. RINCIAN BARANG YANG DIUSULKAN', $data[1]['M']);
-        $this->assertSame('D. ANALISIS KEBUTUHAN', $data[1]['R']);
-        $this->assertSame('E. BARANG YANG DAPAT DIOPTIMALKAN', $data[1]['U']);
-        $this->assertSame('F. KETERANGAN & VERIFIKASI', $data[1]['AA']);
-
-        // Baris 2: Sub-Header Kolom Spesifik (Harus tepat 31 kolom dan tanpa kolom ID Usulan)
-        $this->assertCount(31, $data[2]);
-        $this->assertNotContains('ID Usulan', $data[2]);
-        $this->assertSame('No', $data[2]['A']);
-        $this->assertSame('Bidang / Unit Kerja', $data[2]['B']);
-        $this->assertSame('Nama Pengusul', $data[2]['C']);
-        $this->assertSame('NIP Pengusul', $data[2]['D']);
-        $this->assertSame('Tahun Anggaran', $data[2]['E']);
-        $this->assertSame('Jenis Usulan', $data[2]['F']);
-        $this->assertSame('Tanggal Pengajuan', $data[2]['G']);
-        $this->assertSame('Status Usulan', $data[2]['H']);
-        $this->assertSame('Bidang Urusan', $data[2]['I']);
-        $this->assertSame('Nama Program', $data[2]['J']);
-        $this->assertSame('Nama Sub Kegiatan', $data[2]['K']);
-        $this->assertSame('Program / Kegiatan Gabungan', $data[2]['L']);
-        $this->assertSame('Kode Barang', $data[2]['M']);
-        $this->assertSame('Nama Barang', $data[2]['N']);
-        $this->assertSame('Spesifikasi Teknis', $data[2]['O']);
-        $this->assertSame('Jumlah Usulan', $data[2]['P']);
-        $this->assertSame('Satuan Usulan', $data[2]['Q']);
-        $this->assertSame('Kebutuhan Maksimum', $data[2]['R']);
-        $this->assertSame('Kebutuhan Riil', $data[2]['S']);
-        $this->assertSame('Satuan Kebutuhan', $data[2]['T']);
-        $this->assertSame('Status Optimalisasi', $data[2]['U']);
-        $this->assertSame('Kode Barang Lama', $data[2]['V']);
-        $this->assertSame('Nama Barang Lama', $data[2]['W']);
-        $this->assertSame('Jumlah Optimalisasi', $data[2]['X']);
-        $this->assertSame('Satuan Optimalisasi', $data[2]['Y']);
-        $this->assertSame('Keterangan Optimalisasi', $data[2]['Z']);
-        $this->assertSame('Alasan Kebutuhan', $data[2]['AA']);
-        $this->assertSame('Catatan Pengurus Barang', $data[2]['AB']);
-        $this->assertSame('Alasan Penolakan', $data[2]['AC']);
-        $this->assertSame('Petugas Verifikasi', $data[2]['AD']);
-        $this->assertSame('Waktu Verifikasi', $data[2]['AE']);
-
-        // Baris 3: Data Usulan
-        $row = $data[3];
-        $this->assertEquals(1, $row['A']);
-        $this->assertSame($skpd->nama_skpd, $row['B']);
-        $this->assertSame($pengusul->pegawai->nama_pegawai, $row['C']);
-        $this->assertSame($pengusul->pegawai->nip, $row['D']);
-        $this->assertSame('Diajukan', $row['H']);
-        $this->assertSame('1.3.2.10.02.001', $row['M']);
-        $this->assertSame('Drone Pertanian Precision 31', $row['N']);
-        $this->assertSame('Kamera Multispektral 4K, Baterai 5000mAh', $row['O']);
-        $this->assertSame('Ada Optimalisasi', $row['U']);
-        $this->assertSame('1.3.2.10.02.999', $row['V']);
-        $this->assertSame('Laptop Lama', $row['W']);
+        return $sheet;
     }
 
     /**
-     * 4. Usulan berstatus Draf tidak ikut diekspor oleh Super Admin / Admin Aset.
+     * 1. Tombol Ekspor Data dan modal pilihan 5 jenis usulan tampil untuk Admin Aset, Admin Bidang, dan Admin UPT.
      */
-    public function test_usulan_berstatus_draf_tidak_ikut_diekspor(): void
+    public function test_visibilitas_tombol_ekspor_data_dan_modal_pilihan_5_jenis(): void
     {
-        $skpd = $this->buatSkpd('Bidang Draft Filter Export', 'Bidang');
-        $adminAset = $this->buatUser('Admin Aset', $skpd, 'admin_aset_draft_export');
-        $pengusul = $this->buatUser('Admin Bidang', $skpd, 'pengusul_draft_export');
+        $adminAset = $this->buatUser('Admin Aset', null, 'aset_exp_vis');
+        $skpdBidang = $this->buatSkpd('Bidang Produksi Tanaman Perkebunan', 'Bidang');
+        $adminBidang = $this->buatUser('Admin Bidang', $skpdBidang, 'bidang_exp_vis');
+        $skpdUpt = $this->buatSkpd('UPT Proteksi Tanaman', 'UPT');
+        $adminUpt = $this->buatUser('Admin UPT', $skpdUpt, 'upt_exp_vis');
 
-        $usulanDraftBidang = $this->buatUsulan($skpd, $pengusul, [
-            'nama_barang' => 'Barang Rahasia Draft Exclude ' . uniqid(),
-            'status_usulan' => 'Draft',
-        ]);
-
-        $usulanDraftAdminSendiri = $this->buatUsulan($skpd, $adminAset, [
-            'nama_barang' => 'Draf Admin Aset Sendiri Exclude ' . uniqid(),
-            'status_usulan' => 'Draft',
-        ]);
-
-        $usulanDiajukan = $this->buatUsulan($skpd, $pengusul, [
-            'nama_barang' => 'Barang Resmi Diajukan Include ' . uniqid(),
-            'status_usulan' => 'Diajukan',
-        ]);
-
-        // Ekspor oleh Admin Aset yang memiliki draf sendiri
-        $response = $this->actingAs($adminAset)->get(route('rkbmd.export', ['bidang' => [$skpd->id_skpd]]));
-        $response->assertSuccessful();
-
-        $tmp = tempnam(sys_get_temp_dir(), 'rkbmd_draft_');
-        file_put_contents($tmp, $response->streamedContent());
-        $sheet = IOFactory::load($tmp)->getActiveSheet();
-        @unlink($tmp);
-
-        $data = $sheet->toArray(null, true, true, true);
-        $namaBarangList = array_map(fn ($r) => (string) ($r['N'] ?? ''), $data);
-
-        // Memastikan barang resmi ada dan barang draf (baik milik orang lain maupun milik admin sendiri) TIDAK ada
-        $this->assertContains($usulanDiajukan->nama_barang, $namaBarangList);
-        $this->assertNotContains($usulanDraftBidang->nama_barang, $namaBarangList);
-        $this->assertNotContains($usulanDraftAdminSendiri->nama_barang, $namaBarangList);
-    }
-
-    /**
-     * 5. Catatan Pengurus Barang dan Alasan Penolakan dipisahkan sesuai status.
-     */
-    public function test_catatan_pengurus_dan_alasan_penolakan_dipisahkan_sesuai_status(): void
-    {
-        $superAdmin = $this->buatUser('Super Admin', null, 'super_notes_test');
-        $skpd = $this->buatSkpd('Bidang Notes Separation', 'Bidang');
-
-        // Usulan Ditolak: kolom Catatan Pengurus Barang = '-', kolom Alasan Penolakan = alasan dari pengurus
-        $usulanDitolak = $this->buatUsulan($skpd, null, [
-            'nama_barang' => 'Barang Ditolak Alasan ' . uniqid(),
-            'status_usulan' => 'Ditolak',
-            'catatan_pengurus' => 'Spesifikasi teknis belum memenuhi standar SNI.',
-        ]);
-
-        // Usulan Diterima: kolom Catatan Pengurus Barang = catatan, kolom Alasan Penolakan = '-'
-        $usulanDiterima = $this->buatUsulan($skpd, null, [
-            'nama_barang' => 'Barang Diterima Catatan ' . uniqid(),
-            'status_usulan' => 'Disetujui Pengurus Barang',
-            'catatan_pengurus' => 'Disetujui untuk prioritas pengadaan APBD 2027.',
-        ]);
-
-        $response = $this->actingAs($superAdmin)->get(route('rkbmd.export', ['bidang' => [$skpd->id_skpd]]));
-        $response->assertSuccessful();
-
-        $tmp = tempnam(sys_get_temp_dir(), 'rkbmd_notes_');
-        file_put_contents($tmp, $response->streamedContent());
-        $sheet = IOFactory::load($tmp)->getActiveSheet();
-        @unlink($tmp);
-
-        $data = $sheet->toArray(null, true, true, true);
-
-        // Cari baris usulan ditolak
-        $rowDitolak = null;
-        $rowDiterima = null;
-        foreach ($data as $r) {
-            if (($r['N'] ?? '') === $usulanDitolak->nama_barang) {
-                $rowDitolak = $r;
-            }
-            if (($r['N'] ?? '') === $usulanDiterima->nama_barang) {
-                $rowDiterima = $r;
-            }
+        foreach ([$adminAset, $adminBidang, $adminUpt] as $user) {
+            $res = $this->actingAs($user)->get(route('rkbmd.index'));
+            $res->assertOk();
+            $res->assertSee('Ekspor Data');
+            $res->assertSee('modalExportRkbmd');
+            $res->assertSee('PILIH JENIS USULAN RKBMD');
+            $res->assertSee('Usulan RKBMD Pengadaan');
+            $res->assertSee('Usulan RKBMD Pemeliharaan');
+            $res->assertSee('Usulan RKBMD Penghapusan');
+            $res->assertSee('Usulan RKBMD Pemindahtanganan');
+            $res->assertSee('Usulan RKBMD Pemanfaatan');
         }
-
-        $this->assertNotNull($rowDitolak);
-        $this->assertSame('-', $rowDitolak['AB'], 'Catatan Pengurus untuk usulan ditolak harus tanda strip.');
-        $this->assertSame('Spesifikasi teknis belum memenuhi standar SNI.', $rowDitolak['AC']);
-
-        $this->assertNotNull($rowDiterima);
-        $this->assertSame('Disetujui untuk prioritas pengadaan APBD 2027.', $rowDiterima['AB']);
-        $this->assertSame('-', $rowDiterima['AC'], 'Alasan penolakan untuk usulan diterima harus tanda strip.');
     }
 
     /**
-     * 6. Filter Tahun Anggaran, Jenis Usulan, dan Unit Kerja berfungsi pada ekspor.
+     * 2. Pegawai biasa atau tamu ditolak saat mengakses endpoint ekspor (403 / redirect).
      */
-    public function test_filter_tahun_jenis_dan_unit_kerja_berfungsi_pada_ekspor(): void
+    public function test_pegawai_biasa_dan_tamu_ditolak_akses_ekspor(): void
     {
-        $superAdmin = $this->buatUser('Super Admin', null, 'super_filter_test');
-        $skpd1 = $this->buatSkpd('Bidang Filter 1 ' . uniqid(), 'Bidang');
-        $skpd2 = $this->buatSkpd('Bidang Filter 2 ' . uniqid(), 'Bidang');
+        $skpd = $this->buatSkpd('Sekretariat Pegawai', 'Bidang');
+        $pegawai = $this->buatUser('Pegawai', $skpd, 'pegawai_exp_block');
 
-        $u1 = $this->buatUsulan($skpd1, null, [
-            'nama_barang' => 'Barang Target Filter ' . uniqid(),
-            'tahun_anggaran' => 2027,
-            'jenis_usulan' => 'Pengadaan',
-        ]);
+        // Pegawai biasa ditolak 403
+        $this->actingAs($pegawai)->get(route('rkbmd.export'))->assertForbidden();
 
-        $u2 = $this->buatUsulan($skpd2, null, [
-            'nama_barang' => 'Barang Luar Filter ' . uniqid(),
-            'tahun_anggaran' => 2028,
-            'jenis_usulan' => 'Pemeliharaan',
-        ]);
+        // Tamu unauthenticated diarahkan ke login
+        auth()->logout();
+        $this->get(route('rkbmd.export'))->assertRedirect('/login');
+    }
 
-        // Ekspor dengan filter tahun=2027, jenis=Pengadaan, bidang=[$skpd1->id_skpd]
-        $response = $this->actingAs($superAdmin)->get(route('rkbmd.export', [
-            'tahun' => 2027,
-            'jenis' => 'Pengadaan',
-            'bidang' => [$skpd1->id_skpd],
+    /**
+     * 3. Admin Aset dapat mengekspor seluruh data usulan lintas SKPD (Bidang & UPT).
+     */
+    public function test_admin_aset_bisa_ekspor_seluruh_bidang_dan_upt(): void
+    {
+        $adminAset = $this->buatUser('Admin Aset', null, 'aset_exp_all');
+        $skpd1 = $this->buatSkpd('Bidang Satu Exp', 'Bidang');
+        $skpd2 = $this->buatSkpd('UPT Dua Exp', 'UPT');
+
+        $u1 = $this->buatUsulan($skpd1, null, ['nama_barang' => 'Barang Bidang Satu ' . uniqid(), 'status_usulan' => 'Diajukan']);
+        $u2 = $this->buatUsulan($skpd2, null, ['nama_barang' => 'Barang UPT Dua ' . uniqid(), 'status_usulan' => 'Disetujui Pengurus Barang']);
+
+        $response = $this->actingAs($adminAset)->get(route('rkbmd.export', ['jenis' => 'pengadaan']));
+        $response->assertSuccessful();
+
+        $sheet = $this->loadExportSheet($response);
+        $data = $sheet->toArray(null, true, true, true);
+        $namaBarangList = array_map(fn ($r) => (string) ($r['D'] ?? ''), $data);
+
+        $this->assertContains($u1->nama_barang, $namaBarangList);
+        $this->assertContains($u2->nama_barang, $namaBarangList);
+    }
+
+    /**
+     * 4. Admin Bidang hanya dapat mengekspor data usulan milik SKPD-nya sendiri.
+     */
+    public function test_admin_bidang_hanya_mengekspor_data_skpd_sendiri(): void
+    {
+        $skpdBidang = $this->buatSkpd('Bidang Perlindungan Khusus', 'Bidang');
+        $skpdLain = $this->buatSkpd('Bidang Lain Terpisah', 'Bidang');
+        $adminBidang = $this->buatUser('Admin Bidang', $skpdBidang, 'bidang_exp_own');
+
+        $uOwn = $this->buatUsulan($skpdBidang, $adminBidang, ['nama_barang' => 'Barang Milik Sendiri ' . uniqid()]);
+        $uOther = $this->buatUsulan($skpdLain, null, ['nama_barang' => 'Barang Unit Lain ' . uniqid()]);
+
+        $response = $this->actingAs($adminBidang)->get(route('rkbmd.export', ['jenis' => 'pengadaan']));
+        $response->assertSuccessful();
+
+        $sheet = $this->loadExportSheet($response);
+        $data = $sheet->toArray(null, true, true, true);
+        $namaBarangList = array_map(fn ($r) => (string) ($r['D'] ?? ''), $data);
+
+        $this->assertContains($uOwn->nama_barang, $namaBarangList);
+        $this->assertNotContains($uOther->nama_barang, $namaBarangList);
+    }
+
+    /**
+     * 5. Manipulasi parameter query ?bidang=... oleh Admin Bidang tetap terkunci pada SKPD miliknya.
+     */
+    public function test_admin_bidang_manipulasi_parameter_bidang_tetap_terkunci_ke_skpd_sendiri(): void
+    {
+        $skpdBidang = $this->buatSkpd('Bidang Kunci Scope', 'Bidang');
+        $skpdTargetHacker = $this->buatSkpd('Bidang Target Peretasan', 'Bidang');
+        $adminBidang = $this->buatUser('Admin Bidang', $skpdBidang, 'bidang_hacker_exp');
+
+        $uOwn = $this->buatUsulan($skpdBidang, $adminBidang, ['nama_barang' => 'Barang Resmi Saya ' . uniqid()]);
+        $uTarget = $this->buatUsulan($skpdTargetHacker, null, ['nama_barang' => 'Barang Target Rahasia ' . uniqid()]);
+
+        // Manipulasi query bidang ke SKPD unit lain
+        $response = $this->actingAs($adminBidang)->get(route('rkbmd.export', [
+            'jenis' => 'pengadaan',
+            'bidang' => [$skpdTargetHacker->id_skpd],
         ]));
         $response->assertSuccessful();
 
-        $tmp = tempnam(sys_get_temp_dir(), 'rkbmd_filter_');
-        file_put_contents($tmp, $response->streamedContent());
-        $sheet = IOFactory::load($tmp)->getActiveSheet();
-        @unlink($tmp);
-
+        $sheet = $this->loadExportSheet($response);
         $data = $sheet->toArray(null, true, true, true);
-        $namaBarangList = array_map(fn ($r) => (string) ($r['N'] ?? ''), $data);
+        $namaBarangList = array_map(fn ($r) => (string) ($r['D'] ?? ''), $data);
 
-        $this->assertContains($u1->nama_barang, $namaBarangList);
-        $this->assertNotContains($u2->nama_barang, $namaBarangList);
+        $this->assertContains($uOwn->nama_barang, $namaBarangList);
+        $this->assertNotContains($uTarget->nama_barang, $namaBarangList);
     }
 
     /**
-     * 7. Endpoint Import Excel dan Download Template usulan telah dihapus total (HTTP 404).
+     * 6. Admin UPT hanya mengekspor data usulannya dan manipulasi parameter bidang tetap terkunci.
      */
-    public function test_route_dan_endpoint_import_serta_template_telah_dihapus(): void
+    public function test_admin_upt_hanya_mengekspor_data_uptnya_dan_manipulasi_bidang_terkunci(): void
     {
-        $this->assertFalse(\Illuminate\Support\Facades\Route::has('rkbmd.import'));
-        $this->assertFalse(\Illuminate\Support\Facades\Route::has('rkbmd.template'));
+        $skpdUpt = $this->buatSkpd('UPT Benih Tanaman', 'UPT');
+        $skpdLain = $this->buatSkpd('UPT Lainnya', 'UPT');
+        $adminUpt = $this->buatUser('Admin UPT', $skpdUpt, 'upt_scope_lock');
 
-        $adminAset = $this->buatUser('Admin Aset', $this->buatSkpd('Aset Test No Import', 'Bidang'), 'admin_aset_no_import');
+        $uOwn = $this->buatUsulan($skpdUpt, $adminUpt, ['nama_barang' => 'Barang UPT Resmi ' . uniqid()]);
+        $uOther = $this->buatUsulan($skpdLain, null, ['nama_barang' => 'Barang UPT Lain ' . uniqid()]);
 
-        $this->actingAs($adminAset)->post('/rkbmd/import')->assertNotFound();
-        $this->actingAs($adminAset)->get('/rkbmd/template-usulan')->assertNotFound();
+        $response = $this->actingAs($adminUpt)->get(route('rkbmd.export', [
+            'jenis' => 'pengadaan',
+            'bidang' => [$skpdLain->id_skpd],
+        ]));
+        $response->assertSuccessful();
+
+        $sheet = $this->loadExportSheet($response);
+        $data = $sheet->toArray(null, true, true, true);
+        $namaBarangList = array_map(fn ($r) => (string) ($r['D'] ?? ''), $data);
+
+        $this->assertContains($uOwn->nama_barang, $namaBarangList);
+        $this->assertNotContains($uOther->nama_barang, $namaBarangList);
+    }
+
+    /**
+     * 7. Usulan berstatus Draft tidak pernah ikut diekspor.
+     */
+    public function test_usulan_berstatus_draft_tidak_pernah_ikut_diekspor(): void
+    {
+        $adminAset = $this->buatUser('Admin Aset', null, 'aset_no_draft');
+        $skpd = $this->buatSkpd('Bidang Draft Guard', 'Bidang');
+
+        $uDraft = $this->buatUsulan($skpd, null, ['nama_barang' => 'Barang Draft Disembunyikan ' . uniqid(), 'status_usulan' => 'Draft']);
+        $uDiajukan = $this->buatUsulan($skpd, null, ['nama_barang' => 'Barang Diajukan Diekspor ' . uniqid(), 'status_usulan' => 'Diajukan']);
+        $uDiterima = $this->buatUsulan($skpd, null, ['nama_barang' => 'Barang Diterima Diekspor ' . uniqid(), 'status_usulan' => 'Disetujui Pengurus Barang']);
+        $uDitolak = $this->buatUsulan($skpd, null, ['nama_barang' => 'Barang Ditolak Diekspor ' . uniqid(), 'status_usulan' => 'Ditolak']);
+
+        $response = $this->actingAs($adminAset)->get(route('rkbmd.export', ['jenis' => 'pengadaan']));
+        $response->assertSuccessful();
+
+        $sheet = $this->loadExportSheet($response);
+        $data = $sheet->toArray(null, true, true, true);
+        $namaBarangList = array_map(fn ($r) => (string) ($r['D'] ?? ''), $data);
+
+        $this->assertNotContains($uDraft->nama_barang, $namaBarangList);
+        $this->assertContains($uDiajukan->nama_barang, $namaBarangList);
+        $this->assertContains($uDiterima->nama_barang, $namaBarangList);
+        $this->assertContains($uDitolak->nama_barang, $namaBarangList);
+    }
+
+    /**
+     * 8. Filter Tahun Anggaran dan Status Usulan diterapkan dengan tepat.
+     */
+    public function test_filter_tahun_dan_status_usulan_diterapkan_dengan_tepat(): void
+    {
+        $adminAset = $this->buatUser('Admin Aset', null, 'aset_filter_ts');
+        $skpd = $this->buatSkpd('Bidang Tahun Status', 'Bidang');
+
+        $u2027Disetujui = $this->buatUsulan($skpd, null, [
+            'nama_barang' => 'Barang 2027 Disetujui ' . uniqid(),
+            'tahun_anggaran' => 2027,
+            'status_usulan' => 'Disetujui Pengurus Barang',
+        ]);
+        $u2027Diajukan = $this->buatUsulan($skpd, null, [
+            'nama_barang' => 'Barang 2027 Diajukan ' . uniqid(),
+            'tahun_anggaran' => 2027,
+            'status_usulan' => 'Diajukan',
+        ]);
+        $u2028Disetujui = $this->buatUsulan($skpd, null, [
+            'nama_barang' => 'Barang 2028 Disetujui ' . uniqid(),
+            'tahun_anggaran' => 2028,
+            'status_usulan' => 'Disetujui Pengurus Barang',
+        ]);
+
+        $response = $this->actingAs($adminAset)->get(route('rkbmd.export', [
+            'jenis' => 'pengadaan',
+            'tahun' => 2027,
+            'status' => 'disetujui',
+        ]));
+        $response->assertSuccessful();
+
+        $sheet = $this->loadExportSheet($response);
+        $data = $sheet->toArray(null, true, true, true);
+        $namaBarangList = array_map(fn ($r) => (string) ($r['D'] ?? ''), $data);
+
+        $this->assertContains($u2027Disetujui->nama_barang, $namaBarangList);
+        $this->assertNotContains($u2027Diajukan->nama_barang, $namaBarangList);
+        $this->assertNotContains($u2028Disetujui->nama_barang, $namaBarangList);
+    }
+
+    /**
+     * 9. Seluruh 5 template resmi dapat diekspor dan menghasilkan nama file standar.
+     */
+    public function test_seluruh_5_template_resmi_dapat_diekspor_dan_nama_file_standar(): void
+    {
+        $adminAset = $this->buatUser('Admin Aset', null, 'aset_5_tpl');
+        $skpd = $this->buatSkpd('Bidang 5 Template', 'Bidang');
+
+        $jenisMap = [
+            'pengadaan' => 'Pengadaan',
+            'pemeliharaan' => 'Pemeliharaan',
+            'penghapusan' => 'Penghapusan',
+            'pemindahtanganan' => 'Pemindahtanganan',
+            'pemanfaatan' => 'Pemanfaatan',
+        ];
+
+        foreach ($jenisMap as $jenisKey => $label) {
+            $u = $this->buatUsulan($skpd, null, [
+                'nama_barang' => "Barang {$label} " . uniqid(),
+                'jenis_usulan' => $label,
+                'tahun_anggaran' => 2027,
+            ]);
+
+            $response = $this->actingAs($adminAset)->get(route('rkbmd.export', [
+                'jenis' => $jenisKey,
+                'tahun' => 2027,
+            ]));
+
+            $response->assertSuccessful();
+            $contentDisposition = $response->headers->get('content-disposition');
+            $this->assertStringContainsString("Ekspor_RKBMD_{$label}_2027.xlsx", $contentDisposition);
+        }
+    }
+
+    /**
+     * 10. Header Pengguna Barang diformat dinamis sesuai peran pengguna.
+     */
+    public function test_header_pengguna_barang_sesuai_peran(): void
+    {
+        $adminAset = $this->buatUser('Admin Aset', null, 'aset_header_chk');
+        $skpdBidang = $this->buatSkpd('Bidang Perlindungan Perkebunan', 'Bidang');
+        $adminBidang = $this->buatUser('Admin Bidang', $skpdBidang, 'bidang_header_chk');
+        $skpdUpt = $this->buatSkpd('UPT Pengawasan Benih', 'UPT');
+        $adminUpt = $this->buatUser('Admin UPT', $skpdUpt, 'upt_header_chk');
+
+        // Admin Aset tanpa filter -> PENGGUNA BARANG SEMUA BIDANG DAN UPT
+        $resAset = $this->actingAs($adminAset)->get(route('rkbmd.export', ['jenis' => 'pengadaan', 'tahun' => 2027]));
+        $sheetAset = $this->loadExportSheet($resAset);
+        $this->assertSame('PENGGUNA BARANG SEMUA BIDANG DAN UPT', $sheetAset->getCell('A3')->getValue());
+
+        // Admin Bidang -> PENGGUNA BARANG BIDANG PERLINDUNGAN PERKEBUNAN
+        $this->buatUsulan($skpdBidang, $adminBidang, ['jenis_usulan' => 'Pengadaan', 'tahun_anggaran' => 2027]);
+        $resBidang = $this->actingAs($adminBidang)->get(route('rkbmd.export', ['jenis' => 'pengadaan', 'tahun' => 2027]));
+        $sheetBidang = $this->loadExportSheet($resBidang);
+        $this->assertSame('PENGGUNA BARANG BIDANG PERLINDUNGAN PERKEBUNAN', $sheetBidang->getCell('A3')->getValue());
+
+        // Admin UPT -> PENGGUNA BARANG UPT PENGAWASAN BENIH
+        $this->buatUsulan($skpdUpt, $adminUpt, ['jenis_usulan' => 'Pengadaan', 'tahun_anggaran' => 2027]);
+        $resUpt = $this->actingAs($adminUpt)->get(route('rkbmd.export', ['jenis' => 'pengadaan', 'tahun' => 2027]));
+        $sheetUpt = $this->loadExportSheet($resUpt);
+        $this->assertSame('PENGGUNA BARANG UPT PENGAWASAN BENIH', $sheetUpt->getCell('A3')->getValue());
+    }
+
+    /**
+     * 11. Format Kuasa Pengguna Barang/Program/Kegiatan/Output: "Nama Program | Nama Sub Kegiatan".
+     */
+    public function test_format_kuasa_pengguna_barang_program_sub_kegiatan(): void
+    {
+        $adminAset = $this->buatUser('Admin Aset', null, 'aset_prog_sub');
+        $skpd = $this->buatSkpd('Bidang Program Check', 'Bidang');
+
+        $this->buatUsulan($skpd, null, [
+            'nama_barang' => 'Mesin Olah Kopi ' . uniqid(),
+            'nama_program' => 'PROGRAM PENGEMBANGAN TEKNOLOGI',
+            'nama_sub_kegiatan' => 'Pemberdayaan Petani Kopi',
+            'jenis_usulan' => 'Pengadaan',
+        ]);
+
+        $response = $this->actingAs($adminAset)->get(route('rkbmd.export', [
+            'jenis' => 'pengadaan',
+            'bidang' => [$skpd->id_skpd],
+        ]));
+        $sheet = $this->loadExportSheet($response);
+
+        $this->assertSame('PROGRAM PENGEMBANGAN TEKNOLOGI | Pemberdayaan Petani Kopi', $sheet->getCell('B11')->getValue());
+    }
+
+    /**
+     * 12. Tanda tangan Kepala Dinas Perkebunan Provinsi Jawa Timur tetap utuh pada hasil ekspor.
+     */
+    public function test_penandatangan_kepala_dinas_perkebunan_tetap_utuh(): void
+    {
+        $adminAset = $this->buatUser('Admin Aset', null, 'aset_ttd_chk');
+        $skpd = $this->buatSkpd('Bidang TTD Check', 'Bidang');
+
+        $this->buatUsulan($skpd, null, ['jenis_usulan' => 'Pengadaan']);
+
+        $response = $this->actingAs($adminAset)->get(route('rkbmd.export', [
+            'jenis' => 'pengadaan',
+            'bidang' => [$skpd->id_skpd],
+        ]));
+        $sheet = $this->loadExportSheet($response);
+
+        $foundKadis = false;
+        $foundSuseno = false;
+        $foundNip = false;
+
+        $maxR = $sheet->getHighestRow();
+        for ($r = 20; $r <= $maxR; $r++) {
+            $val = (string) $sheet->getCell("M{$r}")->getValue();
+            if (stripos($val, 'Kepala Dinas Perkebunan') !== false) {
+                $foundKadis = true;
+            }
+            if (stripos($val, 'Dr. Ir. Heru Suseno, M.T.') !== false) {
+                $foundSuseno = true;
+            }
+            if (stripos($val, '196805301995031003') !== false) {
+                $foundNip = true;
+            }
+        }
+
+        $this->assertTrue($foundKadis, 'Jabatan Kepala Dinas Perkebunan harus ditemukan.');
+        $this->assertTrue($foundSuseno, 'Nama Dr. Ir. Heru Suseno, M.T. harus ditemukan.');
+        $this->assertTrue($foundNip, 'NIP 196805301995031003 harus ditemukan.');
+    }
+
+    /**
+     * 13. Data yang bernilai null menggunakan string 'NIHIL', bukan '-' atau '0'.
+     */
+    public function test_data_null_menggunakan_string_nihil(): void
+    {
+        $adminAset = $this->buatUser('Admin Aset', null, 'aset_nihil_chk');
+        $skpd = $this->buatSkpd('Bidang Nihil Check', 'Bidang');
+
+        $this->buatUsulan($skpd, null, [
+            'nama_barang' => 'Barang Serba Null ' . uniqid(),
+            'kode_barang' => null,
+            'kebutuhan_maksimum' => null,
+            'kebutuhan_riil' => null,
+            'barang_optimalisasi' => null,
+            'alasan_kebutuhan' => null,
+            'jenis_usulan' => 'Pengadaan',
+        ]);
+
+        $response = $this->actingAs($adminAset)->get(route('rkbmd.export', [
+            'jenis' => 'pengadaan',
+            'bidang' => [$skpd->id_skpd],
+        ]));
+        $sheet = $this->loadExportSheet($response);
+
+        // Baris data 11
+        $this->assertSame('NIHIL', $sheet->getCell('C11')->getValue(), 'Kode barang null harus NIHIL');
+        $this->assertSame('NIHIL', $sheet->getCell('G11')->getValue(), 'Kebutuhan maksimum null harus NIHIL');
+        $this->assertSame('NIHIL', $sheet->getCell('H11')->getValue(), 'Satuan kebutuhan maksimum null harus NIHIL');
+        $this->assertSame('NIHIL', $sheet->getCell('I11')->getValue(), 'Optimalisasi kode null harus NIHIL');
+        $this->assertSame('NIHIL', $sheet->getCell('M11')->getValue(), 'Kebutuhan riil null harus NIHIL');
+        $this->assertSame('NIHIL', $sheet->getCell('O11')->getValue(), 'Keterangan null harus NIHIL');
+    }
+
+    /**
+     * 14. Template Pemeliharaan: kolom G sampai N dibiarkan KOSONG (""), bukan NIHIL.
+     */
+    public function test_pemeliharaan_kolom_g_sampai_n_dibiarkan_kosong(): void
+    {
+        $adminAset = $this->buatUser('Admin Aset', null, 'aset_pemel_empty');
+        $skpd = $this->buatSkpd('Bidang Pemeliharaan Empty', 'Bidang');
+
+        $u = $this->buatUsulan($skpd, null, [
+            'nama_barang' => 'Traktor Roda Empat ' . uniqid(),
+            'jenis_usulan' => 'Pemeliharaan',
+            'jumlah' => 1,
+            'satuan' => 'Unit',
+        ]);
+
+        $response = $this->actingAs($adminAset)->get(route('rkbmd.export', [
+            'jenis' => 'pemeliharaan',
+            'bidang' => [$skpd->id_skpd],
+        ]));
+        $sheet = $this->loadExportSheet($response);
+
+        // Baris data 12: Kolom A-F terisi data, kolom G-N kosong
+        $this->assertSame(1, (int) $sheet->getCell('A12')->getValue());
+        $this->assertSame($u->nama_barang, $sheet->getCell('D12')->getValue());
+
+        foreach (range('G', 'N') as $col) {
+            $val = $sheet->getCell("{$col}12")->getValue();
+            $this->assertTrue($val === '' || $val === null, "Kolom {$col}12 pada template pemeliharaan harus kosong string.");
+        }
+    }
+
+    /**
+     * 15. Template Penghapusan: NIBAR dan Nilai Perolehan adalah NIHIL, baris TOTAL tetap ada.
+     */
+    public function test_penghapusan_nibar_nilai_perolehan_nihil_dan_total_ada(): void
+    {
+        $adminAset = $this->buatUser('Admin Aset', null, 'aset_hapus_chk');
+        $skpd = $this->buatSkpd('Bidang Penghapusan Check', 'Bidang');
+
+        $this->buatUsulan($skpd, null, [
+            'nama_barang' => 'Mobil Rusak Berat ' . uniqid(),
+            'jenis_usulan' => 'Penghapusan',
+            'jumlah' => 1,
+        ]);
+
+        $response = $this->actingAs($adminAset)->get(route('rkbmd.export', [
+            'jenis' => 'penghapusan',
+            'bidang' => [$skpd->id_skpd],
+        ]));
+        $sheet = $this->loadExportSheet($response);
+
+        // Baris data 16
+        $this->assertSame('NIHIL', $sheet->getCell('E16')->getValue(), 'NIBAR harus NIHIL');
+        $this->assertSame('NIHIL', $sheet->getCell('H16')->getValue(), 'Nilai perolehan harus NIHIL');
+
+        // Pastikan baris TOTAL ditemukan di bawah data
+        $foundTotal = false;
+        $maxR = $sheet->getHighestRow();
+        for ($r = 17; $r <= $maxR; $r++) {
+            if ($sheet->getCell("H{$r}")->getValue() === 'TOTAL') {
+                $foundTotal = true;
+                break;
+            }
+        }
+        $this->assertTrue($foundTotal, 'Baris TOTAL harus tetap ada pada template Penghapusan.');
+    }
+
+    /**
+     * 16. Template Pemindahtanganan: NIBAR, Lokasi, Nilai, Bentuk adalah NIHIL, baris TOTAL tetap ada.
+     */
+    public function test_pemindahtanganan_nibar_lokasi_nilai_bentuk_nihil_dan_total_ada(): void
+    {
+        $adminAset = $this->buatUser('Admin Aset', null, 'aset_pindah_chk');
+        $skpd = $this->buatSkpd('Bidang Pemindahtanganan Check', 'Bidang');
+
+        $this->buatUsulan($skpd, null, [
+            'nama_barang' => 'Genset Hibah ' . uniqid(),
+            'jenis_usulan' => 'Pemindahtanganan',
+            'jumlah' => 1,
+        ]);
+
+        $response = $this->actingAs($adminAset)->get(route('rkbmd.export', [
+            'jenis' => 'pemindahtanganan',
+            'bidang' => [$skpd->id_skpd],
+        ]));
+        $sheet = $this->loadExportSheet($response);
+
+        // Baris data 15
+        $this->assertSame('NIHIL', $sheet->getCell('E15')->getValue(), 'NIBAR harus NIHIL');
+        $this->assertSame('NIHIL', $sheet->getCell('H15')->getValue(), 'Lokasi harus NIHIL');
+        $this->assertSame('NIHIL', $sheet->getCell('I15')->getValue(), 'Nilai perolehan harus NIHIL');
+        $this->assertSame('NIHIL', $sheet->getCell('J15')->getValue(), 'Bentuk pemindahtanganan harus NIHIL');
+
+        $foundTotal = false;
+        $maxR = $sheet->getHighestRow();
+        for ($r = 16; $r <= $maxR; $r++) {
+            if ($sheet->getCell("H{$r}")->getValue() === 'TOTAL') {
+                $foundTotal = true;
+                break;
+            }
+        }
+        $this->assertTrue($foundTotal, 'Baris TOTAL harus tetap ada pada template Pemindahtanganan.');
+    }
+
+    /**
+     * 17. Template Pemanfaatan: Kolom B adalah SKPD pemilik usulan, kolom data teknis (J-S) adalah NIHIL.
+     */
+    public function test_pemanfaatan_kolom_b_skpd_dan_data_teknis_nihil(): void
+    {
+        $adminAset = $this->buatUser('Admin Aset', null, 'aset_manfaat_chk');
+        $skpd = $this->buatSkpd('UPT Produksi Benih Unggul', 'UPT');
+
+        $u = $this->buatUsulan($skpd, null, [
+            'nama_barang' => 'Aula Serbaguna ' . uniqid(),
+            'jenis_usulan' => 'Pemanfaatan',
+            'jumlah' => 1,
+            'alasan_kebutuhan' => 'Sewa aula pertemuan',
+        ]);
+
+        $response = $this->actingAs($adminAset)->get(route('rkbmd.export', [
+            'jenis' => 'pemanfaatan',
+            'bidang' => [$skpd->id_skpd],
+        ]));
+        $sheet = $this->loadExportSheet($response);
+
+        // Baris data 12
+        $this->assertSame('UPT Produksi Benih Unggul', $sheet->getCell('B12')->getValue());
+        $this->assertSame($u->nama_barang, $sheet->getCell('E12')->getValue());
+        $this->assertSame('NIHIL', $sheet->getCell('G12')->getValue(), 'Reg harus NIHIL');
+        // Unmerge Kolom H dan I: H berisi Jumlah numerik, I berdiri sendiri berisi NIHIL (Deskripsi Barang)
+        $this->assertSame(1, (int) $sheet->getCell('H12')->getValue(), 'Jumlah pemanfaatan pada kolom H harus angka');
+        $this->assertSame('NIHIL', $sheet->getCell('I12')->getValue(), 'Deskripsi barang pada kolom I harus NIHIL');
+        $this->assertFalse($sheet->getCell('H12')->isInMergeRange(), 'Kolom H12 tidak boleh dalam status merge');
+        $this->assertFalse($sheet->getCell('I12')->isInMergeRange(), 'Kolom I12 tidak boleh dalam status merge');
+
+        $this->assertSame('NIHIL', $sheet->getCell('J12')->getValue(), 'Luas M2 harus NIHIL');
+        $this->assertSame('NIHIL', $sheet->getCell('K12')->getValue(), 'Letak alamat harus NIHIL');
+        $this->assertSame('NIHIL', $sheet->getCell('L12')->getValue(), 'Peruntukan harus NIHIL');
+        $this->assertSame('NIHIL', $sheet->getCell('M12')->getValue(), 'Status harus NIHIL');
+        $this->assertSame('NIHIL', $sheet->getCell('O12')->getValue(), 'Validasi harus NIHIL');
+        $this->assertSame('Sewa aula pertemuan', $sheet->getCell('T12')->getValue(), 'Peruntukan pemanfaatan harus sesuai alasan');
+    }
+
+    /**
+     * 18. Grouping: Jika 5 field sama persis, kolom numerik dijumlahkan (SUM) dan teks digabung ( / ).
+     */
+    public function test_grouping_lima_field_identik_menjumlahkan_jumlah_usulan(): void
+    {
+        $adminAset = $this->buatUser('Admin Aset', null, 'aset_grp_sum');
+        $skpd = $this->buatSkpd('Bidang Grouping Sum', 'Bidang');
+
+        $kodeBarang = '1.3.2.05.01.001';
+        $namaBarang = 'Komputer Server Identik';
+        $program = 'PROGRAM TEKNOLOGI INFORMASI';
+        $subKegiatan = 'Pengadaan Perangkat Server';
+        $satuan = 'Unit';
+
+        // Usulan 1: jumlah 3, maks 10, riil 4, opt 1, alasan 'Server database lama rusak'
+        $this->buatUsulan($skpd, null, [
+            'nama_program' => $program,
+            'nama_sub_kegiatan' => $subKegiatan,
+            'kode_barang' => $kodeBarang,
+            'nama_barang' => $namaBarang,
+            'satuan' => $satuan,
+            'jumlah' => 3,
+            'kebutuhan_maksimum' => 10,
+            'kebutuhan_riil' => 4,
+            'barang_optimalisasi' => [
+                'kode' => '1.3.2.05.01.999',
+                'nama' => 'Server Bekas UPT',
+                'jumlah' => 1,
+                'satuan' => 'Unit',
+            ],
+            'alasan_kebutuhan' => 'Server database lama rusak',
+            'jenis_usulan' => 'Pengadaan',
+        ]);
+
+        // Usulan 2: jumlah 5, maks 15, riil 6, opt 2, alasan 'Kebutuhan server backup data'
+        $this->buatUsulan($skpd, null, [
+            'nama_program' => $program,
+            'nama_sub_kegiatan' => $subKegiatan,
+            'kode_barang' => $kodeBarang,
+            'nama_barang' => $namaBarang,
+            'satuan' => $satuan,
+            'jumlah' => 5,
+            'kebutuhan_maksimum' => 15,
+            'kebutuhan_riil' => 6,
+            'barang_optimalisasi' => [
+                'kode' => '1.3.2.05.01.999',
+                'nama' => 'Server Cadangan Lab',
+                'jumlah' => 2,
+                'satuan' => 'Unit',
+            ],
+            'alasan_kebutuhan' => 'Kebutuhan server backup data',
+            'jenis_usulan' => 'Pengadaan',
+        ]);
+
+        $response = $this->actingAs($adminAset)->get(route('rkbmd.export', [
+            'jenis' => 'pengadaan',
+            'bidang' => [$skpd->id_skpd],
+        ]));
+        $sheet = $this->loadExportSheet($response);
+
+        // Hanya menghasilkan 1 baris data di row 11
+        $this->assertSame(1, (int) $sheet->getCell('A11')->getValue());
+        $this->assertSame('Komputer Server Identik', $sheet->getCell('D11')->getValue());
+
+        // 1. Numerik dijumlahkan (SUM)
+        $this->assertSame(8, (int) $sheet->getCell('E11')->getValue(), 'Jumlah usulan (3 + 5) harus 8.');
+        $this->assertSame(25, (int) $sheet->getCell('G11')->getValue(), 'Kebutuhan maksimum (10 + 15) harus 25.');
+        $this->assertSame(3, (int) $sheet->getCell('K11')->getValue(), 'Jumlah optimalisasi (1 + 2) harus 3.');
+        $this->assertSame(10, (int) $sheet->getCell('M11')->getValue(), 'Kebutuhan riil (4 + 6) harus 10.');
+
+        // 2. Deskriptif digabung dengan pemisah ' / '
+        $this->assertSame('Server database lama rusak / Kebutuhan server backup data', $sheet->getCell('O11')->getValue());
+        $this->assertSame('Server Bekas UPT / Server Cadangan Lab', $sheet->getCell('J11')->getValue());
+
+        // Baris 12 bukan baris kedua komputer server
+        $this->assertNotSame('Komputer Server Identik', $sheet->getCell('D12')->getValue());
+    }
+
+    /**
+     * 19. Grouping: Jika satuan berbeda, usulan TIDAK digabungkan (menjadi 2 baris terpisah).
+     */
+    public function test_grouping_satuan_berbeda_tidak_digabungkan(): void
+    {
+        $adminAset = $this->buatUser('Admin Aset', null, 'aset_grp_diff');
+        $skpd = $this->buatSkpd('Bidang Grouping Diff', 'Bidang');
+
+        $kodeBarang = '1.3.2.05.01.002';
+        $namaBarang = 'Paket Jaringan Internet';
+        $program = 'PROGRAM TEKNOLOGI INFORMASI';
+        $subKegiatan = 'Pengadaan Jaringan';
+
+        // Usulan 1: satuan Unit
+        $this->buatUsulan($skpd, null, [
+            'nama_program' => $program,
+            'nama_sub_kegiatan' => $subKegiatan,
+            'kode_barang' => $kodeBarang,
+            'nama_barang' => $namaBarang,
+            'satuan' => 'Unit',
+            'jumlah' => 2,
+            'jenis_usulan' => 'Pengadaan',
+        ]);
+
+        // Usulan 2: satuan Paket (satuan berbeda)
+        $this->buatUsulan($skpd, null, [
+            'nama_program' => $program,
+            'nama_sub_kegiatan' => $subKegiatan,
+            'kode_barang' => $kodeBarang,
+            'nama_barang' => $namaBarang,
+            'satuan' => 'Paket',
+            'jumlah' => 1,
+            'jenis_usulan' => 'Pengadaan',
+        ]);
+
+        $response = $this->actingAs($adminAset)->get(route('rkbmd.export', [
+            'jenis' => 'pengadaan',
+            'bidang' => [$skpd->id_skpd],
+        ]));
+        $sheet = $this->loadExportSheet($response);
+
+        // Menghasilkan 2 baris terpisah di row 11 dan row 12
+        $this->assertSame(1, (int) $sheet->getCell('A11')->getValue());
+        $this->assertSame(2, (int) $sheet->getCell('A12')->getValue());
+        $this->assertSame('Paket Jaringan Internet', $sheet->getCell('D11')->getValue());
+        $this->assertSame('Paket Jaringan Internet', $sheet->getCell('D12')->getValue());
+
+        $satuans = [$sheet->getCell('F11')->getValue(), $sheet->getCell('F12')->getValue()];
+        $this->assertContains('Unit', $satuans);
+        $this->assertContains('Paket', $satuans);
+    }
+
+    /**
+     * 20. Penanganan error ramah jika berkas fisik template hilang (tidak crash exception).
+     */
+    public function test_error_handling_jika_berkas_fisik_template_hilang(): void
+    {
+        $adminAset = $this->buatUser('Admin Aset', null, 'aset_err_handling');
+
+        // Simulasikan file_path template salah/hilang sementara
+        $tpl = TemplateDokumen::where('kode_template', 'rkbmd_pengadaan')->first();
+        $originalPath = $tpl->file_path;
+        $tpl->update(['file_path' => 'templates/non_existent_template.xlsx']);
+
+        $response = $this->actingAs($adminAset)->get(route('rkbmd.export', ['jenis' => 'pengadaan']));
+
+        // Kembalikan path asli
+        $tpl->update(['file_path' => $originalPath]);
+
+        // Tidak crash unhandled 500, melainkan redirect back dengan pesan error
+        $response->assertRedirect();
+        $response->assertSessionHas('error');
+    }
+
+    /**
+     * 21. Logika mergeDescriptiveText menggabungkan string berbeda, memangkas spasi, dan mencegah duplikasi.
+     */
+    public function test_merge_descriptive_text_mencegah_duplikasi_dan_menggabungkan_dengan_pemisah(): void
+    {
+        $service = app(\App\Services\RkbmdExportService::class);
+
+        // Jika salah satu null
+        $this->assertSame('Catatan A', $service->mergeDescriptiveText('Catatan A', null));
+        $this->assertSame('Catatan B', $service->mergeDescriptiveText(null, 'Catatan B'));
+
+        // Jika bernilai identik (deduplikasi)
+        $this->assertSame('Catatan Sama', $service->mergeDescriptiveText('Catatan Sama', 'Catatan Sama'));
+
+        // Jika bernilai berbeda -> dipisah ' / '
+        $this->assertSame('Alasan 1 / Alasan 2', $service->mergeDescriptiveText('Alasan 1', 'Alasan 2'));
+
+        // Menambahkan teks baru ke gabungan yang sudah ada
+        $this->assertSame('A / B / C', $service->mergeDescriptiveText('A / B', 'C'));
+
+        // Menambahkan teks yang sudah ada dalam gabungan (tetap deduplikasi)
+        $this->assertSame('A / B', $service->mergeDescriptiveText('A / B', 'A'));
     }
 }
-

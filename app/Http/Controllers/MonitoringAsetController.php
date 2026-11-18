@@ -67,7 +67,7 @@ class MonitoringAsetController extends Controller
         $tahunList = Aset::query()
             ->selectRaw('YEAR(tanggal_pengadaan) as tahun')
             ->whereNotNull('tanggal_pengadaan')
-            ->where(fn ($q) => $q->whereNull('status_aset')->orWhere('status_aset', '!=', 'dihapuskan'))
+            ->whereIn('status_aset', ['aktif', 'Aktif'])
             ->tap(fn ($q) => $this->terapkanScopeMonitoring($q))
             ->distinct()
             ->orderByDesc('tahun')
@@ -196,7 +196,7 @@ class MonitoringAsetController extends Controller
 
         return Aset::query()
             ->with($with)
-            ->where(fn ($q) => $q->whereNull('status_aset')->orWhere('status_aset', '!=', 'dihapuskan'))
+            ->whereIn('status_aset', ['aktif', 'Aktif'])
             ->tap(fn ($q) => $this->terapkanScopeMonitoring($q))
             ->when($search !== '', fn ($q) => $q->where(function ($q2) use ($search) {
                 $q2->where('nomor_kartu_barang', 'like', "%{$search}%")

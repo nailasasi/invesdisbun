@@ -122,41 +122,46 @@
                     <p class="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Data Usulan BMD</p>
                     <div class="space-y-2.5">
                         <div>
-                            <label for="search_master_barang" class="mb-1 block font-semibold text-slate-700">Cari Master Kode Barang</label>
+                            <label for="search_master_barang" class="mb-1 block font-semibold text-slate-700">
+                                Cari Master Kode Barang <span class="font-normal text-slate-400">(opsional)</span>
+                            </label>
                             <select id="search_master_barang"
                                     class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"></select>
                             <p class="mt-1 text-[11px] text-slate-400">Pilih master barang untuk mengisi Kode &amp; Nama Barang otomatis.</p>
                         </div>
                         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
                             <div>
-                                <label for="kode_barang" class="mb-1 block font-semibold text-slate-700">Kode Barang <span class="text-rose-500">*</span></label>
-                                <input type="text" id="kode_barang" name="kode_barang" maxlength="50" readonly required
-                                       placeholder="Terisi otomatis dari master barang"
+                                <label for="kode_barang" class="mb-1 block font-semibold text-slate-700">
+                                    Kode Barang <span class="font-normal text-slate-400">(opsional)</span>
+                                </label>
+                                <input type="text" id="kode_barang" name="kode_barang" maxlength="50" readonly
+                                       placeholder="Terisi otomatis jika master barang dipilih"
                                        value="{{ old('kode_barang') }}"
                                        class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 placeholder-slate-400 placeholder:font-normal focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                             </div>
                             <div>
                                 <label for="nama_barang" class="mb-1 block font-semibold text-slate-700">
-                                    Nama Barang <span class="text-rose-500">*</span>
+                                    Nama Barang <span class="font-normal text-slate-400">(opsional)</span>
                                 </label>
-                                <input type="text" id="nama_barang" name="nama_barang" maxlength="255" readonly required
-                                       placeholder="Terisi otomatis dari master barang"
+                                <input type="text" id="nama_barang" name="nama_barang" maxlength="255" readonly
+                                       placeholder="Terisi otomatis jika master barang dipilih"
                                        value="{{ old('nama_barang') }}"
                                        class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 placeholder-slate-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                             </div>
                             <div>
                                 <label for="usulan-jumlah" class="mb-1 block font-semibold text-slate-700">
-                                    Jumlah <span class="text-rose-500">*</span>
+                                    Jumlah <span class="font-normal text-slate-400">(opsional)</span>
                                 </label>
-                                <input type="number" id="usulan-jumlah" name="jumlah" min="1" value="{{ old('jumlah', 1) }}" required
-                                       class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                <input type="number" id="usulan-jumlah" name="jumlah" min="1" value="{{ old('jumlah') }}" placeholder="Jumlah usulan"
+                                       class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                             </div>
                             <div>
                                 <label for="usulan-satuan" class="mb-1 block font-semibold text-slate-700">
-                                    Satuan <span class="text-rose-500">*</span>
+                                    Satuan <span class="font-normal text-slate-400">(opsional)</span>
                                 </label>
-                                <select id="usulan-satuan" name="satuan" required
+                                <select id="usulan-satuan" name="satuan"
                                         class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                    <option value="">-- Pilih Satuan (opsional) --</option>
                                     @foreach ($satuanList as $satuan)
                                         <option value="{{ $satuan }}" @selected(old('satuan') === $satuan)>{{ $satuan }}</option>
                                     @endforeach
@@ -174,10 +179,10 @@
                     <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
                         <div class="rounded-2xl border border-slate-100 bg-slate-50/60 p-3">
                             <span class="mb-2 block text-[11px] font-bold text-slate-600">
-                                Kebutuhan Maksimum <span class="text-rose-500">*</span>
+                                Kebutuhan Maksimum <span class="font-normal text-slate-400">(opsional)</span>
                             </span>
                             <div class="flex gap-2">
-                                <input type="number" id="usulan-kebutuhan-maks" name="kebutuhan_maksimum" min="0" required
+                                <input type="number" id="usulan-kebutuhan-maks" name="kebutuhan_maksimum" min="0"
                                        value="{{ old('kebutuhan_maksimum') }}" placeholder="Jumlah"
                                        class="w-2/3 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                                 <input type="text" id="usulan-satuan-maks" value="Unit" readonly
@@ -186,10 +191,10 @@
                         </div>
                         <div class="rounded-2xl border border-slate-100 bg-slate-50/60 p-3">
                             <span class="mb-2 block text-[11px] font-bold text-slate-600">
-                                Kebutuhan Riil <span class="text-rose-500">*</span>
+                                Kebutuhan Riil <span class="font-normal text-slate-400">(opsional)</span>
                             </span>
                             <div class="flex gap-2">
-                                <input type="number" id="usulan-kebutuhan-riil" name="kebutuhan_riil" min="0" required
+                                <input type="number" id="usulan-kebutuhan-riil" name="kebutuhan_riil" min="0"
                                        value="{{ old('kebutuhan_riil') }}" placeholder="Jumlah"
                                        class="w-2/3 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                                 <input type="text" id="usulan-satuan-riil" value="Unit" readonly
@@ -226,10 +231,10 @@
                 {{-- 4. KETERANGAN --}}
                 <div>
                     <label for="usulan-alasan" class="mb-1 block font-semibold text-slate-700">
-                        Keterangan / Alasan Kebutuhan <span class="text-rose-500">*</span>
+                        Keterangan / Alasan Kebutuhan <span class="font-normal text-slate-400">(opsional)</span>
                     </label>
-                    <textarea id="usulan-alasan" name="alasan_kebutuhan" rows="2" maxlength="2000" required
-                              placeholder="Tuliskan justifikasi kebutuhan riil..."
+                    <textarea id="usulan-alasan" name="alasan_kebutuhan" rows="2" maxlength="2000"
+                              placeholder="Tuliskan justifikasi kebutuhan riil jika diperlukan..."
                               class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">{{ old('alasan_kebutuhan') }}</textarea>
                 </div>
             </div>
@@ -289,6 +294,28 @@
             font-size: 0.75rem !important;
             overflow: hidden !important;
             z-index: 99999 !important;
+        }
+        .select2-container--default .select2-results > .select2-results__options {
+            max-height: 220px !important;
+            overflow-y: auto !important;
+            overscroll-behavior: contain !important;
+            -webkit-overflow-scrolling: touch !important;
+            scrollbar-width: thin !important;
+            scrollbar-color: #cbd5e1 #f8fafc !important;
+        }
+        .select2-container--default .select2-results > .select2-results__options::-webkit-scrollbar {
+            width: 6px !important;
+        }
+        .select2-container--default .select2-results > .select2-results__options::-webkit-scrollbar-track {
+            background: #f8fafc !important;
+            border-radius: 4px !important;
+        }
+        .select2-container--default .select2-results > .select2-results__options::-webkit-scrollbar-thumb {
+            background: #cbd5e1 !important;
+            border-radius: 4px !important;
+        }
+        .select2-container--default .select2-results > .select2-results__options::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8 !important;
         }
         .select2-container--default .select2-search--dropdown {
             padding: 6px 8px !important;
@@ -365,14 +392,7 @@
             $hiddenInput.val('');
 
             if (!selectedProg) {
-                $subKegiatanSelect.prop('disabled', true);
-                $subKegiatanSelect.select2({
-                    placeholder: 'Pilih Program terlebih dahulu',
-                    width: '100%',
-                    allowClear: true,
-                    dropdownParent: $('#modalUsulan'),
-                    language: select2Language('Sub Kegiatan tidak ditemukan')
-                });
+                $subKegiatanSelect.prop('disabled', true).trigger('change.select2');
                 $bidangInput.val('');
                 return;
             }
@@ -390,23 +410,16 @@
                     $subKegiatanSelect.append(new Option(sub.nama_sub_kegiatan, sub.id_kegiatan, false, false));
                 });
 
-                $subKegiatanSelect.prop('disabled', false);
-                $subKegiatanSelect.select2({
-                    placeholder: 'Cari atau pilih Sub Kegiatan',
-                    width: '100%',
-                    allowClear: true,
-                    dropdownParent: $('#modalUsulan'),
-                    language: select2Language('Sub Kegiatan tidak ditemukan')
-                });
+                $subKegiatanSelect.prop('disabled', false).trigger('change.select2');
             } else {
-                $subKegiatanSelect.prop('disabled', true);
+                $subKegiatanSelect.prop('disabled', true).trigger('change.select2');
                 $bidangInput.val('');
             }
         });
 
         // Event saat Program dibersihkan (clear)
         $programSelect.on('select2:clear', function () {
-            $subKegiatanSelect.empty().append('<option value="">-- Pilih Program terlebih dahulu --</option>').prop('disabled', true).trigger('change');
+            $subKegiatanSelect.empty().append('<option value="">-- Pilih Program terlebih dahulu --</option>').prop('disabled', true).trigger('change.select2');
             $('#usulan-bidang-urusan').val('');
             $('#usulan-program-kegiatan').val('');
         });
@@ -531,7 +544,7 @@
         const satuanUsulan = document.getElementById('usulan-satuan');
         if (satuanUsulan) {
             satuanUsulan.addEventListener('change', function () {
-                const s = satuanUsulan.value;
+                const s = satuanUsulan.value || 'Unit';
                 const a = document.getElementById('usulan-satuan-maks');
                 const b = document.getElementById('usulan-satuan-riil');
                 if (a) a.value = s;
@@ -671,8 +684,11 @@
                 $('#usulan-program-kegiatan').val('');
 
                 document.getElementById('usulan-tahun').value = {{ now()->year + 1 }};
-                document.getElementById('usulan-jumlah').value = 1;
-                const s = document.getElementById('usulan-satuan').value;
+                document.getElementById('usulan-jumlah').value = '';
+                document.getElementById('usulan-satuan').value = '';
+                document.getElementById('usulan-kebutuhan-maks').value = '';
+                document.getElementById('usulan-kebutuhan-riil').value = '';
+                const s = document.getElementById('usulan-satuan').value || 'Unit';
                 const ma = document.getElementById('usulan-satuan-maks');
                 const ri = document.getElementById('usulan-satuan-riil');
                 if (ma) ma.value = s;

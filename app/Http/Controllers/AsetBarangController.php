@@ -16,6 +16,7 @@ use App\Models\Skpd;
 use App\Models\Lokasi;
 use App\Models\TemplateDokumen;
 use App\Models\UsulanPenghapusan;
+use App\Services\AsetMutasiService;
 use App\Services\AsetPenempatan;
 use App\Services\AsetScope;
 use App\Services\TanggalAset;
@@ -70,10 +71,18 @@ class AsetBarangController extends Controller
         'Status Aset',
     ];
 
+    private readonly AsetScope $scope;
+    private readonly ?UsulanPenghapusanService $usulanPenghapusan;
+    private readonly AsetMutasiService $mutasiService;
+
     public function __construct(
-        private readonly AsetScope $scope,
-        private readonly ?UsulanPenghapusanService $usulanPenghapusan = null,
+        AsetScope $scope,
+        ?UsulanPenghapusanService $usulanPenghapusan = null,
+        ?AsetMutasiService $mutasiService = null,
     ) {
+        $this->scope = $scope;
+        $this->usulanPenghapusan = $usulanPenghapusan;
+        $this->mutasiService = $mutasiService ?? app(AsetMutasiService::class);
     }
 
     /**
@@ -1876,25 +1885,12 @@ class AsetBarangController extends Controller
                 ]);
             }
 
-            $pemegangLama = $aset->pemegangSaatIni?->pegawai?->id_pegawai;
-
-            if ($pemegangLama && (int) $pemegangLama === (int) $pemegangBaru) {
-                throw ValidationException::withMessages([
-                    'id_pegawai' => 'Aset sudah dipegang oleh pegawai yang dipilih.',
-                ]);
-            }
-
-            if ($this->isAdminUpt()) {
-                $pegawaiModel = Pegawai::findOrFail($pemegangBaru);
-                $idLokasiCakupan = $this->scope->idLokasi() ?: [];
-                $pegawaiLokasi = $pegawaiModel->ruangan?->id_lokasi;
-                $pegawaiSkpd = $pegawaiModel->id_skpd;
-                $dalamCakupan = ($pegawaiLokasi && in_array($pegawaiLokasi, $idLokasiCakupan, true))
-                    || ($pegawaiSkpd && (int) $pegawaiSkpd === (int) $this->scope->skpdId());
-                abort_unless($dalamCakupan, 403, 'Pegawai baru berada di luar cakupan UPT Anda.');
-            }
-
-            $mutasi = $this->mutatePemegang($aset, $pemegangLama, $pemegangBaru, $data['keterangan'] ?? null);
+            $mutasi = $this->mutasiService->mutasiGantiPemegang(
+                $aset,
+                (int) $pemegangBaru,
+                $data['keterangan'] ?? null,
+                auth()->id()
+            );
 
             $downloadBastUrl = route('mutasi-aset.bast.download', $mutasi->id_mutasi);
 
@@ -1926,102 +1922,24 @@ class AsetBarangController extends Controller
             ]);
         }
 
-        $this->authorizeRuangan((int) $ruanganBaru, 'memutasi aset ke ruangan');
+        $hasil = $this->mutasiService->mutasiPindahRuangan(
+            $aset,
+            (int) $ruanganBaru,
+            $data['keterangan'] ?? null,
+            auth()->id()
+        );
 
-        $pemegangAktif = $aset->pemegangSaatIni?->pegawai?->nama_pegawai;
-
-        if ($pemegangAktif) {
-            throw ValidationException::withMessages([
-                'id_ruangan' => 'Aset memiliki pemegang; ruangan mengikuti pemegang. Gunakan Mutasi → Ganti Pemegang.',
-            ]);
-        }
-
-        $ruanganLama = $aset->penempatanAktif?->id_ruangan;
-        $lokasiLama = $aset->id_lokasi;
-
-        // Cek apakah ruangan sama SEBELUM memodifikasi penempatan
-        if ($ruanganLama && (int) $ruanganLama === (int) $ruanganBaru) {
+        if ($hasil['sama']) {
             return response()->json([
                 'success' => true,
                 'message' => 'Aset sudah berada di ruangan tersebut.',
             ]);
         }
 
-        // Mutasi Pindah Ruangan dibungkus transaksi database agar aman dari partial commits & race conditions
-        $lokasiBaru = DB::transaction(function () use ($aset, $ruanganBaru, $data) {
-            $asetLock = Aset::where('id_aset', $aset->id_aset)->lockForUpdate()->first();
-            if (! $asetLock || $asetLock->status_aset !== 'aktif') {
-                throw ValidationException::withMessages([
-                    'tipe' => 'Aset sedang diubah oleh proses lain atau statusnya telah berubah.',
-                ]);
-            }
-
-            // Pastikan tidak ada pemegang aktif yang dibuat secara bersamaan
-            $pemegangAktifLock = PemegangAset::where('id_aset', $asetLock->id_aset)
-                ->where('status', 'aktif')
-                ->lockForUpdate()
-                ->first();
-
-            if ($pemegangAktifLock) {
-                throw ValidationException::withMessages([
-                    'id_ruangan' => 'Aset memiliki pemegang; ruangan mengikuti pemegang. Gunakan Mutasi → Ganti Pemegang.',
-                ]);
-            }
-
-            $penempatanLamaLock = PenempatanAset::where('id_aset', $asetLock->id_aset)
-                ->where('status', 'aktif')
-                ->lockForUpdate()
-                ->first();
-
-            if (! $penempatanLamaLock) {
-                throw ValidationException::withMessages([
-                    'tipe' => 'Aset tidak memiliki penempatan aktif.',
-                ]);
-            }
-
-            if (! AsetPenempatan::bolehMutasiFinalisasi($penempatanLamaLock)) {
-                throw ValidationException::withMessages([
-                    'tipe' => AsetPenempatan::pesanMutasiBelumDifinalisasi(),
-                ]);
-            }
-
-            $ruanganLama = $penempatanLamaLock->id_ruangan;
-            if ($ruanganLama && (int) $ruanganLama === (int) $ruanganBaru) {
-                return $asetLock->id_lokasi;
-            }
-
-            // Penempatan baru LANGSUNG difinalisasi (mutasi tidak memerlukan finalisasi ulang).
-            $this->placeAtRoom($asetLock, (int) $ruanganBaru, true);
-
-            // SKPD + Lokasi untuk aset TANPA pemegang mengikuti ruangan tujuan:
-            // `ruangan.id_skpd` dan `ruangan.id_lokasi`. Nilai dari request
-            // (`id_skpd`) tidak pernah dipercaya.
-            AsetPenempatan::sinkronAset($asetLock, null, (int) $ruanganBaru);
-
-            $mutasi = MutasiAset::create([
-                'tanggal_mutasi' => now()->toDateString(),
-                'jenis_mutasi' => 'Pindah Ruangan',
-                'keterangan' => $data['keterangan'] ?? null,
-                'id_user_penginput' => auth()->id(),
-                'status_mutasi' => 'selesai',
-            ]);
-
-            DetailMutasiAset::create([
-                'id_mutasi' => $mutasi->id_mutasi,
-                'id_aset' => $asetLock->id_aset,
-                'pegawai_lama' => null,
-                'pegawai_baru' => null,
-                'ruangan_lama' => $ruanganLama,
-                'ruangan_baru' => (int) $ruanganBaru,
-            ]);
-
-            return $asetLock->fresh()->id_lokasi;
-        });
-
         $pesan = 'Aset berhasil dipindah ruangan.';
 
-        if ($lokasiBaru !== $lokasiLama) {
-            $lokasi = Lokasi::find($lokasiBaru);
+        if ($hasil['lokasi_baru'] !== $hasil['lokasi_lama']) {
+            $lokasi = Lokasi::find($hasil['lokasi_baru']);
             $pesan .= ' Lokasi fisik sekarang: '.($lokasi?->nama_lokasi ?? '-').'.';
         }
 
@@ -2071,131 +1989,7 @@ class AsetBarangController extends Controller
         ]);
     }
 
-    /**
-     * Tutup pemegang lama, buka pemegang baru, pindah ruangan, catat riwayat mutasi.
-     * Dibungkus transaksi database agar seluruh operasi atomic.
-     */
-    private function mutatePemegang(Aset $aset, $pemegangLamaId, $pemegangBaruId, ?string $keterangan): MutasiAset
-    {
-        $now = now()->toDateString();
 
-        // Effective room = ruang kerja pemegang baru (null bila pegawai belum
-        // punya ruangan). Ruangan lama dicatat sebagai riwayat sebelum berubah.
-        $penempatanLama = $aset->penempatanAktif;
-        $ruanganLama = $penempatanLama?->id_ruangan;
-        $ruanganBaru = Pegawai::where('id_pegawai', $pemegangBaruId)->value('id_ruangan');
-
-        // Otorisasi dijalankan SEBELUM ada satu pun penulisan database, supaya
-        // penolakan tidak meninggalkan pemegang lama tertutup atau history
-        // setengah jadi.
-        if ($ruanganBaru) {
-            $this->authorizeRuangan($ruanganBaru, 'memindahkan aset ke pemegang baru');
-        }
-
-        return DB::transaction(function () use ($aset, $pemegangLamaId, $pemegangBaruId, $keterangan, $now, $ruanganBaru) {
-            $asetLock = Aset::where('id_aset', $aset->id_aset)->lockForUpdate()->first();
-            if (! $asetLock || $asetLock->status_aset !== 'aktif') {
-                throw ValidationException::withMessages([
-                    'tipe' => 'Aset sedang diubah oleh proses lain atau statusnya telah berubah.',
-                ]);
-            }
-
-            // Kunci baris pemegang aktif & penempatan aktif
-            $pemegangAktifLock = PemegangAset::where('id_aset', $asetLock->id_aset)
-                ->where('status', 'aktif')
-                ->lockForUpdate()
-                ->first();
-
-            $penempatanAktifLock = PenempatanAset::where('id_aset', $asetLock->id_aset)
-                ->where('status', 'aktif')
-                ->lockForUpdate()
-                ->first();
-
-            // Re-validasi setelah row lock berhasil diperoleh
-            if (! AsetPenempatan::bolehMutasi($pemegangAktifLock !== null, $penempatanAktifLock !== null)) {
-                throw ValidationException::withMessages([
-                    'tipe' => 'Tetapkan pemegang atau lokasi terlebih dahulu sebelum melakukan mutasi.',
-                ]);
-            }
-
-            if (! AsetPenempatan::bolehMutasiFinalisasi($penempatanAktifLock)) {
-                throw ValidationException::withMessages([
-                    'tipe' => AsetPenempatan::pesanMutasiBelumDifinalisasi(),
-                ]);
-            }
-
-            // Validasi pemegang lama belum berubah secara konkuren
-            $currentPemegangId = $pemegangAktifLock?->id_pegawai;
-            if ($pemegangLamaId && (int) $currentPemegangId !== (int) $pemegangLamaId) {
-                throw ValidationException::withMessages([
-                    'tipe' => 'Pemegang aktif telah berubah oleh proses lain. Silakan muat ulang halaman.',
-                ]);
-            }
-
-            if ($currentPemegangId && (int) $currentPemegangId === (int) $pemegangBaruId) {
-                throw ValidationException::withMessages([
-                    'id_pegawai' => 'Aset sudah dipegang oleh pegawai yang dipilih.',
-                ]);
-            }
-
-            $ruanganLama = $penempatanAktifLock?->id_ruangan;
-
-            // Tutup pemegang lama
-            if ($pemegangAktifLock) {
-                $pemegangAktifLock->update(['status' => 'tidak aktif', 'tanggal_selesai' => $now]);
-            } else {
-                PemegangAset::where('id_aset', $asetLock->id_aset)
-                    ->where('status', 'aktif')
-                    ->update(['status' => 'tidak aktif', 'tanggal_selesai' => $now]);
-            }
-
-            // Buka pemegang baru
-            PemegangAset::create([
-                'id_aset' => $asetLock->id_aset,
-                'id_pegawai' => $pemegangBaruId,
-                'tanggal_mulai' => $now,
-                'status' => 'aktif',
-            ]);
-
-            // Ruangan aset mengikuti ruang kerja pemegang baru.
-            if ($ruanganBaru) {
-                // Mutasi Ganti Pemegang: penempatan aktif baru LANGSUNG
-                // difinalisasi (mutasi tidak memerlukan finalisasi ulang) —
-                // berlaku untuk pemegang lama maupun pemegang baru, termasuk
-                // saat aset sebelumnya belum punya penempatan aktif.
-                $this->placeAtRoom($asetLock, $ruanganBaru, true);
-            } else {
-                // Pemegang baru belum punya ruang: penempatan lama harus ditutup,
-                // kalau tidak aset tetap "berada" di ruang lamanya.
-                $this->tutupPenempatanAktif($asetLock);
-            }
-
-            // SKPD aset mengikuti `pegawai.id_skpd` PEMEGANG BARU, dan lokasi
-            // mengikuti `ruangan.id_lokasi` ruang kerjanya. Keduanya NULL bila
-            // efektif tidak ada — nilai lama tidak dipertahankan.
-            AsetPenempatan::sinkronAset($asetLock, $pemegangBaruId, $ruanganBaru);
-
-            // Catat mutasi sebagai riwayat
-            $mutasi = MutasiAset::create([
-                'tanggal_mutasi' => $now,
-                'jenis_mutasi' => 'Ganti Pemegang',
-                'keterangan' => $keterangan,
-                'id_user_penginput' => auth()->id(),
-                'status_mutasi' => 'selesai',
-            ]);
-
-            DetailMutasiAset::create([
-                'id_mutasi' => $mutasi->id_mutasi,
-                'id_aset' => $asetLock->id_aset,
-                'pegawai_lama' => $currentPemegangId,
-                'pegawai_baru' => $pemegangBaruId,
-                'ruangan_lama' => $ruanganLama,
-                'ruangan_baru' => $ruanganBaru,
-            ]);
-
-            return $mutasi;
-        });
-    }
 
     /**
      * Validasi data master Aset Barang untuk tambah dan edit

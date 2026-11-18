@@ -592,9 +592,8 @@ class SensusAsetTest extends TestCase
         );
     }
 
-    public function test_hasil_sensus_rusak_berat_memperbarui_kondisi_inventaris_tanpa_otomatis_membuat_usulan_penghapusan(): void
+    public function test_hasil_sensus_rusak_berat_otomatis_mengubah_status_menjadi_diusulkan_hapus_dan_membuat_usulan(): void
     {
-        // Pastikan kondisi awal inventaris adalah 'Baik' dan status aktif
         $this->asetP2btp->update([
             'kondisi' => 'Baik',
             'status_aset' => 'aktif',
@@ -602,7 +601,6 @@ class SensusAsetTest extends TestCase
 
         $jumlahUsulanAwal = UsulanPenghapusan::where('id_aset', $this->asetP2btp->id_aset)->count();
 
-        // Simpan hasil sensus dengan hasil 'Rusak Berat'
         $response = $this->actingAs($this->adminAset)
             ->post(route('monitoring-aset.sensus.update', $this->asetP2btp), [
                 'periode' => '2025–2028',
@@ -612,6 +610,8 @@ class SensusAsetTest extends TestCase
             ]);
 
         $response->assertSessionHas('success');
+        $this->assertStringContainsStringIgnoringCase('otomatis masuk', (string) session('success'));
+        $this->assertStringContainsStringIgnoringCase('usulan penghapusan', (string) session('success'));
 
         // Pastikan hasil sensus tersimpan di sensus_aset
         $this->assertDatabaseHas('sensus_aset', [
@@ -620,16 +620,171 @@ class SensusAsetTest extends TestCase
             'hasil_sensus' => 'Rusak Berat',
         ]);
 
-        // 1. Kondisi inventaris asli di tabel aset IKUT DIPERBARUI menjadi 'Rusak Berat'
+        // Kondisi master aset diperbarui menjadi Rusak Berat dan status menjadi diusulkan_hapus
         $this->asetP2btp->refresh();
         $this->assertSame('Rusak Berat', $this->asetP2btp->kondisi, 'Kondisi master aset harus sinkron dan diperbarui sesuai hasil sensus.');
+        $this->assertSame('diusulkan_hapus', $this->asetP2btp->status_aset, 'Status aset harus otomatis berubah menjadi diusulkan_hapus.');
 
-        // 2. Status aset tetap 'aktif' dan tidak berubah menjadi 'diusulkan_hapus'
-        $this->assertSame('aktif', $this->asetP2btp->status_aset, 'Status aset tidak boleh otomatis berubah karena hasil sensus.');
+        // Usulan penghapusan baru dibuat secara otomatis
+        $this->assertDatabaseHas('usulan_penghapusan', [
+            'id_aset' => $this->asetP2btp->id_aset,
+            'status_usulan' => 'diajukan',
+        ]);
+        $this->assertSame($jumlahUsulanAwal + 1, UsulanPenghapusan::where('id_aset', $this->asetP2btp->id_aset)->count());
+    }
 
-        // 3. Tidak ada usulan penghapusan yang dibuat secara otomatis
-        $jumlahUsulanAkhir = UsulanPenghapusan::where('id_aset', $this->asetP2btp->id_aset)->count();
-        $this->assertSame($jumlahUsulanAwal, $jumlahUsulanAkhir, 'Hasil sensus Rusak Berat tidak boleh otomatis membuat usulan penghapusan.');
+    public function test_penyimpanan_ulang_sensus_rusak_berat_tidak_membuat_usulan_ganda(): void
+    {
+        $this->asetP2btp->update([
+            'kondisi' => 'Baik',
+            'status_aset' => 'aktif',
+        ]);
+
+        // Simpan sensus Rusak Berat pertama kali
+        $this->actingAs($this->adminAset)
+            ->post(route('monitoring-aset.sensus.update', $this->asetP2btp), [
+                'periode' => '2025–2028',
+                'hasil_sensus' => 'Rusak Berat',
+                'tanggal_sensus' => '2026-10-28',
+                'catatan' => 'Rusak total motherboard',
+            ]);
+
+        $this->assertSame(1, UsulanPenghapusan::where('id_aset', $this->asetP2btp->id_aset)->count());
+
+        // Simpan sensus ulang dengan hasil yang sama
+        $response = $this->actingAs($this->adminAset)
+            ->post(route('monitoring-aset.sensus.update', $this->asetP2btp), [
+                'periode' => '2025–2028',
+                'hasil_sensus' => 'Rusak Berat',
+                'tanggal_sensus' => '2026-10-29',
+                'catatan' => 'Pembaruan catatan: Rusak parah tak tertolong',
+            ]);
+
+        $response->assertSessionHas('success');
+        $this->assertSame(1, UsulanPenghapusan::where('id_aset', $this->asetP2btp->id_aset)->count(), 'Menyimpan ulang sensus Rusak Berat tidak boleh membuat usulan duplikat.');
+    }
+
+    public function test_hasil_sensus_selain_rusak_berat_tidak_membuat_usulan_otomatis(): void
+    {
+        $this->asetP2btp->update([
+            'kondisi' => 'Baik',
+            'status_aset' => 'aktif',
+        ]);
+
+        $response = $this->actingAs($this->adminAset)
+            ->post(route('monitoring-aset.sensus.update', $this->asetP2btp), [
+                'periode' => '2025–2028',
+                'hasil_sensus' => 'Rusak Ringan',
+                'tanggal_sensus' => '2026-10-28',
+                'catatan' => 'Baret halus pada bodi',
+            ]);
+
+        $response->assertSessionHas('success');
+        $this->asetP2btp->refresh();
+        $this->assertSame('Rusak Ringan', $this->asetP2btp->kondisi);
+        $this->assertSame('aktif', $this->asetP2btp->status_aset);
+        $this->assertSame(0, UsulanPenghapusan::where('id_aset', $this->asetP2btp->id_aset)->count());
+    }
+
+    public function test_monitoring_aset_hanya_menampilkan_aset_aktif_dan_mengecualikan_diusulkan_hapus_dihapuskan_nonaktif(): void
+    {
+        $lokasiP2 = $this->lokasiUpt('UPT P2BTP');
+
+        $asetAktif = Aset::create([
+            'id_lokasi' => $lokasiP2->id_lokasi,
+            'nomor_kartu_barang' => 'TEST-MONITORING-AKTIF-' . uniqid(),
+            'merk' => 'Aset Monitor Aktif',
+            'tanggal_pengadaan' => '2025-01-01',
+            'status_aset' => 'aktif',
+            'kondisi' => 'Baik',
+        ]);
+
+        $asetDiusulkan = Aset::create([
+            'id_lokasi' => $lokasiP2->id_lokasi,
+            'nomor_kartu_barang' => 'TEST-MONITORING-USUL-' . uniqid(),
+            'merk' => 'Aset Monitor Usul Hapus',
+            'tanggal_pengadaan' => '2025-01-01',
+            'status_aset' => 'diusulkan_hapus',
+            'kondisi' => 'Rusak Berat',
+        ]);
+
+        $asetDihapuskan = Aset::create([
+            'id_lokasi' => $lokasiP2->id_lokasi,
+            'nomor_kartu_barang' => 'TEST-MONITORING-HAPUS-' . uniqid(),
+            'merk' => 'Aset Monitor Dihapuskan',
+            'tanggal_pengadaan' => '2025-01-01',
+            'status_aset' => 'dihapuskan',
+            'kondisi' => 'Rusak Berat',
+        ]);
+
+        $asetNonaktif = Aset::create([
+            'id_lokasi' => $lokasiP2->id_lokasi,
+            'nomor_kartu_barang' => 'TEST-MONITORING-NONAKTIF-' . uniqid(),
+            'merk' => 'Aset Monitor Nonaktif',
+            'tanggal_pengadaan' => '2025-01-01',
+            'status_aset' => 'nonaktif',
+            'kondisi' => 'Baik',
+        ]);
+
+        $response = $this->actingAs($this->adminAset)->get(route('monitoring-aset.index'));
+        $response->assertOk();
+
+        $response->assertSee($asetAktif->nomor_kartu_barang);
+        $response->assertDontSee($asetDiusulkan->nomor_kartu_barang);
+        $response->assertDontSee($asetDihapuskan->nomor_kartu_barang);
+        $response->assertDontSee($asetNonaktif->nomor_kartu_barang);
+    }
+
+    public function test_aset_yang_direaktifkan_muncul_kembali_di_monitoring_meskipun_tanpa_pemegang_dan_lokasi(): void
+    {
+        $skpdP2 = Skpd::where('nama_skpd', 'UPT P2BTP')->firstOrFail();
+
+        $asetReaktif = Aset::create([
+            'id_skpd' => $skpdP2->id_skpd,
+            'id_lokasi' => null,
+            'nomor_kartu_barang' => 'TEST-REAKTIF-NOLOKASI-' . uniqid(),
+            'merk' => 'Laptop Reaktif Mandiri',
+            'tanggal_pengadaan' => '2025-01-01',
+            'status_aset' => 'aktif',
+            'kondisi' => 'Baik',
+        ]);
+
+        $response = $this->actingAs($this->adminAset)->get(route('monitoring-aset.index'));
+        $response->assertOk();
+        $response->assertSee($asetReaktif->nomor_kartu_barang);
+    }
+
+    public function test_kpi_dan_filter_tahun_monitoring_tidak_menghitung_aset_yang_sedang_diusulkan(): void
+    {
+        $lokasiP2 = $this->lokasiUpt('UPT P2BTP');
+
+        $responseAwal = $this->actingAs($this->adminAset)->get(route('monitoring-aset.index'));
+        $totalNilaiBukuAwal = $responseAwal->viewData('totalNilaiBuku');
+
+        $tahunUnik = 1993;
+        $asetDiusulkan = Aset::create([
+            'id_lokasi' => $lokasiP2->id_lokasi,
+            'nomor_kartu_barang' => 'TEST-KPI-USUL-' . uniqid(),
+            'merk' => 'Aset Usulan KPI',
+            'tanggal_pengadaan' => "{$tahunUnik}-05-10",
+            'nilai_perolehan' => 88888888,
+            'status_aset' => 'diusulkan_hapus',
+            'kondisi' => 'Rusak Berat',
+        ]);
+
+        $response = $this->actingAs($this->adminAset)->get(route('monitoring-aset.index'));
+        $response->assertOk();
+
+        // 1. Filter tahun tidak boleh menyertakan tahun aset yang sedang diusulkan
+        $tahunList = $response->viewData('tahunList');
+        $this->assertFalse($tahunList->contains($tahunUnik), 'Filter tahun tidak boleh menyertakan tahun dari aset diusulkan_hapus.');
+
+        // 2. Total nilai buku tidak terpengaruh oleh aset yang berstatus diusulkan_hapus
+        $this->assertSame($totalNilaiBukuAwal, $response->viewData('totalNilaiBuku'));
+
+        // 3. Daftar aset yang ditampilkan tidak mengandung aset tersebut
+        $asetList = $response->viewData('asetList');
+        $this->assertFalse($asetList->getCollection()->pluck('nomor_kartu_barang')->contains($asetDiusulkan->nomor_kartu_barang));
     }
 
     public function test_admin_upt_dapat_menyimpan_sensus_pada_aset_tanpa_lokasi_jika_skpd_sesuai(): void

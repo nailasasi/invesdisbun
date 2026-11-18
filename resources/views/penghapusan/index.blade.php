@@ -15,7 +15,7 @@
             <a href="{{ route('penghapusan.index') }}"
                class="inline-flex items-center gap-2 border-b-2 border-disbun-700 px-4 py-2.5 text-sm font-bold text-disbun-700">
                 <span>Antrean Usulan</span>
-                <span class="rounded-full bg-disbun-100 px-2 py-0.5 text-xs font-bold text-disbun-800">{{ $usulanList->total() }}</span>
+                <span class="rounded-full bg-disbun-100 px-2 py-0.5 text-xs font-bold text-disbun-800">{{ ($usulanAsetList->total() ?? 0) + ($usulanInventarisList->total() ?? 0) }}</span>
             </a>
             <a href="{{ route('penghapusan.riwayat') }}"
                class="inline-flex items-center gap-2 border-b-2 border-transparent px-4 py-2.5 text-sm font-semibold text-slate-500 transition hover:border-slate-300 hover:text-slate-800">
@@ -27,9 +27,14 @@
         </div>
     </div>
 
+    {{-- TABEL 1: USULAN PENGHAPUSAN ASET MASTER --}}
     <x-card :padding="false">
         <x-action-bar>
             <form method="GET" action="{{ route('penghapusan.index') }}" class="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+                @if (request()->has('inv_page'))
+                    <input type="hidden" name="inv_page" value="{{ request('inv_page') }}">
+                @endif
+
                 <div class="relative flex-1 sm:max-w-sm">
                     <svg class="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/></svg>
                     <input type="text" name="search" value="{{ request('search') }}" placeholder="Cari nama / kode aset..."
@@ -53,6 +58,16 @@
             </x-slot>
         </x-action-bar>
 
+        <div class="border-b border-slate-100 bg-slate-50/60 px-6 py-3.5 flex items-center justify-between">
+            <div>
+                <h3 class="text-sm font-bold text-slate-800">Usulan Penghapusan Aset Master</h3>
+                <p class="text-xs text-slate-400">Aset barang dan kendaraan dinas yang masuk dalam antrean usulan penghapusan.</p>
+            </div>
+            <span class="rounded-full bg-disbun-100 px-2.5 py-0.5 text-xs font-bold text-disbun-800">
+                {{ $usulanAsetList->total() }} usulan
+            </span>
+        </div>
+
         <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
                 <thead>
@@ -60,13 +75,13 @@
                         <th class="py-3 px-3">Aset & Kode Barang</th>
                         <th class="py-3 px-3">Lokasi / Pemegang Terakhir</th>
                         <th class="py-3 px-3">Kondisi</th>
-                        <th class="py-3 px-3">Nilai Buku</th>
+                        <th class="py-3 px-3">Nilai Perolehan</th>
                         <th class="py-3 px-3">Alasan Usulan</th>
                         <th class="py-3 px-3 text-center">Tindakan</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-50">
-                    @forelse ($usulanList as $item)
+                    @forelse ($usulanAsetList as $item)
                         @php
                             $alasan = $item->alasan_penghapusan ?? '';
                             $badge = 'bg-slate-100 text-slate-600';
@@ -75,38 +90,28 @@
                             } elseif (str_contains($alasan, 'Rusak')) {
                                 $badge = 'bg-rose-50 text-rose-700';
                             }
-                            $isInventaris = (bool) $item->inventaris;
-                            if ($isInventaris) {
-                                $inv = $item->inventaris;
-                                $namaAset = $inv->nama_barang;
-                                $nomorKartu = $inv->kode_inventaris;
-                                $ruangNama = $inv->ruangan?->nama_ruangan ?? '-';
-                                $lokasiGedung = $inv->ruangan?->lokasi?->nama_lokasi ?? '-';
-                                $lokasi = $ruangNama . ' (' . $lokasiGedung . ')';
-                                $pemegang = 'Ruangan (Non-Personal)';
-                                $nilaiFormatted = '—';
-                                $kondisiAset = $inv->kondisi ?? 'Rusak Berat';
-                            } else {
-                                $namaAset = $item->aset?->kendaraan?->namaTampil() ?? $item->aset?->barang?->nama_barang ?? 'Aset #'.$item->id_aset;
-                                $nomorKartu = $item->aset?->nomor_kartu_barang ?? '-';
-                                $lokasi = $item->aset?->penempatanAktif?->ruangan?->nama_ruangan ?? $item->aset?->lokasi?->nama_lokasi ?? '-';
-                                $pemegang = $item->aset?->pemegangSaatIni?->pegawai?->nama_pegawai ?? 'Tanpa Pemegang';
-                                $nilaiFormatted = 'Rp ' . number_format($item->aset?->nilai_perolehan ?? 0, 0, ',', '.');
-                                $kondisiAset = $item->aset?->kondisi;
-                            }
+                            $namaAset = $item->aset?->kendaraan?->namaTampil() ?? $item->aset?->barang?->nama_barang ?? 'Aset #'.$item->id_aset;
+                            $nomorKartu = $item->aset?->nomor_kartu_barang ?? '-';
+                            $lokasi = $item->aset?->penempatanAktif?->ruangan?->nama_ruangan ?? $item->aset?->lokasi?->nama_lokasi ?? '-';
+                            $pemegang = $item->aset?->pemegangSaatIni?->pegawai?->nama_pegawai ?? 'Tanpa Pemegang';
+                            $nilaiFormatted = 'Rp ' . number_format($item->aset?->nilai_perolehan ?? 0, 0, ',', '.');
+                            $kondisiAset = $item->aset?->kondisi;
+                            $kondisiBadge = match ($kondisiAset) {
+                                'Rusak Berat' => 'bg-rose-50 text-rose-700',
+                                'Rusak Ringan' => 'bg-amber-50 text-amber-700',
+                                'Baik' => 'bg-emerald-50 text-emerald-700',
+                                default => 'bg-slate-100 text-slate-600',
+                            };
                         @endphp
                         <tr class="transition hover:bg-slate-50/50">
                             <td class="py-3 px-3">
                                 <span class="font-bold text-slate-800">{{ $namaAset }}</span>
                                 <div class="flex items-center gap-1.5 mt-0.5">
                                     <span class="font-mono text-[11px] text-slate-400">{{ $nomorKartu }}</span>
-                                    @if ($isInventaris)
-                                        <span class="inline-flex items-center rounded-full bg-purple-50 px-2 py-0.2 text-[10px] font-bold text-purple-700">Inventaris Lokal</span>
+                                    @if ($item->aset?->is_kendaraan)
+                                        <span class="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.2 text-[10px] font-bold text-blue-700">Kendaraan</span>
                                     @endif
                                 </div>
-                                @if ($isInventaris && $item->inventaris?->merk)
-                                    <span class="block text-[11px] text-slate-500">Merk: {{ $item->inventaris->merk }}</span>
-                                @endif
                                 <span class="block text-[10px] text-slate-300">Diusulkan {{ $item->tanggal_usulan?->format('d M Y') ?? '-' }}</span>
                             </td>
                             <td class="py-3 px-3 text-slate-600">
@@ -114,15 +119,6 @@
                                 <span class="block text-[11px] text-slate-400">{{ $pemegang }}</span>
                             </td>
                             <td class="py-3 px-3">
-                                @php
-                                    $kondisiAset = $item->aset?->kondisi;
-                                    $kondisiBadge = match ($kondisiAset) {
-                                        'Rusak Berat' => 'bg-rose-50 text-rose-700',
-                                        'Rusak Ringan' => 'bg-amber-50 text-amber-700',
-                                        'Baik' => 'bg-emerald-50 text-emerald-700',
-                                        default => 'bg-slate-100 text-slate-600',
-                                    };
-                                @endphp
                                 <span class="rounded-full px-2.5 py-0.5 text-[10px] font-bold {{ $kondisiBadge }}">{{ $kondisiAset ?? '-' }}</span>
                             </td>
                             <td class="py-3 px-3 font-mono text-slate-600">
@@ -134,7 +130,7 @@
                             <td class="py-3 px-3 text-center">
                                 <div class="flex items-center justify-center gap-2">
                                     @if (auth()->user()?->role?->nama_role === 'Admin Aset')
-                                        <form action="{{ route('penghapusan.reaktifkan', $item->id_usulan_hapus) }}" method="POST" onsubmit="return confirm('Batalkan usulan dan kembalikan barang ini ke status aktif?')">
+                                        <form action="{{ route('penghapusan.reaktifkan', $item->id_usulan_hapus) }}" method="POST" onsubmit="return confirm('Batalkan usulan dan kembalikan aset master ini ke status aktif dengan kondisi Baik?')">
                                             @csrf
                                             <button type="submit" class="rounded-xl border border-disbun-100 bg-disbun-50 px-2.5 py-1 text-[11px] font-bold text-disbun-800 transition hover:bg-disbun-100">Re-Aktifkan</button>
                                         </form>
@@ -164,7 +160,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="py-8 text-center text-slate-400">Tidak ada usulan penghapusan aset yang aktif.</td>
+                            <td colspan="6" class="py-8 text-center text-slate-400">Tidak ada usulan penghapusan aset master yang aktif.</td>
                         </tr>
                     @endforelse
                 </tbody>
@@ -172,7 +168,119 @@
         </div>
 
         <div class="border-t border-disbun-card-border px-6 py-4">
-            {{ $usulanList->links() }}
+            {{ $usulanAsetList->links() }}
+        </div>
+    </x-card>
+
+    {{-- TABEL 2: USULAN PENGHAPUSAN INVENTARIS LOKAL RUANGAN --}}
+    <x-card :padding="false" class="mt-6">
+        <div class="border-b border-slate-100 bg-slate-50/60 px-6 py-4 flex items-center justify-between">
+            <div>
+                <div class="flex items-center gap-2">
+                    <h3 class="text-sm font-bold text-slate-800">Usulan Penghapusan Inventaris Lokal Ruangan</h3>
+                    <span class="rounded-full bg-purple-50 border border-purple-200 px-2 py-0.5 text-xs font-bold text-purple-700">
+                        {{ $usulanInventarisList->total() }} usulan
+                    </span>
+                </div>
+                <p class="mt-0.5 text-xs text-slate-400">Barang operasional ruangan lokal (non-aset) yang diusulkan penghapusan.</p>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead>
+                    <tr class="border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                        <th class="py-3 px-3">Kode & Nama Inventaris</th>
+                        <th class="py-3 px-3">Ruangan & Lokasi</th>
+                        <th class="py-3 px-3">Kondisi</th>
+                        <th class="py-3 px-3">Keterangan / Alasan</th>
+                        <th class="py-3 px-3 text-center">Tindakan</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-50">
+                    @forelse ($usulanInventarisList as $item)
+                        @php
+                            $inv = $item->inventaris;
+                            $namaAset = $inv?->nama_barang ?? 'Inventaris #'.$item->id_inventaris;
+                            $nomorKartu = $inv?->kode_inventaris ?? '-';
+                            $ruangNama = $inv?->ruangan?->nama_ruangan ?? '-';
+                            $lokasiGedung = $inv?->ruangan?->lokasi?->nama_lokasi ?? '-';
+                            $lokasi = $ruangNama . ' (' . $lokasiGedung . ')';
+                            $pemegang = 'Ruangan (Inventaris Lokal)';
+                            $kondisiAset = $inv?->kondisi ?? 'Rusak Berat';
+                            $kondisiBadge = match ($kondisiAset) {
+                                'Rusak Berat' => 'bg-rose-50 text-rose-700',
+                                'Rusak Ringan' => 'bg-amber-50 text-amber-700',
+                                'Baik' => 'bg-emerald-50 text-emerald-700',
+                                default => 'bg-slate-100 text-slate-600',
+                            };
+                        @endphp
+                        <tr class="transition hover:bg-slate-50/50">
+                            <td class="py-3 px-3">
+                                <span class="font-bold text-slate-800">{{ $namaAset }}</span>
+                                <div class="flex items-center gap-1.5 mt-0.5">
+                                    <span class="font-mono text-[11px] text-slate-400">{{ $nomorKartu }}</span>
+                                    <span class="inline-flex items-center rounded-full bg-purple-50 px-2 py-0.2 text-[10px] font-bold text-purple-700">Inventaris Lokal</span>
+                                </div>
+                                @if ($inv?->merk)
+                                    <span class="block text-[11px] text-slate-500">Merk: {{ $inv->merk }}</span>
+                                @endif
+                                <span class="block text-[10px] text-slate-300">Diusulkan {{ $item->tanggal_usulan?->format('d M Y') ?? '-' }}</span>
+                            </td>
+                            <td class="py-3 px-3 text-slate-600">
+                                {{ $lokasi }}
+                            </td>
+                            <td class="py-3 px-3">
+                                <span class="rounded-full px-2.5 py-0.5 text-[10px] font-bold {{ $kondisiBadge }}">{{ $kondisiAset }}</span>
+                            </td>
+                            <td class="py-3 px-3 text-slate-600">
+                                <div>{{ $item->alasan_penghapusan ?? '-' }}</div>
+                                @if ($item->keterangan)
+                                    <span class="text-[11px] text-slate-400">{{ $item->keterangan }}</span>
+                                @endif
+                            </td>
+                            <td class="py-3 px-3 text-center">
+                                <div class="flex items-center justify-center gap-2">
+                                    @if (auth()->user()?->role?->nama_role === 'Admin Aset')
+                                        <form action="{{ route('penghapusan.reaktifkan', $item->id_usulan_hapus) }}" method="POST" onsubmit="return confirm('Batalkan usulan dan kembalikan inventaris lokal ini ke status aktif di ruangannya?')">
+                                            @csrf
+                                            <button type="submit" class="rounded-xl border border-disbun-100 bg-disbun-50 px-2.5 py-1 text-[11px] font-bold text-disbun-800 transition hover:bg-disbun-100">Re-Aktifkan</button>
+                                        </form>
+
+                                        {{-- Tombol Hapus Permanen: Membuka Modal Otorisasi Kamera --}}
+                                        <button type="button"
+                                                onclick="bukaModalHapusPermanen({
+                                                    id: {{ $item->id_usulan_hapus }},
+                                                    action: '{{ route('penghapusan.eksekusi', $item->id_usulan_hapus) }}',
+                                                    nama: '{{ addslashes($namaAset) }}',
+                                                    kode: '{{ addslashes($nomorKartu) }}',
+                                                    alasan: '{{ addslashes($item->alasan_penghapusan ?? '-') }}',
+                                                    lokasi: '{{ addslashes($lokasi) }}',
+                                                    pemegang: '{{ addslashes($pemegang) }}',
+                                                    nilai: '—'
+                                                })"
+                                                class="rounded-xl border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 transition hover:bg-rose-100">
+                                            Hapus Permanen
+                                        </button>
+                                    @else
+                                        <span class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-medium text-slate-600">
+                                            Menunggu Verifikasi
+                                        </span>
+                                    @endif
+                                </div>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="5" class="py-8 text-center text-slate-400">Tidak ada usulan penghapusan inventaris lokal yang aktif.</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+
+        <div class="border-t border-disbun-card-border px-6 py-4">
+            {{ $usulanInventarisList->links() }}
         </div>
     </x-card>
 

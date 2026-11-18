@@ -65,18 +65,15 @@ class RkbmdUsulanOptimalisasiTest extends TestCase
     {
         $role = $this->buatRole($roleNama);
 
-        $pegawai = null;
-        if ($skpd) {
-            $pegawai = Pegawai::create([
-                'nip' => '8'.random_int(10000000, 99999999),
-                'nama_pegawai' => 'User '.$username,
-                'jabatan' => 'Pegawai',
-                'id_skpd' => $skpd->id_skpd,
-            ]);
-        }
+        $pegawai = Pegawai::create([
+            'nip' => '8'.random_int(10000000, 99999999),
+            'nama_pegawai' => 'User '.$username,
+            'jabatan' => 'Pegawai',
+            'id_skpd' => $skpd?->id_skpd,
+        ]);
 
         return User::create([
-            'id_pegawai' => $pegawai?->id_pegawai,
+            'id_pegawai' => $pegawai->id_pegawai,
             'id_role' => $role->id_role,
             'username' => $username,
             'password' => self::PASSWORD,
@@ -265,7 +262,7 @@ class RkbmdUsulanOptimalisasiTest extends TestCase
         DB::table('usulan_rkbmd')->insert($baris);
 
         foreach (\App\Http\Controllers\RkbmdController::JENIS_KODE as $kode => $label) {
-            $resp = $this->get(route('rkbmd.export', ['jenis' => $kode, 'bidang' => 'all', 'status' => 'all']));
+            $resp = $this->get(route('rkbmd.export', ['jenis' => $kode, 'bidang' => [$idSkpd], 'status' => 'all']));
             $resp->assertSuccessful();
 
             $tmp = tempnam(sys_get_temp_dir(), 'rkbmdxlsx');
@@ -273,10 +270,15 @@ class RkbmdUsulanOptimalisasiTest extends TestCase
             $isi = \PhpOffice\PhpSpreadsheet\IOFactory::load($tmp)->getActiveSheet()->toArray(null, true, true, false);
             @unlink($tmp);
 
-            $namaBarang = array_values(array_filter(
-                array_map(fn ($r) => (string) ($r[13] ?? ($r[14] ?? ($r[4] ?? ''))), $isi),
-                fn ($n) => str_starts_with($n, 'Barang ')
-            ));
+            $namaBarang = [];
+            foreach (array_slice($isi, 10) as $r) {
+                foreach ($r as $val) {
+                    if (is_string($val) && str_starts_with($val, 'Barang ') && $val !== 'Barang yang dipelihara') {
+                        $namaBarang[] = $val;
+                    }
+                }
+            }
+            $namaBarang = array_values(array_unique($namaBarang));
 
             $this->assertSame(['Barang '.$label], $namaBarang, 'Ekspor jenis '.$kode.' tidak memfilter dengan benar.');
         }

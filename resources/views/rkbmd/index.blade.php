@@ -109,16 +109,19 @@
             </form>
 
             <x-slot name="actions">
-                @if ($isAdmin)
-                    {{-- Tombol Langsung Export Excel (Khusus Super Admin & Admin Aset) --}}
-                    <a href="{{ route('rkbmd.export', request()->query()) }}"
+                @php
+                    $canExport = in_array(auth()->user()?->role?->nama_role, ['Admin Aset', 'Super Admin', 'Admin Bidang', 'Admin UPT'], true);
+                @endphp
+                @if ($canExport)
+                    {{-- Tombol Buka Popup Pilih Jenis Usulan Ekspor (Admin Aset, Super Admin, Admin Bidang, Admin UPT) --}}
+                    <button type="button" data-open-modal="modalExportRkbmd"
                        class="inline-flex items-center gap-1.5 rounded-2xl border border-disbun-card-border bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                       title="Export Rekap RKBMD ke Excel">
+                       title="Ekspor Data RKBMD ke Excel Berdasarkan Template Resmi">
                         <svg class="h-4 w-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                         </svg>
-                        <span>Export Excel</span>
-                    </a>
+                        <span>Ekspor Data</span>
+                    </button>
                 @endif
                 <button type="button" data-open-modal="modalUsulan"
                         class="inline-flex items-center gap-1.5 rounded-2xl bg-disbun-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-disbun-800">
@@ -224,15 +227,17 @@
                                 <span class="inline-block rounded-lg px-2 py-0.5 text-[10px] font-bold {{ $badgeJenis }}">{{ $usulan->jenis_usulan }}</span>
                             </td>
                             <td class="max-w-[240px] px-3 py-2.5">
-                                <p class="truncate font-bold text-slate-800" title="{{ $usulan->nama_barang }}">{{ $usulan->nama_barang }}</p>
+                                <p class="truncate font-bold text-slate-800" title="{{ $usulan->nama_barang }}">{{ $usulan->nama_barang ?: '-' }}</p>
                                 <p class="font-mono text-[10px] text-slate-400">{{ $usulan->kode_barang ?: '-' }}</p>
                                 @if ($usulan->spesifikasi)
                                     <p class="mt-0.5 line-clamp-1 text-[10px] text-slate-500" title="{{ $usulan->spesifikasi }}">{{ $usulan->spesifikasi }}</p>
                                 @endif
                             </td>
                             <td class="px-3 py-2.5 text-center whitespace-nowrap">
-                                <span class="font-bold text-slate-800">{{ $usulan->jumlah }}</span>
-                                <span class="text-[10px] text-slate-400">{{ $usulan->satuan }}</span>
+                                <span class="font-bold text-slate-800">{{ $usulan->jumlah ?? '-' }}</span>
+                                @if ($usulan->satuan)
+                                    <span class="text-[10px] text-slate-400">{{ $usulan->satuan }}</span>
+                                @endif
                             </td>
                             <td class="max-w-[220px] px-3 py-2.5">
                                 <p class="line-clamp-2 text-slate-600" title="{{ $usulan->alasan_kebutuhan }}">{{ $usulan->alasan_kebutuhan }}</p>
@@ -498,6 +503,95 @@
 
         {{-- MODAL LIHAT ARSIP --}}
         @include('rkbmd.partials.modal-list-arsip')
+
+        {{-- MODAL PILIH JENIS USULAN EKSPOR RKBMD --}}
+        <div id="modalExportRkbmd" class="fixed inset-0 z-50 hidden items-center justify-center p-4" data-modal>
+            <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" data-close></div>
+            <div class="relative w-full max-w-lg rounded-3xl border border-slate-200/80 bg-white p-6 shadow-2xl">
+                <div class="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
+                    <div class="flex items-start gap-3">
+                        <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                            <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                        </span>
+                        <div>
+                            <h3 class="text-base font-bold text-slate-900">PILIH JENIS USULAN RKBMD</h3>
+                            <p class="mt-0.5 text-xs text-slate-500">Pilih jenis usulan RKBMD yang ingin diekspor berdasarkan template resmi.</p>
+                        </div>
+                    </div>
+                    <button type="button" data-close class="rounded-xl p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600" title="Tutup">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+
+                <div class="mt-4 space-y-2.5">
+                    @php
+                        $opsiExport = [
+                            [
+                                'jenis' => 'pengadaan',
+                                'label' => 'Usulan RKBMD Pengadaan',
+                                'deskripsi' => 'Format 15 kolom: usulan, kebutuhan maksimum, optimalisasi & kebutuhan riil',
+                                'icon_color' => 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                            ],
+                            [
+                                'jenis' => 'pemeliharaan',
+                                'label' => 'Usulan RKBMD Pemeliharaan',
+                                'deskripsi' => 'Format 14 kolom: barang dipelihara dan kolom isian manual kondisi barang',
+                                'icon_color' => 'bg-sky-50 text-sky-700 border-sky-200',
+                            ],
+                            [
+                                'jenis' => 'penghapusan',
+                                'label' => 'Usulan RKBMD Penghapusan',
+                                'deskripsi' => 'Format resmi 10 kolom: spesifikasi barang, NIBAR, jumlah dan alasan penghapusan',
+                                'icon_color' => 'bg-rose-50 text-rose-700 border-rose-200',
+                            ],
+                            [
+                                'jenis' => 'pemindahtanganan',
+                                'label' => 'Usulan RKBMD Pemindahtanganan',
+                                'deskripsi' => 'Format resmi 12 kolom: identitas barang, NIBAR, bentuk dan alasan pemindahtanganan',
+                                'icon_color' => 'bg-amber-50 text-amber-700 border-amber-200',
+                            ],
+                            [
+                                'jenis' => 'pemanfaatan',
+                                'label' => 'Usulan RKBMD Pemanfaatan',
+                                'deskripsi' => 'Format 24 kolom: SKPD pengusul, validasi data pemanfaatan & rencana kebutuhan',
+                                'icon_color' => 'bg-indigo-50 text-indigo-700 border-indigo-200',
+                            ],
+                        ];
+                    @endphp
+
+                    @foreach ($opsiExport as $opsi)
+                        <a href="{{ route('rkbmd.export', array_merge(request()->query(), ['jenis' => $opsi['jenis']])) }}"
+                           class="group flex items-center justify-between rounded-2xl border border-slate-200/80 bg-slate-50/50 p-3.5 transition hover:border-emerald-500 hover:bg-emerald-50/30 hover:shadow-sm">
+                            <div class="flex items-center gap-3">
+                                <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border {{ $opsi['icon_color'] }}">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                    </svg>
+                                </span>
+                                <div>
+                                    <p class="text-xs font-bold text-slate-800 transition group-hover:text-emerald-700">{{ $opsi['label'] }}</p>
+                                    <p class="text-[11px] text-slate-500">{{ $opsi['deskripsi'] }}</p>
+                                </div>
+                            </div>
+                            <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-xs transition group-hover:bg-emerald-600 group-hover:text-white">
+                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                                </svg>
+                            </span>
+                        </a>
+                    @endforeach
+                </div>
+
+                <div class="mt-5 flex items-center justify-end border-t border-slate-100 pt-3">
+                    <button type="button" data-close
+                            class="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50">
+                        Batal
+                    </button>
+                </div>
+            </div>
+        </div>
 
 
         {{-- MODAL TOLAK (per usulan, khusus admin) --}}

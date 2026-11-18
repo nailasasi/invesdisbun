@@ -4,9 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Aset;
 use App\Models\InventarisRuangan;
+use App\Models\PemegangAset;
+use App\Models\PenempatanAset;
 use App\Models\RiwayatPenghapusan;
 use App\Models\UsulanPenghapusan;
 use App\Rules\FotoKameraValid;
+use App\Services\AsetPenempatan;
 use App\Services\AsetScope;
 use App\Services\BuktiOtorisasi;
 use App\Services\UsulanPenghapusanService;
@@ -42,50 +45,74 @@ class PenghapusanAsetController extends Controller
     /**
      * Daftar antrean usulan penghapusan (status aset: diusulkan_hapus).
      * Dibatasi oleh AsetScope: Admin Aset melihat global, Admin UPT hanya lokasi fisiknya.
+     * Menampilkan dua tabel terpisah: Usulan Aset Master dan Usulan Inventaris Lokal Ruangan.
      */
     public function index(Request $request)
     {
         $search = trim((string) $request->query('search'));
         $scope = $this->scope();
 
-        $usulanList = UsulanPenghapusan::with([
+        // 1. Usulan Penghapusan Aset Master (hanya yang memiliki relasi id_aset)
+        $usulanAsetQuery = UsulanPenghapusan::with([
                 'aset.barang.kategori',
                 'aset.kendaraan',
                 'aset.penempatanAktif.ruangan',
                 'aset.pemegangSaatIni.pegawai',
                 'aset.skpd',
                 'aset.lokasi',
+            ])
+            ->where('status_usulan', 'diajukan')
+            ->whereNotNull('id_aset');
+
+        if (! $scope->cakupanPenuh()) {
+            $usulanAsetQuery->whereHas('aset', fn ($a) => $scope->terapkan($a));
+        }
+
+        if ($search !== '') {
+            $usulanAsetQuery->where(function ($query) use ($search) {
+                $query->whereHas('aset.barang', fn ($b) => $b->where('nama_barang', 'like', "%{$search}%"))
+                    ->orWhereHas('aset.kendaraan', fn ($k) => $k->where('nama_kendaraan', 'like', "%{$search}%"))
+                    ->orWhereHas('aset', fn ($a) => $a->where('nomor_kartu_barang', 'like', "%{$search}%"));
+            });
+        }
+
+        $usulanAsetList = $usulanAsetQuery
+            ->orderByDesc('id_usulan_hapus')
+            ->paginate(10, ['*'], 'aset_page')
+            ->withQueryString();
+
+        // 2. Usulan Penghapusan Inventaris Lokal Ruangan (hanya yang memiliki relasi id_inventaris)
+        $usulanInventarisQuery = UsulanPenghapusan::with([
                 'inventaris.ruangan.lokasi',
                 'inventaris.ruangan.skpd',
             ])
             ->where('status_usulan', 'diajukan')
-            ->when(! $scope->cakupanPenuh(), function ($q) use ($scope) {
-                $idLokasi = $scope->idLokasi() ?: [];
-                $q->where(function ($sub) use ($scope, $idLokasi) {
-                    $sub->whereHas('aset', fn ($a) => $scope->terapkan($a))
-                        ->orWhereHas('inventaris.ruangan', function ($r) use ($scope, $idLokasi) {
-                            if ($scope->isAdminUpt()) {
-                                if (empty($idLokasi)) {
-                                    $r->whereRaw('1 = 0');
-                                } else {
-                                    $r->whereIn('ruangan.id_lokasi', $idLokasi);
-                                }
-                            } elseif ($scope->isAdminBidang()) {
-                                $r->where('ruangan.id_lokasi', 1);
-                            }
-                        });
-                });
-            })
-            ->when($search !== '', fn ($q) => $q->where(function ($query) use ($search) {
-                $query->whereHas('aset.barang', fn ($b) => $b->where('nama_barang', 'like', "%{$search}%"))
-                    ->orWhereHas('aset.kendaraan', fn ($k) => $k->where('nama_kendaraan', 'like', "%{$search}%"))
-                    ->orWhereHas('aset', fn ($a) => $a->where('nomor_kartu_barang', 'like', "%{$search}%"))
-                    ->orWhereHas('inventaris', fn ($inv) => $inv->where('nama_barang', 'like', "%{$search}%")
-                        ->orWhere('kode_inventaris', 'like', "%{$search}%")
-                        ->orWhere('merk', 'like', "%{$search}%"));
-            }))
+            ->whereNotNull('id_inventaris');
+
+        if (! $scope->cakupanPenuh()) {
+            $idLokasi = $scope->idLokasi() ?: [];
+            $usulanInventarisQuery->whereHas('inventaris.ruangan', function ($r) use ($scope, $idLokasi) {
+                if ($scope->isAdminUpt()) {
+                    if (empty($idLokasi)) {
+                        $r->whereRaw('1 = 0');
+                    } else {
+                        $r->whereIn('ruangan.id_lokasi', $idLokasi);
+                    }
+                } elseif ($scope->isAdminBidang()) {
+                    $r->where('ruangan.id_lokasi', 1);
+                }
+            });
+        }
+
+        if ($search !== '') {
+            $usulanInventarisQuery->whereHas('inventaris', fn ($inv) => $inv->where('nama_barang', 'like', "%{$search}%")
+                ->orWhere('kode_inventaris', 'like', "%{$search}%")
+                ->orWhere('merk', 'like', "%{$search}%"));
+        }
+
+        $usulanInventarisList = $usulanInventarisQuery
             ->orderByDesc('id_usulan_hapus')
-            ->paginate(10)
+            ->paginate(10, ['*'], 'inv_page')
             ->withQueryString();
 
         // Aset berstatus aktif yang belum punya usulan aktif, difilter sesuai scope untuk dropdown modal.
@@ -116,7 +143,10 @@ class PenghapusanAsetController extends Controller
             })->count()
             : 0;
 
-        return view('penghapusan.index', compact('usulanList', 'asetAktifList', 'totalRiwayat'));
+        // Alias usulanList untuk kompatibilitas mundur dengan test dan helper yang ada
+        $usulanList = $usulanAsetList;
+
+        return view('penghapusan.index', compact('usulanAsetList', 'usulanInventarisList', 'usulanList', 'asetAktifList', 'totalRiwayat'));
     }
 
     /**
@@ -166,34 +196,68 @@ class PenghapusanAsetController extends Controller
 
     /**
      * Batalkan usulan (klik salah oleh staf): aset/inventaris kembali aktif, baris usulan dihapus.
+     * Untuk Aset Master: status aktif, kondisi Baik, pemegang aktif ditutup, penempatan aktif ditutup,
+     * lokasi dikosongkan (aset pool tanpa penempatan). Histori penempatan dan pemegang lama tetap dipertahankan.
+     * Untuk Inventaris Lokal: status aktif, ruangan tetap dipertahankan.
      */
     public function reaktifkan(UsulanPenghapusan $usulan)
     {
-        $aset = $usulan->aset;
-        $inventaris = $usulan->inventaris;
+        $today = now()->toDateString();
 
-        DB::transaction(function () use ($aset, $inventaris, $usulan) {
+        DB::transaction(function () use ($usulan, $today) {
+            $lockedUsulan = UsulanPenghapusan::whereKey($usulan->getKey())->lockForUpdate()->firstOrFail();
+
+            $aset = $lockedUsulan->id_aset
+                ? Aset::whereKey($lockedUsulan->id_aset)->lockForUpdate()->first()
+                : null;
+            $inventaris = $lockedUsulan->id_inventaris
+                ? InventarisRuangan::whereKey($lockedUsulan->id_inventaris)->lockForUpdate()->first()
+                : null;
+
             if ($aset) {
-                $aset->update(['status_aset' => 'aktif']);
+                // 1. Status aset kembali aktif dan kondisi kembali Baik
+                $aset->update([
+                    'status_aset' => 'aktif',
+                    'kondisi' => 'Baik',
+                ]);
+
+                // 2. Tutup pemegang aktif sebelumnya secara historis (jangan hapus riwayat)
+                PemegangAset::where('id_aset', $aset->id_aset)
+                    ->where('status', 'aktif')
+                    ->update([
+                        'status' => 'tidak aktif',
+                        'tanggal_selesai' => $today,
+                    ]);
+
+                // 3. Jika aset merupakan kendaraan, kosongkan teks pemegang pada tabel kendaraan
+                if ($aset->is_kendaraan) {
+                    $aset->kendaraan()->update(['pemegang' => null]);
+                }
+
+                // 4. Tutup penempatan aktif sebelumnya secara historis (jangan hapus riwayat)
+                PenempatanAset::where('id_aset', $aset->id_aset)
+                    ->where('status', 'aktif')
+                    ->update([
+                        'status' => 'tidak aktif',
+                        'tanggal_selesai' => $today,
+                    ]);
+
+                // 5. Kosongkan sinkronisasi lokasi fisik aset (aset pool siap dialokasikan)
+                AsetPenempatan::sinkronLokasiAset($aset, null);
             } elseif ($inventaris) {
+                // Perilaku Reaktif Inventaris Lokal: tetap mempertahankan ruangan dan status aktif
                 $inventaris->update(['status' => InventarisRuangan::STATUS_AKTIF]);
             }
 
-            $usulan->delete();
+            // Hapus record usulan yang dibatalkan
+            $lockedUsulan->delete();
         });
 
-        if ($inventaris) {
+        if ($usulan->id_inventaris) {
             return back()->with('success', 'Usulan dibatalkan dan inventaris lokal dikembalikan ke status aktif.');
         }
 
-        if ($aset && $aset->kondisi === UsulanPenghapusanService::KONDISI_RUSAK_BERAT) {
-            return back()->with(
-                'warning',
-                'Usulan dibatalkan dan aset kembali aktif. Kondisi aset masih "Rusak Berat" — perbarui kondisinya bila sudah diperbaiki, karena kondisi Rusak Berat akan mengusulkan penghapusan lagi.'
-            );
-        }
-
-        return back()->with('success', 'Usulan dibatalkan dan aset dikembalikan ke status aktif.');
+        return back()->with('success', 'Usulan dibatalkan dan aset master dikembalikan ke status aktif dengan kondisi Baik.');
     }
 
     /**

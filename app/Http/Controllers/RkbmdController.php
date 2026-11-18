@@ -8,6 +8,7 @@ use App\Models\MasterKegiatanRkbmd;
 use App\Models\MasterKodeBarangRkbmd;
 use App\Models\Skpd;
 use App\Models\UsulanRkbmd;
+use App\Services\RkbmdExportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -414,28 +415,58 @@ class RkbmdController extends Controller
     }
 
     /**
-     * Ekspor rekap usulan (.xlsx) mengikuti parameter export: jenis, bidang, tahun, status.
-     * Khusus hanya dapat diakses oleh Admin Aset dan Super Admin (403 jika diakses role lain).
-     * Format matriks komprehensif 31 kolom dalam 1 sheet berjenjang 2 baris header.
+     * Ekspor usulan RKBMD berbasis 5 template resmi Excel.
+     * Hak akses: Admin Aset, Super Admin, Admin Bidang, Admin UPT.
+     * Menggunakan template resmi tunggal per jenis usulan, pengelompokan 5 field, dan format dinamis.
      */
     public function export(Request $request)
     {
-        abort_unless($this->isAdmin(), 403, 'Akses ditolak. Fitur Export Excel RKBMD hanya dapat diakses oleh Admin Aset / Super Admin.');
+        $role = auth()->user()?->role?->nama_role;
+        $allowedRoles = ['Admin Aset', 'Super Admin', 'Admin Bidang', 'Admin UPT'];
+        abort_unless(in_array($role, $allowedRoles, true), 403, 'Akses ditolak. Fitur Ekspor RKBMD hanya dapat diakses oleh Admin Aset, Admin Bidang, atau Admin UPT.');
 
-        $query = $this->applyFilters($request);
+        $isAdmin = $this->isAdmin();
+        $query = UsulanRkbmd::with(['skpd', 'pegawai', 'kegiatan']);
 
-        // Seluruh usulan berstatus Draf tidak boleh ikut diekspor
-        $query->where('status_usulan', '!=', 'Draft');
-
-        // Filter "Jenis Usulan / Lampiran" (kode pendek atau label lengkap).
-        $jenisKode = $request->query('jenis');
-        if (isset(self::JENIS_KODE[$jenisKode])) {
-            $query->where('jenis_usulan', self::JENIS_KODE[$jenisKode]);
-        } elseif (in_array($jenisKode, self::JENIS, true)) {
-            $query->where('jenis_usulan', $jenisKode);
+        // Scope data berdasarkan peran
+        if ($isAdmin) {
+            $bidangIds = (array) $request->query('bidang', []);
+            $bidangIds = array_values(array_filter(array_map('intval', $bidangIds), fn ($x) => $x > 0));
+            if (count($bidangIds) > 0) {
+                $query->whereIn('id_skpd', $bidangIds);
+            }
+        } else {
+            $mySkpd = $this->userSkpd();
+            abort_unless($mySkpd, 403, 'Akun Anda tidak terhubung ke unit/SKPD manapun.');
+            // Kunci SKPD untuk non-admin, abaikan manipulasi parameter bidang pada URL
+            $query->where('id_skpd', $mySkpd->id_skpd);
+            $bidangIds = [$mySkpd->id_skpd];
         }
 
-        // Filter "Status Usulan" jika ada parameter status spesifik.
+        // Seluruh usulan berstatus Draft tidak boleh ikut diekspor
+        $query->where('status_usulan', '!=', 'Draft');
+
+        // Filter Tahun Anggaran
+        $tahun = (int) $request->query('tahun');
+        if ($tahun > 0) {
+            $query->where('tahun_anggaran', $tahun);
+        }
+
+        // Filter Jenis Usulan (pilihan salah satu dari 5 template resmi)
+        $jenisParam = (string) $request->query('jenis', 'pengadaan');
+        $jenisKey = strtolower(trim($jenisParam));
+        if (isset(self::JENIS_KODE[$jenisKey])) {
+            $query->where('jenis_usulan', self::JENIS_KODE[$jenisKey]);
+        } elseif (in_array($jenisParam, self::JENIS, true)) {
+            $key = array_search($jenisParam, self::JENIS_KODE, true);
+            $jenisKey = $key !== false ? $key : 'pengadaan';
+            $query->where('jenis_usulan', $jenisParam);
+        } else {
+            $jenisKey = 'pengadaan';
+            $query->where('jenis_usulan', 'Pengadaan');
+        }
+
+        // Filter Status Usulan (jika difilter spesifik)
         $statusKode = $request->query('status');
         if ($statusKode === 'disetujui') {
             $query->where('status_usulan', 'Disetujui Pengurus Barang');
@@ -445,21 +476,25 @@ class RkbmdController extends Controller
             $query->where('status_usulan', 'Ditolak');
         }
 
-        $rows = $query->with(['skpd', 'pegawai', 'approver.pegawai', 'kegiatan'])
-            ->orderBy('id_usulan')
-            ->get();
+        $rows = $query->orderBy('id_usulan')->get();
 
-        $spreadsheet = $this->buildExportSpreadsheet($rows);
+        try {
+            $exportService = app(RkbmdExportService::class);
+            $filterSkpd = ($isAdmin && count($bidangIds) === 1) ? Skpd::find($bidangIds[0]) : null;
+            $spreadsheet = $exportService->generateSpreadsheet(
+                $rows,
+                $jenisKey,
+                auth()->user(),
+                $filterSkpd,
+                $tahun > 0 ? $tahun : null
+            );
 
-        $namaFile = 'RKBMD_'
-            . self::labelJenis($jenisKode)
-            . '_'
-            . $this->labelBidang($request->query('bidang'))
-            . '_'
-            . ($request->query('tahun') ?: 'semua-tahun')
-            . '.xlsx';
+            $filename = $exportService->getExportFilename($jenisKey, $tahun > 0 ? $tahun : null);
 
-        return self::streamXlsx($spreadsheet, $namaFile);
+            return self::streamXlsx($spreadsheet, $filename);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
     }
 
     /**
@@ -589,15 +624,15 @@ class RkbmdController extends Controller
             $sheet->setCellValue("K{$rowNum}", $usulan->nama_sub_kegiatan ?: ($usulan->kegiatan?->nama_sub_kegiatan ?: '-'));
             $sheet->setCellValue("L{$rowNum}", $usulan->program_kegiatan ?: '-');
 
-            $sheet->setCellValueExplicit("M{$rowNum}", (string) $usulan->kode_barang, DataType::TYPE_STRING);
-            $sheet->setCellValue("N{$rowNum}", (string) $usulan->nama_barang);
+            $sheet->setCellValueExplicit("M{$rowNum}", (string) ($usulan->kode_barang ?? ''), DataType::TYPE_STRING);
+            $sheet->setCellValue("N{$rowNum}", (string) ($usulan->nama_barang ?? ''));
             $sheet->setCellValue("O{$rowNum}", $usulan->spesifikasi ?: '-');
-            $sheet->setCellValue("P{$rowNum}", (int) $usulan->jumlah);
-            $sheet->setCellValue("Q{$rowNum}", (string) $usulan->satuan);
+            $sheet->setCellValue("P{$rowNum}", $usulan->jumlah !== null ? (int) $usulan->jumlah : '');
+            $sheet->setCellValue("Q{$rowNum}", (string) ($usulan->satuan ?? ''));
 
-            $sheet->setCellValue("R{$rowNum}", (int) ($usulan->kebutuhan_maksimum ?? 0));
-            $sheet->setCellValue("S{$rowNum}", (int) ($usulan->kebutuhan_riil ?? 0));
-            $sheet->setCellValue("T{$rowNum}", (string) $usulan->satuan);
+            $sheet->setCellValue("R{$rowNum}", $usulan->kebutuhan_maksimum !== null ? (int) $usulan->kebutuhan_maksimum : '-');
+            $sheet->setCellValue("S{$rowNum}", $usulan->kebutuhan_riil !== null ? (int) $usulan->kebutuhan_riil : '-');
+            $sheet->setCellValue("T{$rowNum}", (string) ($usulan->satuan ?? ''));
 
             // Barang Optimalisasi
             $opt = $usulan->barang_optimalisasi;
@@ -897,21 +932,22 @@ class RkbmdController extends Controller
             // Master Kegiatan terintegrasi: id_kegiatan wajib valid untuk usulan baru
             'id_kegiatan' => $idKegiatanRules,
             'program_kegiatan' => ['nullable', 'string', 'max:500'],
-            'nama_barang' => ['required', 'string', 'max:255'],
-            // Kode Barang wajib; diisi otomatis dari master barang.
-            'kode_barang' => ['required', 'string', 'max:50'],
+            'nama_barang' => ['nullable', 'string', 'max:255'],
+            // Kode Barang opsional; diisi otomatis jika memilih master barang.
+            'kode_barang' => ['nullable', 'string', 'max:50'],
             'spesifikasi' => ['nullable', 'string', 'max:1000'],
-            'jumlah' => ['required', 'integer', 'min:1'],
-            'satuan' => ['required', 'string', 'max:50'],
-            // Kebutuhan Maksimum & Riil wajib (bagian Optimalisasi).
-            'kebutuhan_maksimum' => ['required', 'integer', 'min:0'],
-            'kebutuhan_riil' => ['required', 'integer', 'min:0'],
+            'jumlah' => ['nullable', 'integer', 'min:1'],
+            'satuan' => ['nullable', 'string', 'max:50'],
+            // Kebutuhan Maksimum & Riil opsional (bagian Optimalisasi).
+            'kebutuhan_maksimum' => ['nullable', 'integer', 'min:0'],
+            'kebutuhan_riil' => ['nullable', 'integer', 'min:0'],
             // Bagian "Barang yang Dapat Dioptimalkan" opsional seluruhnya.
             'opt_kode' => ['nullable', 'string', 'max:50'],
             'opt_nama' => ['nullable', 'string', 'max:255'],
             'opt_jumlah' => ['nullable', 'integer', 'min:1'],
             'opt_satuan' => ['nullable', 'string', 'max:50'],
-            'alasan_kebutuhan' => ['required', 'string', 'max:2000'],
+            // Alasan kebutuhan / keterangan bersifat opsional.
+            'alasan_kebutuhan' => ['nullable', 'string', 'max:2000'],
         ];
 
         if ($isAdmin) {
@@ -946,6 +982,14 @@ class RkbmdController extends Controller
         ] : null;
 
         unset($data['opt_kode'], $data['opt_nama'], $data['opt_jumlah'], $data['opt_satuan']);
+
+        // Pastikan field opsional usulan bernilai null eksplisit jika kosong/tidak diisi
+        $data['nama_barang'] = $data['nama_barang'] ?? null;
+        $data['kode_barang'] = $data['kode_barang'] ?? null;
+        $data['jumlah'] = isset($data['jumlah']) && $data['jumlah'] !== '' ? (int) $data['jumlah'] : null;
+        $data['satuan'] = ! empty($data['satuan']) ? $data['satuan'] : null;
+        $data['kebutuhan_maksimum'] = isset($data['kebutuhan_maksimum']) && $data['kebutuhan_maksimum'] !== '' ? (int) $data['kebutuhan_maksimum'] : null;
+        $data['kebutuhan_riil'] = isset($data['kebutuhan_riil']) && $data['kebutuhan_riil'] !== '' ? (int) $data['kebutuhan_riil'] : null;
 
         return $data;
     }

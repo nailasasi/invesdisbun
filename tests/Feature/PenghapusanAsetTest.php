@@ -3,9 +3,13 @@
 namespace Tests\Feature;
 
 use App\Models\Aset;
+use App\Models\InventarisRuangan;
+use App\Models\Kendaraan;
 use App\Models\Lokasi;
 use App\Models\MasterBarang;
 use App\Models\Pegawai;
+use App\Models\PemegangAset;
+use App\Models\PenempatanAset;
 use App\Models\RiwayatPenghapusan;
 use App\Models\Role;
 use App\Models\Ruangan;
@@ -644,5 +648,212 @@ class PenghapusanAsetTest extends TestCase
         $this->assertSame('Kendaraan', $riwayat->jenis_aset_tampil);
         $this->assertSame('Rp 350.000.000', $riwayat->nilai_perolehan_tampil);
         $this->assertSame('2026-11-02 14:30:00', $riwayat->waktu_penghapusan->format('Y-m-d H:i:s'));
+    }
+
+    /** 18. Reaktif Aset Master: status aktif, kondisi Baik, pemegang & penempatan aktif ditutup, riwayat dipertahankan */
+    public function test_18_reaktifkan_aset_master_sukses_dan_membersihkan_relasi_aktif(): void
+    {
+        $ruangan = Ruangan::create([
+            'nama_ruangan' => 'Ruang Uji Reaktif ' . uniqid(),
+            'id_skpd' => $this->skpdDinas->id_skpd,
+            'id_lokasi' => $this->lokasiDinas->id_lokasi,
+            'status' => 'Aktif',
+        ]);
+
+        $aset = $this->buatAsetDenganLokasi($this->skpdDinas, $this->lokasiDinas, 'aktif', 'Baik', 'Laptop Reaktif Test');
+
+        // Beri pemegang aktif
+        $pemegang = PemegangAset::create([
+            'id_aset' => $aset->id_aset,
+            'id_pegawai' => $this->pegawai->id_pegawai,
+            'tanggal_mulai' => '2026-01-01',
+            'status' => 'aktif',
+        ]);
+
+        // Beri penempatan aktif
+        $penempatan = PenempatanAset::create([
+            'id_aset' => $aset->id_aset,
+            'id_ruangan' => $ruangan->id_ruangan,
+            'tanggal_mulai' => '2026-01-01',
+            'status' => 'aktif',
+            'is_finalized' => 1,
+        ]);
+
+        // Simulasikan aset masuk usulan penghapusan (kondisi Rusak Berat, status diusulkan_hapus)
+        $aset->update([
+            'status_aset' => 'diusulkan_hapus',
+            'kondisi' => 'Rusak Berat',
+        ]);
+
+        $usulan = UsulanPenghapusan::create([
+            'id_aset' => $aset->id_aset,
+            'id_pegawai_penghapus' => $this->adminAset->pegawai->id_pegawai,
+            'tanggal_usulan' => now()->toDateString(),
+            'alasan_penghapusan' => 'Rusak Berat',
+            'status_usulan' => 'diajukan',
+        ]);
+
+        // Eksekusi Re-Aktifkan oleh Admin Aset
+        $this->loginSebagai($this->adminAset);
+        $response = $this->post(route('penghapusan.reaktifkan', $usulan->id_usulan_hapus));
+
+        $response->assertRedirect();
+        $response->assertSessionHas('success');
+        $response->assertSessionMissing('warning');
+
+        // Verifikasi aset
+        $freshAset = $aset->fresh();
+        $this->assertSame('aktif', $freshAset->status_aset);
+        $this->assertSame('Baik', $freshAset->kondisi);
+        $this->assertNull($freshAset->id_lokasi);
+
+        // Verifikasi bahwa pemegangSaatIni dan penempatanAktif bernilai null
+        $this->assertNull($freshAset->pemegangSaatIni);
+        $this->assertNull($freshAset->penempatanAktif);
+
+        // Verifikasi histori pemegang lama tetap tersimpan tapi tidak aktif
+        $freshPemegang = $pemegang->fresh();
+        $this->assertSame('tidak aktif', $freshPemegang->status);
+        $this->assertNotNull($freshPemegang->tanggal_selesai);
+
+        // Verifikasi histori penempatan lama tetap tersimpan tapi tidak aktif
+        $freshPenempatan = $penempatan->fresh();
+        $this->assertSame('tidak aktif', $freshPenempatan->status);
+        $this->assertNotNull($freshPenempatan->tanggal_selesai);
+
+        // Verifikasi usulan terhapus
+        $this->assertDatabaseMissing('usulan_penghapusan', [
+            'id_usulan_hapus' => $usulan->id_usulan_hapus,
+        ]);
+    }
+
+    /** 19. Reaktif Kendaraan: pemegang teks pada tabel kendaraan ikut dikosongkan */
+    public function test_19_reaktifkan_kendaraan_mengosongkan_pemegang_kendaraan(): void
+    {
+        $aset = $this->buatAsetDenganLokasi($this->skpdDinas, $this->lokasiDinas, 'diusulkan_hapus', 'Rusak Berat', 'Mobil Operasional Test');
+        $aset->update(['is_kendaraan' => true]);
+
+        $kendaraan = Kendaraan::create([
+            'id_aset' => $aset->id_aset,
+            'nama_kendaraan' => 'Avanza Test',
+            'jenis_kendaraan' => 'Mobil',
+            'merk' => 'Toyota',
+            'tipe' => 'G',
+            'pemegang' => 'Pegawai Lama',
+            'nomor_rangka' => 'MHK123' . uniqid(),
+            'nomor_mesin' => '1NR456' . uniqid(),
+        ]);
+
+        $usulan = UsulanPenghapusan::create([
+            'id_aset' => $aset->id_aset,
+            'id_pegawai_penghapus' => $this->adminAset->pegawai->id_pegawai,
+            'tanggal_usulan' => now()->toDateString(),
+            'alasan_penghapusan' => 'Rusak Berat',
+            'status_usulan' => 'diajukan',
+        ]);
+
+        $this->loginSebagai($this->adminAset);
+        $response = $this->post(route('penghapusan.reaktifkan', $usulan->id_usulan_hapus));
+
+        $response->assertRedirect();
+        $response->assertSessionHas('success');
+
+        $this->assertSame('aktif', $aset->fresh()->status_aset);
+        $this->assertSame('Baik', $aset->fresh()->kondisi);
+        $this->assertNull($kendaraan->fresh()->pemegang);
+    }
+
+    /** 20. Reaktif Inventaris Lokal: status kembali aktif, ruangan tetap dipertahankan */
+    public function test_20_reaktifkan_inventaris_lokal_mempertahankan_ruangan(): void
+    {
+        $ruangan = Ruangan::create([
+            'nama_ruangan' => 'Ruang Inventaris ' . uniqid(),
+            'id_skpd' => $this->skpdDinas->id_skpd,
+            'id_lokasi' => $this->lokasiDinas->id_lokasi,
+            'status' => 'Aktif',
+        ]);
+
+        $inv = InventarisRuangan::create([
+            'id_ruangan' => $ruangan->id_ruangan,
+            'kode_inventaris' => 'INV-TEST-' . uniqid(),
+            'nama_barang' => 'Dispenser Ruang Uji',
+            'kondisi' => 'Rusak Berat',
+            'status' => InventarisRuangan::STATUS_DIUSULKAN_HAPUS,
+        ]);
+
+        $usulan = UsulanPenghapusan::create([
+            'id_aset' => null,
+            'id_inventaris' => $inv->id_inventaris,
+            'id_pegawai_penghapus' => $this->adminAset->pegawai->id_pegawai,
+            'tanggal_usulan' => now()->toDateString(),
+            'alasan_penghapusan' => 'Rusak Berat',
+            'status_usulan' => 'diajukan',
+        ]);
+
+        $this->loginSebagai($this->adminAset);
+        $response = $this->post(route('penghapusan.reaktifkan', $usulan->id_usulan_hapus));
+
+        $response->assertRedirect();
+        $response->assertSessionHas('success');
+
+        $freshInv = $inv->fresh();
+        $this->assertSame(InventarisRuangan::STATUS_AKTIF, $freshInv->status);
+        $this->assertSame($ruangan->id_ruangan, $freshInv->id_ruangan);
+
+        $this->assertDatabaseMissing('usulan_penghapusan', [
+            'id_usulan_hapus' => $usulan->id_usulan_hapus,
+        ]);
+    }
+
+    /** 21. Halaman index menampilkan dua tabel terpisah dan mendukung paginasi independen */
+    public function test_21_halaman_index_memisahkan_dua_tabel_dan_paginasi_independen(): void
+    {
+        $ruangan = Ruangan::create([
+            'nama_ruangan' => 'Ruang Index Test ' . uniqid(),
+            'id_skpd' => $this->skpdDinas->id_skpd,
+            'id_lokasi' => $this->lokasiDinas->id_lokasi,
+            'status' => 'Aktif',
+        ]);
+
+        $aset = $this->buatAsetDenganLokasi($this->skpdDinas, $this->lokasiDinas, 'diusulkan_hapus', 'Rusak Berat', 'Komputer Server Khusus');
+        $usulanAset = $this->buatUsulan($aset, $this->adminAset);
+
+        $inv = InventarisRuangan::create([
+            'id_ruangan' => $ruangan->id_ruangan,
+            'kode_inventaris' => 'INV-SEP-' . uniqid(),
+            'nama_barang' => 'Kipas Angin Dinding Ruang',
+            'kondisi' => 'Rusak Berat',
+            'status' => InventarisRuangan::STATUS_DIUSULKAN_HAPUS,
+        ]);
+        $usulanInv = UsulanPenghapusan::create([
+            'id_aset' => null,
+            'id_inventaris' => $inv->id_inventaris,
+            'id_pegawai_penghapus' => $this->adminAset->pegawai->id_pegawai,
+            'tanggal_usulan' => now()->toDateString(),
+            'alasan_penghapusan' => 'Rusak Berat',
+            'status_usulan' => 'diajukan',
+        ]);
+
+        $this->loginSebagai($this->adminAset);
+        $response = $this->get(route('penghapusan.index', ['aset_page' => 1, 'inv_page' => 1]));
+
+        $response->assertOk();
+        $response->assertViewHas('usulanAsetList');
+        $response->assertViewHas('usulanInventarisList');
+
+        $asetList = $response->viewData('usulanAsetList');
+        $invList = $response->viewData('usulanInventarisList');
+
+        // Usulan Aset Master ada di tabel 1, tidak ada di tabel 2
+        $this->assertTrue($asetList->pluck('id_usulan_hapus')->contains($usulanAset->id_usulan_hapus));
+        $this->assertFalse($invList->pluck('id_usulan_hapus')->contains($usulanAset->id_usulan_hapus));
+
+        // Usulan Inventaris Lokal ada di tabel 2, tidak ada di tabel 1
+        $this->assertTrue($invList->pluck('id_usulan_hapus')->contains($usulanInv->id_usulan_hapus));
+        $this->assertFalse($asetList->pluck('id_usulan_hapus')->contains($usulanInv->id_usulan_hapus));
+
+        // Teks header kedua tabel muncul di view
+        $response->assertSee('Usulan Penghapusan Aset Master');
+        $response->assertSee('Usulan Penghapusan Inventaris Lokal Ruangan');
     }
 }

@@ -61,18 +61,15 @@ class RkbmdDetailOtorisasiTest extends TestCase
     {
         $role = $this->buatRole($roleNama);
 
-        $pegawai = null;
-        if ($skpd) {
-            $pegawai = Pegawai::create([
-                'nip' => '8' . random_int(10000000, 99999999),
-                'nama_pegawai' => 'Pegawai ' . $username,
-                'jabatan' => 'Staff ' . $roleNama,
-                'id_skpd' => $skpd->id_skpd,
-            ]);
-        }
+        $pegawai = Pegawai::create([
+            'nip' => '8' . random_int(10000000, 99999999),
+            'nama_pegawai' => 'Pegawai ' . $username,
+            'jabatan' => 'Staff ' . $roleNama,
+            'id_skpd' => $skpd?->id_skpd,
+        ]);
 
         return User::create([
-            'id_pegawai' => $pegawai?->id_pegawai,
+            'id_pegawai' => $pegawai->id_pegawai,
             'id_role' => $role->id_role,
             'username' => $username,
             'password' => self::PASSWORD,
