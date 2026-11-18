@@ -60,7 +60,24 @@ class ManajemenPegawaiRefactorTest extends TestCase
 
     private function getAdminUpt(): User
     {
-        return User::whereHas('role', fn ($q) => $q->where('nama_role', 'Admin UPT'))->firstOrFail();
+        $role = Role::where('nama_role', 'Admin UPT')->firstOrFail();
+        $user = User::where('id_role', $role->id_role)
+            ->whereHas('pegawai', fn ($q) => $q->where('id_skpd', 6))
+            ->first();
+
+        if (! $user) {
+            $peg = Pegawai::firstOrCreate(
+                ['nip' => '198001012000011006'],
+                ['nama_pegawai' => 'Admin UPT P2BTP Test', 'jabatan' => 'Admin TU', 'id_skpd' => 6]
+            );
+
+            $user = User::firstOrCreate(
+                ['username' => 'admin_p2btp_test'],
+                ['id_pegawai' => $peg->id_pegawai, 'id_role' => $role->id_role, 'password' => bcrypt('password123'), 'status_user' => 'aktif']
+            );
+        }
+
+        return $user;
     }
 
     private function getPegawaiUser(): User
@@ -1119,7 +1136,7 @@ class ManajemenPegawaiRefactorTest extends TestCase
     }
 
     /**
-     * 26. Unduh template Excel pegawai berhasil dan memiliki header kolom baku.
+     * 26. Unduh template Excel pegawai berhasil dan memiliki header kolom baku serta petunjuk pengisian.
      */
     public function test_26_download_template_excel_pegawai_berhasil_dan_header_sesuai(): void
     {
@@ -1131,6 +1148,24 @@ class ManajemenPegawaiRefactorTest extends TestCase
         $this->assertTrue(
             str_contains((string) $response->headers->get('content-disposition'), 'Template-Data-Pegawai.xlsx')
         );
+
+        $tmpFile = tempnam(sys_get_temp_dir(), 'tpl_peg_') . '.xlsx';
+        file_put_contents($tmpFile, $response->streamedContent());
+        $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($tmpFile);
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // Baris 1: Judul petunjuk
+        $this->assertSame('PETUNJUK PENGISIAN IMPORT DATA PEGAWAI', $sheet->getCell('A1')->getValue());
+        // Baris 9: Header tabel dengan bintang pada kolom wajib
+        $this->assertSame('NIP *', $sheet->getCell('A9')->getValue());
+        $this->assertSame('Nama Pegawai *', $sheet->getCell('B9')->getValue());
+        $this->assertSame('Jabatan *', $sheet->getCell('C9')->getValue());
+        $this->assertSame('Nama SKPD *', $sheet->getCell('D9')->getValue());
+        $this->assertSame('Nama Ruangan', $sheet->getCell('E9')->getValue());
+        // Baris 10: Data contoh
+        $this->assertSame('CONTOH - 198001012006041001', $sheet->getCell('A10')->getValue());
+
+        @unlink($tmpFile);
     }
 
     /**
@@ -1342,5 +1377,149 @@ class ManajemenPegawaiRefactorTest extends TestCase
         $peg = Pegawai::where('nip', $nipDenganNol)->firstOrFail();
         $this->assertSame($nipDenganNol, $peg->nip);
         $this->assertTrue(str_starts_with($peg->nip, '0'));
+    }
+
+    /**
+     * 33. Import Excel mentoleransi ejaan KBBI 'Pengolahan' (pada master 'Pengelolahan') dan spasi ganda.
+     */
+    public function test_33_import_excel_toleransi_ejaan_skpd_pengolahan_dan_spasi_ganda(): void
+    {
+        $admin = $this->getAdminAset();
+        $this->actingAs($admin);
+
+        $nipTest = '199707072027011033';
+        // Ketik "Bidang Pengolahan dan Pemasaran Hasil" (ejaan KBBI pakai 'o') dengan spasi ganda di tengah
+        $rows = [
+            [$nipTest, 'Pegawai Toleransi SKPD', 'Analis', 'Bidang  Pengolahan   dan Pemasaran Hasil', ''],
+        ];
+
+        $file = $this->buatExcelPegawai($rows);
+
+        $response = $this->post(route('master-data.pegawai.import'), [
+            'file' => $file,
+            'mode' => 'skip',
+        ]);
+
+        $response->assertSessionHas('success');
+        $this->assertDatabaseHas('pegawai', [
+            'nip' => $nipTest,
+            'id_skpd' => 3, // SKPD 'Bidang Pengelolahan dan Pemasaran Hasil'
+        ]);
+    }
+
+    /**
+     * 34. Import Excel mentoleransi nama ruangan pendek tanpa teks di dalam tanda kurung.
+     */
+    public function test_34_import_excel_toleransi_nama_ruangan_pendek_tanpa_tanda_kurung(): void
+    {
+        $admin = $this->getAdminAset();
+        $this->actingAs($admin);
+
+        // Di DB: 'Ruang Kepala Bidang 1 (Bidang Pengolahan dan Pemasaran Hasil)' (id_skpd = 3)
+        $ruangDb = Ruangan::where('id_ruangan', 19)->firstOrFail();
+        $nipTest = '199808082028011034';
+
+        // Pengguna mengetik nama pendek tanpa tanda kurung: "Ruang Kepala Bidang 1"
+        $rows = [
+            [$nipTest, 'Pegawai Ruang Pendek', 'Kabid', 'Bidang Pengelolahan dan Pemasaran Hasil', 'Ruang Kepala Bidang 1'],
+        ];
+
+        $file = $this->buatExcelPegawai($rows);
+
+        $response = $this->post(route('master-data.pegawai.import'), [
+            'file' => $file,
+            'mode' => 'skip',
+        ]);
+
+        $response->assertSessionHas('success');
+        $this->assertDatabaseHas('pegawai', [
+            'nip' => $nipTest,
+            'id_ruangan' => $ruangDb->id_ruangan,
+        ]);
+    }
+
+    /**
+     * 35. Import Excel: kolom Nama Ruangan yang dikosongkan tersimpan sebagai null.
+     */
+    public function test_35_import_excel_ruangan_kosong_tersimpan_sebagai_null(): void
+    {
+        $admin = $this->getAdminAset();
+        $this->actingAs($admin);
+
+        $nipTest = '199909092029011035';
+        $rows = [
+            [$nipTest, 'Pegawai Tanpa Ruangan', 'Staf Lapangan', 'Sekretariat', ''],
+        ];
+
+        $file = $this->buatExcelPegawai($rows);
+
+        $response = $this->post(route('master-data.pegawai.import'), [
+            'file' => $file,
+            'mode' => 'skip',
+        ]);
+
+        $response->assertSessionHas('success');
+        $this->assertDatabaseHas('pegawai', [
+            'nip' => $nipTest,
+            'id_ruangan' => null,
+        ]);
+    }
+
+    /**
+     * 36. End-to-end: Berkas dari downloadTemplate() yang diisi data di baris 11 berhasil diimpor sempurna.
+     */
+    public function test_36_import_menggunakan_template_asli_download_berhasil_diimpor(): void
+    {
+        $admin = $this->getAdminAset();
+        $this->actingAs($admin);
+
+        // 1. Download template
+        $responseDownload = $this->get(route('master-data.pegawai.template'));
+        $tmpFile = tempnam(sys_get_temp_dir(), 'tpl_e2e_') . '.xlsx';
+        file_put_contents($tmpFile, $responseDownload->streamedContent());
+
+        // 2. Isi data nyata di baris 11
+        $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($tmpFile);
+        $sheet = $spreadsheet->getActiveSheet();
+
+        $nipTest = '198706052014021099';
+        $sheet->setCellValueExplicit('A11', $nipTest, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        $sheet->setCellValueExplicit('B11', 'Pegawai Dari Template Asli', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        $sheet->setCellValueExplicit('C11', 'Pranata Komputer', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        $sheet->setCellValueExplicit('D11', 'Sekretariat', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        $sheet->setCellValueExplicit('E11', 'Ruang Aset', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $writer->save($tmpFile);
+
+        // 3. Upload berkas hasil pengisian
+        $uploadedFile = new \Illuminate\Http\UploadedFile(
+            $tmpFile,
+            'Template-Data-Pegawai.xlsx',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            null,
+            true
+        );
+
+        $responseImport = $this->post(route('master-data.pegawai.import'), [
+            'file' => $uploadedFile,
+            'mode' => 'skip',
+        ]);
+
+        $responseImport->assertSessionHas('success');
+        $summary = session('import_summary');
+        $this->assertEquals(1, $summary['created']);
+        $this->assertEquals(0, $summary['failed']);
+
+        $ruangAset = Ruangan::where('nama_ruangan', 'Ruang Aset')->firstOrFail();
+        $this->assertDatabaseHas('pegawai', [
+            'nip' => $nipTest,
+            'nama_pegawai' => 'Pegawai Dari Template Asli',
+            'jabatan' => 'Pranata Komputer',
+            'id_skpd' => 1,
+            'id_ruangan' => $ruangAset->id_ruangan,
+        ]);
+
+        @unlink($tmpFile);
     }
 }

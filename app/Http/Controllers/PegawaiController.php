@@ -50,7 +50,7 @@ class PegawaiController extends Controller
      * Judul kolom template import data pegawai (urutan baku).
      */
     private const KOLOM_TEMPLATE = [
-        'NIP', 'Nama Pegawai', 'Jabatan', 'Nama SKPD', 'Nama Ruangan',
+        'NIP *', 'Nama Pegawai *', 'Jabatan *', 'Nama SKPD *', 'Nama Ruangan',
     ];
 
     public function __construct(
@@ -467,7 +467,7 @@ class PegawaiController extends Controller
     }
 
     /**
-     * Unduh template Excel baku isian data pegawai.
+     * Unduh template Excel baku isian data pegawai (1 worksheet + petunjuk pengisian di atas).
      */
     public function downloadTemplate()
     {
@@ -480,20 +480,39 @@ class PegawaiController extends Controller
         // Pastikan kolom A (NIP) diformat sebagai Text (@) agar 0 di depan tidak hilang
         $sheet->getStyle('A:A')->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
 
-        $sheet->fromArray(self::KOLOM_TEMPLATE, null, 'A1');
+        // Petunjuk Pengisian di bagian atas sheet (Baris 1 - 7)
+        $sheet->setCellValue('A1', 'PETUNJUK PENGISIAN IMPORT DATA PEGAWAI');
+        $sheet->setCellValue('A2', '1. Kolom Wajib (*): NIP, Nama Pegawai, Jabatan, dan Nama SKPD wajib diisi.');
+        $sheet->setCellValue('A3', '2. Format NIP: Ketik angka NIP secara utuh tanpa spasi. Kolom telah diformat sebagai teks agar angka 0 di depan tidak hilang.');
+        $sheet->setCellValue('A4', '3. Nama SKPD (Unit Kerja): Harus sesuai dengan nama resmi di sistem (Sekretariat, Bidang Produksi Tanaman Semusim, Bidang Produksi Tanaman Tahunan, Bidang Perlindungan Perkebunan, Bidang Pengelolahan dan Pemasaran Hasil, UPT P2BTP, atau UPT PSBP).');
+        $sheet->setCellValue('A5', '4. Keunikan Data: NIP harus unik di dalam sistem. Baris dengan NIP duplikat akan dilewati atau diperbarui sesuai mode import yang dipilih.');
+        $sheet->setCellValue('A6', '5. Penempatan & Nama Ruangan: Kolom Nama Ruangan bersifat opsional (boleh dikosongkan saat import dan diatur belakangan melalui menu Edit Pegawai). Jika ingin langsung diisi, penamaannya WAJIB disamakan persis dengan nama ruangan yang terdaftar pada menu "Aset Ruangan" di website sesuai SKPD terkait.');
+        $sheet->setCellValue('A7', '6. Baris Contoh: Baris yang diawali dengan kata "CONTOH -" akan otomatis dilewati oleh sistem saat proses import berlangsung.');
 
-        // Baris contoh — dilewati otomatis saat import (mengandung "CONTOH").
-        $sheet->setCellValueExplicit('A2', 'CONTOH - 198001012006041001', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-        $sheet->setCellValueExplicit('B2', 'CONTOH - Budi Santoso, S.P.', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-        $sheet->setCellValueExplicit('C2', 'Kepala Bidang', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-        $sheet->setCellValueExplicit('D2', 'CONTOH - Sekretariat', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-        $sheet->setCellValueExplicit('E2', 'CONTOH - Ruang Kepala', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        // Styling Petunjuk
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(11)->getColor()->setRGB('0F5132');
+        $sheet->getStyle('A2:A7')->getFont()->setSize(9)->setItalic(true)->getColor()->setRGB('334155');
 
-        $sheet->getStyle('A1:E1')->applyFromArray([
+        // Baris 8 dibiarkan kosong sebagai jeda pemisah
+
+        // Baris Header Tabel pada Baris 9
+        $sheet->fromArray(self::KOLOM_TEMPLATE, null, 'A9');
+
+        // Baris Contoh pada Baris 10 (Dilewati otomatis saat import karena mengandung penanda 'CONTOH')
+        $sheet->setCellValueExplicit('A10', 'CONTOH - 198001012006041001', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        $sheet->setCellValueExplicit('B10', 'CONTOH - Budi Santoso, S.P.', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        $sheet->setCellValueExplicit('C10', 'Kepala Bidang', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        $sheet->setCellValueExplicit('D10', 'CONTOH - Sekretariat', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        $sheet->setCellValueExplicit('E10', 'CONTOH - Ruang Kepala Dinas', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+
+        // Styling Header Tabel (A9:E9)
+        $sheet->getStyle('A9:E9')->applyFromArray([
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '047857']],
-            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '0F5132']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
         ]);
+        $sheet->getRowDimension(9)->setRowHeight(28);
+        $sheet->getRowDimension(10)->setRowHeight(20);
 
         foreach (range('A', 'E') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
@@ -725,7 +744,7 @@ class PegawaiController extends Controller
     }
 
     /**
-     * Ambil nilai sel sebagai string (trim), aman bila kolom tak dipetakan.
+     * Ambil nilai sel sebagai string (trim dan normalisasi spasi ganda), aman bila kolom tak dipetakan.
      * Mencegah konversi notasi ilmiah Excel (mis. 1.98001E+17).
      */
     private function importCell(array $row, string $letter): string
@@ -744,7 +763,21 @@ class PegawaiController extends Controller
             return sprintf('%.0f', (float) $raw);
         }
 
-        return trim((string) $raw);
+        return trim((string) preg_replace('/\s+/', ' ', (string) $raw));
+    }
+
+    /**
+     * Normalisasi teks input import: trim dan reduksi spasi ganda menjadi spasi tunggal lowercase.
+     */
+    private function normalizeImportText(?string $text): string
+    {
+        if ($text === null) {
+            return '';
+        }
+
+        $collapsed = preg_replace('/\s+/', ' ', trim($text));
+
+        return mb_strtolower((string) $collapsed);
     }
 
     /**
@@ -763,13 +796,23 @@ class PegawaiController extends Controller
 
     /**
      * Cari SKPD berdasarkan nama, dibatasi SKPD yang boleh dikelola aktor.
+     * Mendukung toleransi spasi ganda, case-insensitive, dan variasi ejaan 'pengolahan' / 'pengelolahan'.
      */
     private function resolveSkpdImport(string $nama): ?object
     {
-        $target = mb_strtolower(trim($nama));
+        $target = $this->normalizeImportText($nama);
+        if ($target === '') {
+            return null;
+        }
+
+        // Normalisasi kanonikal untuk variasi ejaan 'pengolahan' vs 'pengelolahan'
+        $canonicalTarget = str_replace('pengolahan', 'pengelolahan', $target);
 
         foreach ($this->scope->skpdBolehDipilih() as $skpd) {
-            if (mb_strtolower(trim((string) $skpd->nama_skpd)) === $target) {
+            $skpdNama = $this->normalizeImportText((string) $skpd->nama_skpd);
+            $skpdCanonical = str_replace('pengolahan', 'pengelolahan', $skpdNama);
+
+            if ($skpdNama === $target || $skpdCanonical === $canonicalTarget) {
                 return $skpd;
             }
         }
@@ -780,35 +823,63 @@ class PegawaiController extends Controller
     /**
      * Cari id_ruangan berdasarkan nama untuk SKPD terpilih.
      * Mengembalikan id (int), false bila tidak ketemu / ambigu / tidak sesuai lokasi SKPD.
+     * Mendukung toleransi spasi ganda, case-insensitive, dan nama tanpa teks tanda kurung.
      */
     private function resolveRuanganImport(int $idSkpd, string $nama): int|false
     {
-        $target = mb_strtolower(trim($nama));
+        $target = $this->normalizeImportText($nama);
+        if ($target === '') {
+            return false;
+        }
+
         $lokasiId = Lokasi::untukSkpd($idSkpd)?->id_lokasi;
 
-        $matches = Ruangan::query()
+        $candidates = Ruangan::query()
             ->where(function ($q) use ($lokasiId) {
                 $q->whereNull('id_skpd');
                 if ($lokasiId !== null) {
                     $q->orWhere('id_lokasi', $lokasiId);
                 }
             })
-            ->get(['id_ruangan', 'nama_ruangan', 'id_skpd', 'id_lokasi'])
-            ->filter(fn ($r) => mb_strtolower(trim((string) $r->nama_ruangan)) === $target)
-            ->values();
+            ->get(['id_ruangan', 'nama_ruangan', 'id_skpd', 'id_lokasi']);
 
-        if ($matches->isEmpty()) {
-            return false;
+        // 1. Pencocokan eksak (setelah normalisasi spasi ganda dan lowercase)
+        $exactMatches = $candidates->filter(
+            fn ($r) => $this->normalizeImportText((string) $r->nama_ruangan) === $target
+        )->values();
+
+        if ($exactMatches->count() === 1) {
+            return (int) $exactMatches->first()->id_ruangan;
         }
 
-        if ($matches->count() === 1) {
-            return (int) $matches->first()->id_ruangan;
+        if ($exactMatches->count() > 1) {
+            // Bila terdapat nama ruangan kembar di lokasi yang sama, utamakan yang terikat langsung ke SKPD ini
+            $spesifik = $exactMatches->filter(fn ($r) => (int) $r->id_skpd === $idSkpd);
+            if ($spesifik->count() === 1) {
+                return (int) $spesifik->first()->id_ruangan;
+            }
+
+            return false; // Ambigu
         }
 
-        // Bila terdapat nama ruangan kembar di lokasi yang sama, utamakan yang terikat langsung ke SKPD ini
-        $spesifik = $matches->filter(fn ($r) => (int) $r->id_skpd === $idSkpd);
-        if ($spesifik->count() === 1) {
-            return (int) $spesifik->first()->id_ruangan;
+        // 2. Fallback: pencocokan terhadap nama ruangan yang dibersihkan dari teks di dalam tanda kurung
+        $strippedMatches = $candidates->filter(function ($r) use ($target) {
+            $cleanName = preg_replace('/\s*\([^)]*\)/', '', (string) $r->nama_ruangan);
+
+            return $this->normalizeImportText($cleanName) === $target;
+        })->values();
+
+        if ($strippedMatches->count() === 1) {
+            return (int) $strippedMatches->first()->id_ruangan;
+        }
+
+        if ($strippedMatches->count() > 1) {
+            $spesifik = $strippedMatches->filter(fn ($r) => (int) $r->id_skpd === $idSkpd);
+            if ($spesifik->count() === 1) {
+                return (int) $spesifik->first()->id_ruangan;
+            }
+
+            return false; // Ambigu
         }
 
         return false;
