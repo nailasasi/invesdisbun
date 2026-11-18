@@ -2077,7 +2077,7 @@ class AsetBarangController extends Controller
     }
 
     /**
-     * Unduh template Excel baku isian import master Aset Barang.
+     * Unduh template Excel baku isian import master Aset Barang (1 worksheet + petunjuk pengisian di atas).
      */
     public function downloadTemplate()
     {
@@ -2087,25 +2087,45 @@ class AsetBarangController extends Controller
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Import Aset Barang');
 
-        $sheet->fromArray(self::KOLOM_TEMPLATE_IMPORT, null, 'A1');
+        // Pastikan kolom A (Nomor Kartu Barang) diformat sebagai Text (@) agar 0 di depan tidak hilang
+        $sheet->getStyle('A:A')->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
 
-        // Baris contoh — dilewati otomatis saat import.
+        // Petunjuk Pengisian di bagian atas sheet (Baris 1 - 6)
+        $sheet->setCellValue('A1', 'PETUNJUK PENGISIAN IMPORT ASET BARANG');
+        $sheet->setCellValue('A2', '1. Kolom Wajib (*): Nomor Kartu Inventaris Barang, Tanggal Pengadaan, Nama Barang, dan Nilai Perolehan wajib diisi.');
+        $sheet->setCellValue('A3', '2. Format Tanggal: Gunakan format YYYY-MM-DD atau DD/MM/YYYY (contoh: 2025-12-23).');
+        $sheet->setCellValue('A4', '3. Nilai Perolehan: Diisi angka rupiah murni TANPA simbol mata uang (Rp), TANPA titik pemisah ribuan, dan TANPA koma desimal (contoh: 1462000).');
+        $sheet->setCellValue('A5', '4. Kondisi Barang: Diisi dengan status kondisi fisik baku seperti BAIK, RUSAK RINGAN, atau RUSAK BERAT.');
+        $sheet->setCellValue('A6', '5. Baris Contoh: Baris yang diawali dengan kata "CONTOH -" akan otomatis dilewati oleh sistem.');
+
+        // Styling Petunjuk
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(11)->getColor()->setRGB('0F5132');
+        $sheet->getStyle('A2:A6')->getFont()->setSize(9)->setItalic(true)->getColor()->setRGB('334155');
+
+        // Baris 7 dibiarkan kosong sebagai jeda pemisah
+
+        // Baris Header Tabel pada Baris 8
+        $sheet->fromArray(self::KOLOM_TEMPLATE_IMPORT, null, 'A8');
+
+        // Baris Contoh pada Baris 9 (dilewati otomatis saat import)
         $sheet->fromArray([
             'CONTOH - KIB.01.01.01.001',
             'CONTOH - Laptop Lenovo ThinkPad',
             'Lenovo',
             '01/01/2026',
             '31/12/2030',
-            7500000,
+            1462000,
             'Baik',
             'aktif',
-        ], null, 'A2');
+        ], null, 'A9');
 
-        $sheet->getStyle('A1:H1')->applyFromArray([
+        $sheet->getStyle('A8:H8')->applyFromArray([
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '047857']],
-            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '0F5132']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
         ]);
+        $sheet->getRowDimension(8)->setRowHeight(28);
+        $sheet->getRowDimension(9)->setRowHeight(20);
 
         foreach (range('A', 'H') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);

@@ -34,8 +34,9 @@
             <div>
                 <label for="nilai_perolehan" class="mb-1 block font-semibold text-slate-700">Nilai Perolehan (Rp)</label>
                 <input type="number" id="nilai_perolehan" name="nilai_perolehan" min="0" step="0.01"
-                       value="{{ old('nilai_perolehan', $tanah->nilai_perolehan ?? '') }}" placeholder="0"
+                       value="{{ old('nilai_perolehan', $tanah->nilai_perolehan ?? '') }}" placeholder="contoh: 2213000"
                        class="w-full rounded-xl border border-slate-200 px-3 py-2 text-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                <small class="text-xs text-slate-500 text-muted">Catatan: Masukkan angka murni <strong>tanpa titik</strong> ataupun <strong>koma</strong> (contoh: 2213000).</small>
             </div>
 
             <div>

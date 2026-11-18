@@ -53,7 +53,8 @@
 
                     <div class="flex flex-col gap-1.5">
                         <label for="field-nilai-perolehan" class="block text-sm font-medium text-slate-700">Nilai Perolehan <span class="text-red-500">*</span></label>
-                        <input id="field-nilai-perolehan" name="nilai_perolehan" type="number" step="any" inputmode="decimal" required min="0" class="block h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
+                        <input id="field-nilai-perolehan" name="nilai_perolehan" type="number" step="any" inputmode="decimal" required min="0" class="block h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition" placeholder="contoh: 1462000">
+                        <small class="text-xs text-slate-500 text-muted">Catatan: Masukkan angka murni <strong>tanpa titik</strong> ataupun <strong>koma</strong> (contoh: 1462000).</small>
                         <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="nilai_perolehan"></p>
                     </div>
 

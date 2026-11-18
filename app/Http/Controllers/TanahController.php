@@ -339,8 +339,8 @@ class TanahController extends Controller
 
     /**
      * Unduh template Excel baku isian data tanah (KIB A).
-     * Layout mengikuti pola template Import Kendaraan: header baris 1,
-     * contoh data baris 2.
+     * Memiliki blok petunjuk pengisian di baris 1-7, jeda baris 8,
+     * header tabel di baris 9, dan contoh data di baris 10.
      */
     public function downloadTemplate()
     {
@@ -348,23 +348,40 @@ class TanahController extends Controller
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Import Tanah');
 
-        $sheet->fromArray(self::KOLOM_TEMPLATE, null, 'A1');
+        // Pastikan kolom B (KIB / Nomor Kartu Barang) diformat sebagai Text (@) agar 0 di depan tidak hilang
+        $sheet->getStyle('B:B')->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
 
-        // Baris contoh data acuan (sesuai file Excel sumber).
+        // Petunjuk Pengisian di bagian atas sheet (Baris 1 - 7)
+        $sheet->setCellValue('A1', 'PETUNJUK PENGISIAN IMPORT ASET TANAH (KIB A)');
+        $sheet->setCellValue('A2', '1. Kolom Wajib (*): Nomor Kartu Barang, Tanggal Perolehan, Luas, Alamat, dan Nilai Perolehan wajib diisi.');
+        $sheet->setCellValue('A3', '2. Format Tanggal: Gunakan format YYYY-MM-DD atau DD/MM/YYYY (contoh: 2025-12-31).');
+        $sheet->setCellValue('A4', '3. Nilai Perolehan: Diisi angka rupiah murni TANPA simbol mata uang (Rp), TANPA titik pemisah ribuan, dan TANPA koma desimal (contoh: 2213000).');
+        $sheet->setCellValue('A5', '4. Luas & Detail Fisik: Diisi angka luas dalam meter persegi serta status hukum/penggunaan yang valid.');
+        $sheet->setCellValue('A6', '5. Kondisi Barang: Diisi dengan status kondisi fisik baku seperti BAIK, RUSAK RINGAN, atau RUSAK BERAT.');
+        $sheet->setCellValue('A7', '6. Baris Contoh: Baris yang diawali dengan kata "CONTOH -" akan otomatis dilewati oleh sistem.');
+
+        // Styling Petunjuk
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(11)->getColor()->setRGB('0F5132');
+        $sheet->getStyle('A2:A7')->getFont()->setSize(9)->setItalic(true)->getColor()->setRGB('334155');
+
+        // Baris 8 dibiarkan kosong sebagai jeda pemisah
+
+        // Baris Header Tabel pada Baris 9
+        $sheet->fromArray(self::KOLOM_TEMPLATE, null, 'A9');
+
+        // Baris contoh data acuan pada Baris 10 (dilewati otomatis saat import)
         $sheet->fromArray([
             1,
-            '11.01.35.00.020301.00000.00000.1980-1.3.1.01.01.02.003.000001',
+            'CONTOH - 11.01.35.00.020301.00000.00000.1980-1.3.1.01.01.02.003.000001',
             '17/12/2025',
             '31/12/1980',
-            '2.213.000,00',
-            'Tanah Gudang OPC',
-            '1,770',
+            2213000,
+            'CONTOH - Tanah Gudang OPC',
+            '1770',
             'Desa Bumirejo, Kecamatan Dampit, Kabupaten Malang',
             'KAB. MALANG.Dampit.Bumirejo',
             'PENGELOLAAN',
-            // Penanda eksplisit: baris ini adalah contoh. Import akan
-            // melewati baris yang memuat "CONTOH" pada KIB/Nomor Sertifikat.
-            'CONTOH',
+            'CONTOH - 12345',
             '17/12/2025',
             'Idle/ Rencana Disewakan',
             'BAIK',
@@ -373,18 +390,19 @@ class TanahController extends Controller
             '0822 3011 9624',
             'https://maps.app.goo.gl/ByBsHYJhTeGqK4rW7?g_st=ic',
             'Mata Air',
-        ], null, 'A2');
+        ], null, 'A10');
 
-        $sheet->getStyle('A1:S1')->applyFromArray([
+        $sheet->getStyle('A9:S9')->applyFromArray([
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '047857']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '0F5132']],
             'alignment' => [
                 'horizontal' => Alignment::HORIZONTAL_CENTER,
                 'vertical' => Alignment::VERTICAL_CENTER,
                 'wrapText' => true,
             ],
         ]);
-        $sheet->getRowDimension(1)->setRowHeight(30);
+        $sheet->getRowDimension(9)->setRowHeight(30);
+        $sheet->getRowDimension(10)->setRowHeight(20);
 
         foreach (range('A', 'S') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
@@ -415,9 +433,21 @@ class TanahController extends Controller
         $sheet = IOFactory::load($request->file('file_excel')->getRealPath())->getActiveSheet();
         $rows = $sheet->toArray(null, true, true, true);
 
-        // Petakan kolom berdasar judul baris (baris 1), bukan patokan posisi tetap,
-        // agar kompatibel dengan "Aset Tanah BMD.xlsx" (kolom bergeser) & template sendiri.
-        $colMap = $this->resolveColumns($rows[1] ?? []);
+        // Cari baris header pada rentang baris 1-15 (mendukung template dengan petunjuk di baris 1-7 maupun berkas langsung di baris 1)
+        $headerRow = 1;
+        $maxMatches = 0;
+        foreach ($rows as $index => $row) {
+            if ($index > 15) {
+                break;
+            }
+            $matches = $this->countMatchingHeadings($row);
+            if ($matches > $maxMatches && $matches >= 2) {
+                $maxMatches = $matches;
+                $headerRow = $index;
+            }
+        }
+
+        $colMap = $this->resolveColumns($rows[$headerRow] ?? []);
 
         $created = 0;
         $updated = 0;
@@ -428,17 +458,17 @@ class TanahController extends Controller
         // Seluruh proses dibungkus transaksi: bila terjadi kegagalan tak terduga,
         // tidak ada baris yang tersimpan setengah jalan (partial import).
         try {
-            DB::transaction(function () use ($rows, $colMap, $updateExisting, &$created, &$updated, &$skipped, &$failed, &$errors) {
+            DB::transaction(function () use ($rows, $colMap, $headerRow, $updateExisting, &$created, &$updated, &$skipped, &$failed, &$errors) {
                 foreach ($rows as $no => $row) {
-                    if ($no < 2) {
-                        continue; // baris 1 = judul kolom
+                    if ($no <= $headerRow) {
+                        continue; // baris <= headerRow = petunjuk & judul kolom
                     }
 
                     $rowErrors = [];
                     $mapped = $this->mapRow($row, $colMap, $rowErrors);
 
                     // Lewati baris contoh bawaan template & baris kosong.
-                    $isContoh = self::isBarisContoh($mapped);
+                    $isContoh = self::isBarisContoh($mapped, $row);
                     $isEmpty = empty($mapped['nomor_sertifikat'])
                         && empty($mapped['kib'])
                         && empty($mapped['deskripsi_objek'])
@@ -576,13 +606,17 @@ class TanahController extends Controller
 
     /**
      * Menandai baris contoh bawaan template agar tidak tersimpan sebagai data
-     * sungguhan. Penanda "CONTOH" diperiksa pada kolom identitas terstruktur
-     * (KIB & Nomor Sertifikat) dan TIDAK pada deskripsi objek, supaya rekaman
-     * valid yang deskripsinya kebetulan memuat kata "contoh" tidak ikut
-     * terlewat. Perbandingan mengabaikan huruf besar/kecil.
+     * sungguhan. Baris contoh ditandai dengan awalan "CONTOH -" atau kata "CONTOH"
+     * pada nomor kartu/KIB, nomor sertifikat, maupun sel lainnya.
      */
-    private static function isBarisContoh(array $mapped): bool
+    private static function isBarisContoh(array $mapped, array $row = []): bool
     {
+        foreach ($row as $val) {
+            if (is_string($val) && stripos($val, 'CONTOH') !== false) {
+                return true;
+            }
+        }
+
         foreach (['kib', 'nomor_sertifikat'] as $field) {
             $nilai = strtoupper(trim((string) ($mapped[$field] ?? '')));
             if ($nilai !== '' && str_contains($nilai, 'CONTOH')) {
@@ -591,6 +625,37 @@ class TanahController extends Controller
         }
 
         return false;
+    }
+
+    /**
+     * Hitung berapa banyak sel dalam baris yang cocok dengan nama kolom KIB A yang dikenal.
+     */
+    private function countMatchingHeadings(array $row): int
+    {
+        $normalize = fn ($v) => strtolower((string) preg_replace('/[^a-zA-Z0-9]+/', '', (string) $v));
+        $knownHeadings = [
+            'no', 'kib', 'kibnobarang', 'nobarang', 'kodennibarang',
+            'tanggalbuku', 'tglbuku', 'tanggalperolehan', 'tglperolehan',
+            'nilaiperolehan', 'nilaiperolehanrp', 'perolehan', 'nilai',
+            'deskobj', 'deskripsiobjek', 'deskripsi',
+            'luas', 'luastanah', 'luastanahm2',
+            'alamat', 'ketkel', 'kelurahan', 'letakkelurahan',
+            'statushak', 'nosert', 'nomorsertifikat', 'nosertifikat',
+            'tglsert', 'tanggalsertifikat', 'tglsertifikat',
+            'pengunaan', 'penggunaan', 'penggunaantanah',
+            'kondisi', 'keterangan', 'namapetugas', 'nomortlppetugas',
+            'gmaps', 'googlemaps', 'penggunaanair',
+        ];
+
+        $matches = 0;
+        foreach ($row as $val) {
+            $key = $normalize($val);
+            if ($key !== '' && in_array($key, $knownHeadings, true)) {
+                $matches++;
+            }
+        }
+
+        return $matches;
     }
 
     /**
