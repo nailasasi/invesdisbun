@@ -291,6 +291,27 @@ class AsetRuanganController extends Controller
             ->tap(fn ($q) => $this->scope->terapkan($q))
             ->exists();
 
+        // Hitung ketersediaan barang untuk cetak KIR (aset melekat terfinalisasi + inventaris lokal aktif)
+        $jumlahAsetKIR = PenempatanAset::where('id_ruangan', $ruangan->id_ruangan)
+            ->where('status', 'aktif')
+            ->when($kolomFinalisasi, fn ($q) => $q->where('is_finalized', 1))
+            ->whereHas('aset', fn ($a) => $a->where('is_kendaraan', false)
+                ->whereDoesntHave('pemegangSaatIni')
+                ->whereIn('status_aset', self::STATUS_USER)
+                ->where('kondisi', '!=', 'Rusak Berat')
+            )
+            ->count();
+
+        $jumlahInventarisKIR = $ruangan->inventaris()
+            ->where('status', InventarisRuangan::STATUS_AKTIF)
+            ->where(function ($q) {
+                $q->where('kondisi', '!=', 'Rusak Berat')
+                  ->orWhereNull('kondisi');
+            })
+            ->count();
+
+        $jumlahItemKIR = $jumlahAsetKIR + $jumlahInventarisKIR;
+
         return view('aset-ruangan.show', compact(
             'ruangan',
             'asetMelekat',
@@ -301,6 +322,7 @@ class AsetRuanganController extends Controller
             'bolehKelolaRuangan',
             'bolehCetakDokumen',
             'ruanganTujuan',
+            'jumlahItemKIR',
         ));
     }
 

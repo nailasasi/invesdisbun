@@ -262,6 +262,33 @@ class AsetRuanganHakAksesTest extends TestCase
         $ruanganOther = Ruangan::where('id_lokasi', '!=', $idLokasiUpt)->first();
 
         if ($ruanganOwn) {
+            // Pastikan ruangan memiliki aset melekat terfinalisasi dan inventaris aktif agar label & KIR bisa diunduh
+            $asetSample = Aset::where('is_kendaraan', false)
+                ->where('status_aset', 'aktif')
+                ->whereDoesntHave('pemegangSaatIni')
+                ->first();
+
+            if ($asetSample) {
+                PenempatanAset::updateOrCreate([
+                    'id_aset' => $asetSample->id_aset,
+                    'id_ruangan' => $ruanganOwn->id_ruangan,
+                ], [
+                    'status' => 'aktif',
+                    'tanggal_mulai' => now()->toDateString(),
+                    'is_finalized' => 1,
+                ]);
+            }
+
+            InventarisRuangan::firstOrCreate([
+                'id_ruangan' => $ruanganOwn->id_ruangan,
+                'kode_inventaris' => 'TEST-KIR-UPT',
+            ], [
+                'nama_barang' => 'Meja Kerja UPT',
+                'merk' => 'Test Merk',
+                'kondisi' => 'Baik',
+                'status' => InventarisRuangan::STATUS_AKTIF,
+            ]);
+
             // Label download untuk ruangan sendiri -> diizinkan (200 / streamed download)
             $resLabelOwn = $this->actingAs($userUpt)->get(route('aset-ruangan.label.download', [
                 'ruangan' => $ruanganOwn->id_ruangan,
@@ -620,5 +647,98 @@ class AsetRuanganHakAksesTest extends TestCase
         $resShow->assertOk();
         // Nomor KIB aset rusak berat tidak boleh muncul di tabel
         $resShow->assertDontSee('TEST-KIB-RUSAK-BERAT-999');
+    }
+
+    // =========================================================================
+    // 8. VERIFIKASI FITUR CETAK KIR (MODAL, FORM, VALIDASI, & UNDUH WORD)
+    // =========================================================================
+
+    public function test_halaman_show_aset_ruangan_menampilkan_tombol_kir_modal_tanpa_target_blank(): void
+    {
+        $adminAset = $this->userByRole('Admin Aset');
+        if (! $adminAset) {
+            $this->markTestSkipped('User Admin Aset tidak ditemukan.');
+        }
+
+        $ruangan = Ruangan::where('status', 'Aktif')->first();
+        if (! $ruangan) {
+            $this->markTestSkipped('Ruangan tidak ditemukan.');
+        }
+
+        $res = $this->actingAs($adminAset)->get(route('aset-ruangan.show', $ruangan->id_ruangan));
+        $res->assertOk();
+
+        // Tombol Cetak KIR ada di halaman
+        $res->assertSee('id="btn-kir-scope"', false);
+
+        // Modal Cetak KIR ada di halaman
+        $res->assertSee('id="kir-scope-modal"', false);
+
+        // Form TIDAK menggunakan target="_blank"
+        $res->assertDontSee('id="kir-scope-form" method="GET" action="' . route('aset-ruangan.kir.download', $ruangan->id_ruangan) . '" target="_blank"', false);
+        $res->assertSee('id="kir-scope-form" method="GET" action="' . route('aset-ruangan.kir.download', $ruangan->id_ruangan) . '"', false);
+
+        // Script listener untuk btn-kir-scope ada di halaman
+        $res->assertSee('btnKirScope.addEventListener', false);
+    }
+
+    public function test_download_kir_ditolak_dengan_error_jika_ruangan_tanpa_item_terfinalisasi(): void
+    {
+        $adminAset = $this->userByRole('Admin Aset');
+        if (! $adminAset) {
+            $this->markTestSkipped('User Admin Aset tidak ditemukan.');
+        }
+
+        // Buat ruangan baru yang pasti kosong
+        $ruanganKosong = Ruangan::create([
+            'nama_ruangan' => 'Ruang Kosong Test KIR',
+            'id_lokasi' => 1,
+            'status' => 'Aktif',
+        ]);
+
+        $res = $this->actingAs($adminAset)->get(route('aset-ruangan.kir.download', $ruanganKosong->id_ruangan));
+        $res->assertRedirect();
+        $res->assertSessionHas('error');
+
+        // Buka halaman show ruangan kosong, pastikan ada peringatan di modal
+        $resShow = $this->actingAs($adminAset)->get(route('aset-ruangan.show', $ruanganKosong->id_ruangan));
+        $resShow->assertOk();
+        $resShow->assertSee('Belum Ada Barang yang Memenuhi Syarat Cetak KIR');
+    }
+
+    public function test_download_kir_berhasil_menghasilkan_dokumen_word_jika_memiliki_item(): void
+    {
+        $adminAset = $this->userByRole('Admin Aset');
+        if (! $adminAset) {
+            $this->markTestSkipped('User Admin Aset tidak ditemukan.');
+        }
+
+        $ruangan = Ruangan::where('status', 'Aktif')->first();
+        if (! $ruangan) {
+            $this->markTestSkipped('Ruangan tidak ditemukan.');
+        }
+
+        // Tambah 1 inventaris lokal aktif ke ruangan
+        InventarisRuangan::create([
+            'id_ruangan' => $ruangan->id_ruangan,
+            'kode_inventaris' => 'TEST-KIR-WORD-01',
+            'nama_barang' => 'Kursi Direktur KIR',
+            'merk' => 'Ergotec',
+            'kondisi' => 'Baik',
+            'status' => InventarisRuangan::STATUS_AKTIF,
+        ]);
+
+        $res = $this->actingAs($adminAset)->get(route('aset-ruangan.kir.download', [
+            'ruangan' => $ruangan->id_ruangan,
+            'nama_pejabat_1' => 'Drs. Pembina Utama',
+            'nip_pejabat_1' => '19700101 199503 1 001',
+            'nama_pejabat_2' => 'Pengurus Barang',
+            'nip_pejabat_2' => '19850101 201001 2 002',
+            'tanggal_cetak' => '2026-11-19',
+        ]));
+
+        $res->assertOk();
+        $this->assertStringContainsString('application/vnd.openxmlformats-officedocument.wordprocessingml.document', $res->headers->get('Content-Type'));
+        $this->assertStringContainsString('KIR_', $res->headers->get('Content-Disposition'));
     }
 }

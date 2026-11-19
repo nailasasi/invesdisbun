@@ -20,7 +20,26 @@ class Kendaraan extends Model
 
     protected $primaryKey = 'id_kendaraan';
 
-    protected $fillable = ['id_aset', 'nama_kendaraan', 'jenis_kendaraan', 'nomor_rangka', 'nomor_mesin', 'merk', 'tipe', 'pemegang', 'foto', 'keterangan', 'status_penggunaan'];
+    protected $fillable = [
+        'id_aset',
+        'nama_kendaraan',
+        'jenis_kendaraan',
+        'nomor_rangka',
+        'nomor_mesin',
+        'merk',
+        'tipe',
+        'pemegang',
+        'foto',
+        'keterangan',
+        'status_penggunaan',
+        'jatuh_tempo_pkb',
+        'jatuh_tempo_stnk',
+    ];
+
+    protected $casts = [
+        'jatuh_tempo_pkb' => 'date',
+        'jatuh_tempo_stnk' => 'date',
+    ];
 
     /**
      * Sumber tunggal nama tampilan kendaraan.
@@ -111,7 +130,7 @@ class Kendaraan extends Model
     {
         $now = $now ?? Carbon::today();
         $pajak = $this->pajakAktif;
-        $tgl = $pajak?->tanggal_berakhir;
+        $tgl = $pajak?->tanggal_berakhir ?? ($this->jatuh_tempo_pkb ? Carbon::parse($this->jatuh_tempo_pkb) : null);
 
         if (! $tgl) {
             return [
@@ -165,7 +184,7 @@ class Kendaraan extends Model
         $now = $now ?? Carbon::today();
         $pajak5 = $this->pajakLimaTahunanAktif;
         $plat = $this->platAktif;
-        $tgl = $pajak5?->tanggal_berakhir_stnk ?? $plat?->tanggal_berlaku;
+        $tgl = $pajak5?->tanggal_berakhir_stnk ?? $plat?->tanggal_berlaku ?? ($this->jatuh_tempo_stnk ? Carbon::parse($this->jatuh_tempo_stnk) : null);
 
         if (! $tgl) {
             return [

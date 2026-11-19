@@ -27,7 +27,7 @@
             <div class="space-y-1.5">
                 <label class="block text-sm font-medium text-slate-700">File Excel / CSV <span class="text-red-500">*</span></label>
                 <input type="file" name="file" accept=".xlsx,.xls,.csv" required class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                <p class="text-xs text-slate-400">Kolom Wajib: Nomor Kartu Barang, Nama Kendaraan, Nomor Polisi, No. Rangka, No. Mesin, Tanggal Pengadaan, Tanggal Habis Pakai, Nilai Perolehan, Kondisi, Status Aset. Kolom Opsional: Jenis Kendaraan, Merk, Tipe, Keterangan, Jatuh Tempo Pajak 1 &amp; 5 Tahun, Nominal &amp; Total Pajak, Pajak 5 Tahunan, Dokumentasi. Maks 5MB.</p>
+                <p class="text-xs text-slate-400">Kolom Wajib: No Kartu Barang, Nama Kendaraan, Nomor Polisi, No. Rangka, No. Mesin, Tanggal Pengadaan, Nilai Perolehan, Kondisi, Status Aset. Kolom Opsional: Jenis Kendaraan, Merk, Tipe, Keterangan, Jatuh Tempo Pajak 1 &amp; 5 Tahun, Dokumentasi. Maks 5MB.</p>
                 @error('file')
                     <p class="text-xs font-medium text-red-600">{{ $message }}</p>
                 @enderror

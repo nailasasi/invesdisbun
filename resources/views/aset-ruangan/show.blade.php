@@ -14,6 +14,20 @@
         </a>
     </div>
 
+    {{-- Notifikasi Flash Pesan Error / Sukses --}}
+    @if (session('error'))
+        <div class="mb-4 flex items-center gap-2.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-800 shadow-xs">
+            <svg class="h-4 w-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            <span>{{ session('error') }}</span>
+        </div>
+    @endif
+    @if (session('success'))
+        <div class="mb-4 flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800 shadow-xs">
+            <svg class="h-4 w-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            <span>{{ session('success') }}</span>
+        </div>
+    @endif
+
     {{-- Header Judul & Aksi Utama --}}
     <div class="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
@@ -34,9 +48,12 @@
             {{-- Cetak KIR (Admin Aset & Admin UPT) --}}
             <button type="button" id="btn-kir-scope"
                class="inline-flex items-center gap-1.5 rounded-xl border border-sky-200 bg-sky-50/80 px-3 py-1.5 text-xs font-bold text-sky-700 shadow-2xs transition hover:bg-sky-100"
-               title="Unduh Kartu Inventaris Ruangan (KIR)">
+               title="{{ ($jumlahItemKIR ?? 0) === 0 ? 'Ruangan belum memiliki aset terfinalisasi/inventaris aktif untuk dicetak pada KIR' : 'Unduh Kartu Inventaris Ruangan (KIR)' }}">
                 <svg class="h-3.5 w-3.5 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
                 <span>Cetak KIR</span>
+                @if (($jumlahItemKIR ?? 0) > 0)
+                    <span class="ml-0.5 rounded-full bg-sky-200/70 px-1.5 py-0.2 text-[10px] text-sky-800 font-semibold">{{ $jumlahItemKIR }}</span>
+                @endif
             </button>
             @endif
 
@@ -145,6 +162,17 @@
                         if (labelScopeError) labelScopeError.classList.remove('hidden');
                     }
                 });
+            }
+
+            // ---- Modal Cetak KIR (Kartu Inventaris Ruangan) ----
+            const kirScopeModal = document.getElementById('kir-scope-modal');
+            const btnKirScope = document.getElementById('btn-kir-scope');
+
+            if (btnKirScope && kirScopeModal) {
+                btnKirScope.addEventListener('click', () => {
+                    openModal(kirScopeModal);
+                });
+                bindClose(kirScopeModal, '[data-kir-scope-close]');
             }
 
             // ---- Inventaris Lokal (Kelola & Mutasi) ----

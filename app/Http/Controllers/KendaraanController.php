@@ -473,7 +473,10 @@ class KendaraanController extends Controller
                 ->first();
         };
 
-        return [$ambil(false)?->tanggal_berakhir, $ambil(true)?->tanggal_berakhir];
+        $jt1 = $ambil(false)?->tanggal_berakhir ?? $kendaraan->statusPkb()['tanggal'];
+        $jt5 = $ambil(true)?->tanggal_berakhir ?? $kendaraan->statusStnk()['tanggal'];
+
+        return [$jt1, $jt5];
     }
 
     /**
@@ -1822,7 +1825,7 @@ class KendaraanController extends Controller
             }
 
             // ==========================================
-            // 1. VALIDASI 10 FIELD WAJIB
+            // 1. VALIDASI 9 FIELD WAJIB
             // ==========================================
 
             // 1. Nomor Kartu Barang (Wajib, string, maks 255)
@@ -1886,22 +1889,22 @@ class KendaraanController extends Controller
                 continue;
             }
 
-            // 7. Tanggal Habis Pakai (Wajib, tanggal valid, > tanggal pengadaan)
-            if ($tglHabisRaw === null) {
-                $errors[] = "Baris {$index}: Tanggal Habis Pakai wajib diisi.";
-                continue;
-            }
-            $tglHabisDate = $this->parseDate($tglHabisRaw);
-            if ($tglHabisDate === null) {
-                $errors[] = "Baris {$index}: Tanggal Habis Pakai ('{$tglHabisRaw}') tidak valid. Gunakan format DD/MM/YYYY.";
-                continue;
-            }
-            if ($tglHabisDate <= $tglPengadaanDate) {
-                $errors[] = "Baris {$index}: Tanggal Habis Pakai ('{$tglHabisRaw}') harus lebih besar dari Tanggal Pengadaan ('{$tglPengadaanRaw}').";
-                continue;
+            // Tanggal Habis Pakai (Opsional; jika diisi, harus valid & > tanggal pengadaan)
+            $tglHabisDate = null;
+            if ($tglHabisRaw !== null) {
+                $parsedHabis = $this->parseDate($tglHabisRaw);
+                if ($parsedHabis === null) {
+                    $errors[] = "Baris {$index}: Tanggal Habis Pakai ('{$tglHabisRaw}') tidak valid. Gunakan format DD/MM/YYYY.";
+                    continue;
+                }
+                if ($parsedHabis <= $tglPengadaanDate) {
+                    $errors[] = "Baris {$index}: Tanggal Habis Pakai ('{$tglHabisRaw}') harus lebih besar dari Tanggal Pengadaan ('{$tglPengadaanRaw}').";
+                    continue;
+                }
+                $tglHabisDate = $parsedHabis;
             }
 
-            // 8. Nilai Perolehan (Wajib, numeric, > 0)
+            // 7. Nilai Perolehan (Wajib, numeric, > 0)
             if ($nilaiRaw === null) {
                 $errors[] = "Baris {$index}: Nilai Perolehan wajib diisi.";
                 continue;
@@ -1916,7 +1919,7 @@ class KendaraanController extends Controller
                 continue;
             }
 
-            // 9. Kondisi (Wajib, in: Baik, Rusak Ringan, Rusak Berat)
+            // 8. Kondisi (Wajib, in: Baik, Rusak Ringan, Rusak Berat)
             if ($kondisiRaw === null) {
                 $errors[] = "Baris {$index}: Kondisi wajib diisi.";
                 continue;
@@ -1927,7 +1930,7 @@ class KendaraanController extends Controller
                 continue;
             }
 
-            // 10. Status Aset (Wajib, in: aktif, nonaktif)
+            // 9. Status Aset (Wajib, in: aktif, nonaktif)
             if ($statusAsetRaw === null) {
                 $errors[] = "Baris {$index}: Status Aset wajib diisi.";
                 continue;
@@ -2064,6 +2067,8 @@ class KendaraanController extends Controller
                             'merk' => $merk ?: $existingKendaraan->merk,
                             'tipe' => $tipe ?: $existingKendaraan->tipe,
                             'keterangan' => $keterangan ?: $existingKendaraan->keterangan,
+                            'jatuh_tempo_pkb' => $jt1Date ?: $existingKendaraan->jatuh_tempo_pkb,
+                            'jatuh_tempo_stnk' => $jt5Date ?: $existingKendaraan->jatuh_tempo_stnk,
                             // Pemegang dipertahankan apa adanya (tidak disentuh)
                         ]);
 
@@ -2090,45 +2095,8 @@ class KendaraanController extends Controller
                                     'ganti_plat' => true,
                                     'status' => 'Aktif',
                                 ]);
-                            }
-                        }
-
-                        // Penanganan Pajak Kendaraan
-                        if ($jt1Date || $jt5Date || $nominalVal !== null || $totalVal !== null) {
-                            $pajakAktif = $existingKendaraan->pajakAktif;
-                            if ($pajakAktif) {
-                                $pajakAktif->update([
-                                    'tanggal_berakhir' => $jt1Date ?: ($jt5Date ?: $pajakAktif->tanggal_berakhir),
-                                    'tahun' => $jt1Date ? Carbon::parse($jt1Date)->year : ($jt5Date ? Carbon::parse($jt5Date)->year : $pajakAktif->tahun),
-                                    'nominal' => $nominalVal ?? $pajakAktif->nominal,
-                                    'total_pajak' => $totalVal ?? $pajakAktif->total_pajak,
-                                    'pajak_5_tahunan' => (bool) $flag5,
-                                ]);
-                            } else {
-                                if ($jt1Date) {
-                                    PajakKendaraan::create([
-                                        'id_kendaraan' => $existingKendaraan->id_kendaraan,
-                                        'jenis_pajak' => 'PKB',
-                                        'tahun' => Carbon::parse($jt1Date)->year,
-                                        'tanggal_berakhir' => $jt1Date,
-                                        'nominal' => $nominalVal,
-                                        'total_pajak' => $totalVal,
-                                        'pajak_5_tahunan' => false,
-                                        'status' => 'Aktif',
-                                    ]);
-                                }
-                                if ($jt5Date) {
-                                    PajakKendaraan::create([
-                                        'id_kendaraan' => $existingKendaraan->id_kendaraan,
-                                        'jenis_pajak' => 'PKB',
-                                        'tahun' => Carbon::parse($jt5Date)->year,
-                                        'tanggal_berakhir' => $jt5Date,
-                                        'nominal' => $jt1Date ? null : $nominalVal,
-                                        'total_pajak' => $jt1Date ? null : $totalVal,
-                                        'pajak_5_tahunan' => true,
-                                        'status' => $jt1Date ? 'Tidak Aktif' : 'Aktif',
-                                    ]);
-                                }
+                            } elseif ($jt5Date && ! $platAktif->tanggal_berlaku) {
+                                $platAktif->update(['tanggal_berlaku' => $jt5Date]);
                             }
                         }
 
@@ -2194,6 +2162,8 @@ class KendaraanController extends Controller
                         'tipe' => $tipe,
                         'pemegang' => null, // Selalu null saat import kendaraan baru
                         'keterangan' => $keterangan,
+                        'jatuh_tempo_pkb' => $jt1Date,
+                        'jatuh_tempo_stnk' => $jt5Date,
                     ]);
 
                     $photoPath = $photosByRow[$index] ?? null;
@@ -2208,32 +2178,6 @@ class KendaraanController extends Controller
                             'tanggal_berlaku' => $jt5Date,
                             'ganti_plat' => (bool) $flag5,
                             'status' => 'Aktif',
-                        ]);
-                    }
-
-                    if ($jt1Date) {
-                        PajakKendaraan::create([
-                            'id_kendaraan' => $kendaraan->id_kendaraan,
-                            'jenis_pajak' => 'PKB',
-                            'tahun' => Carbon::parse($jt1Date)->year,
-                            'tanggal_berakhir' => $jt1Date,
-                            'nominal' => $nominalVal,
-                            'total_pajak' => $totalVal,
-                            'pajak_5_tahunan' => false,
-                            'status' => 'Aktif',
-                        ]);
-                    }
-
-                    if ($jt5Date) {
-                        PajakKendaraan::create([
-                            'id_kendaraan' => $kendaraan->id_kendaraan,
-                            'jenis_pajak' => 'PKB',
-                            'tahun' => Carbon::parse($jt5Date)->year,
-                            'tanggal_berakhir' => $jt5Date,
-                            'nominal' => $jt1Date ? null : $nominalVal,
-                            'total_pajak' => $jt1Date ? null : $totalVal,
-                            'pajak_5_tahunan' => true,
-                            'status' => $jt1Date ? 'Tidak Aktif' : 'Aktif',
                         ]);
                     }
 
@@ -2290,12 +2234,12 @@ class KendaraanController extends Controller
 
         // Petunjuk Pengisian di bagian atas sheet (Baris 1 - 7)
         $sheet->setCellValue('A1', 'PETUNJUK PENGISIAN IMPORT KENDARAAN DINAS');
-        $sheet->setCellValue('A2', '1. Kolom Wajib (*): Nomor Kartu Barang, Nama Kendaraan, Nomor Polisi, No. Rangka, No. Mesin, Tanggal Pengadaan, Tanggal Habis Pakai, Nilai Perolehan, Kondisi, Status Aset.');
-        $sheet->setCellValue('A3', '2. Tanggal Pengadaan & Habis Pakai: Gunakan format DD/MM/YYYY (contoh: 15/01/2024). Tanggal Habis Pakai harus lebih besar dari Tanggal Pengadaan.');
-        $sheet->setCellValue('A4', '3. Nilai Perolehan: Diisi angka rupiah lebih besar dari 0 (contoh: 450000000). Jangan disamakan dengan Nominal Pajak STNK.');
-        $sheet->setCellValue('A5', '4. Kondisi & Status: Kondisi hanya Baik, Rusak Ringan, atau Rusak Berat. Status Aset hanya aktif atau nonaktif.');
-        $sheet->setCellValue('A6', '5. Keunikan: Nomor Kartu Barang, Nomor Rangka, dan Nomor Mesin harus unik di sistem dan tidak boleh duplikat antar-baris.');
-        $sheet->setCellValue('A7', '6. Pemegang: Pemegang kendaraan TIDAK diisi di sini; ditetapkan terpisah melalui menu Penempatan Awal atau Mutasi.');
+        $sheet->setCellValue('A2', '1. Kolom Wajib (*): No Kartu Barang, Nama Kendaraan, Nomor Polisi, No. Rangka, No. Mesin, Tanggal Pengadaan, Nilai Perolehan, Kondisi, dan Status Aset.');
+        $sheet->setCellValue('A3', '2. Format Tanggal: Gunakan format DD/MM/YYYY atau YYYY-MM-DD (contoh: 15/01/2024).');
+        $sheet->setCellValue('A4', '3. Nilai Perolehan: Diisi angka rupiah murni TANPA simbol mata uang (Rp), TANPA titik pemisah ribuan, dan TANPA koma desimal (contoh: 450000000).');
+        $sheet->setCellValue('A5', '4. Kondisi & Status: Kondisi baku (Baik, Rusak Ringan, Rusak Berat). Status Aset (aktif / nonaktif).');
+        $sheet->setCellValue('A6', '5. Pajak Kendaraan: Jatuh Tempo Pajak 1 Tahun & 5 Tahun bersifat opsional untuk informasi tabel kendaraan (tidak membuat transaksi riwayat kelola pajak).');
+        $sheet->setCellValue('A7', '6. Baris Contoh: Baris yang diawali dengan kata "CONTOH -" akan otomatis dilewati oleh sistem.');
 
         // Styling Petunjuk
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(11)->getColor()->setRGB('064E3B');
@@ -2315,21 +2259,17 @@ class KendaraanController extends Controller
             'CONTOH - MHKMJ1A200012345',
             'CONTOH - 1GRFE1234567',
             '15/01/2024',
-            '15/01/2031',
             450000000,
             'Baik',
             'aktif',
             'Kendaraan dinas operasional',
             '02/07/2027',
             '02/07/2029',
-            2443500,
-            2443500,
-            'Tidak',
-            null, // dokumentasi: gambar disisip, bukan teks
+            null, // Dokumentasi: gambar disisip, bukan teks
         ], null, 'A10');
 
-        // Styling Header Tabel (A9:T9)
-        $sheet->getStyle('A9:T9')->applyFromArray([
+        // Styling Header Tabel (A9:P9)
+        $sheet->getStyle('A9:P9')->applyFromArray([
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
             'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '047857']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
@@ -2337,9 +2277,11 @@ class KendaraanController extends Controller
         $sheet->getRowDimension(9)->setRowHeight(28);
         $sheet->getRowDimension(10)->setRowHeight(20);
 
-        foreach (range('A', 'T') as $col) {
+        foreach (range('A', 'P') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
+
+        $sheet->getStyle('A10')->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
 
         $writer = new Xlsx($spreadsheet);
 
@@ -2353,10 +2295,10 @@ class KendaraanController extends Controller
     }
 
     /**
-     * Daftar kolom resmi template import kendaraan (20 kolom berurutan).
+     * Daftar kolom resmi template import kendaraan (16 kolom berurutan).
      */
     public const KOLOM_TEMPLATE = [
-        'Nomor Kartu Barang',
+        'No Kartu Barang',
         'Nama Kendaraan',
         'Jenis Kendaraan',
         'Merk',
@@ -2365,16 +2307,12 @@ class KendaraanController extends Controller
         'No. Rangka',
         'No. Mesin',
         'Tanggal Pengadaan',
-        'Tanggal Habis Pakai',
         'Nilai Perolehan',
         'Kondisi',
         'Status Aset',
         'Keterangan',
         'Jatuh Tempo Pajak 1 Tahun',
         'Jatuh Tempo Pajak 5 Tahun',
-        'Nominal Pajak',
-        'Total Pajak',
-        'Pajak 5 Tahunan',
         'Dokumentasi',
     ];
 
