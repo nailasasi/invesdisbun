@@ -144,7 +144,7 @@
                 </div>
             @endif
 
-            @if (auth()->user()?->role?->nama_role === 'Admin Aset')
+            @if (in_array(auth()->user()?->role?->nama_role, ['Admin Aset', 'Admin UPT'], true))
                 {{-- DOKUMEN --}}
                 <div>
                     <p class="mb-1 px-3 text-[10px] font-extrabold uppercase tracking-widest text-emerald-400/60">Dokumen</p>
@@ -159,15 +159,17 @@
                         Laporan
                     </a>
 
-                    <a href="{{ route('template-dokumen.index') }}"
-                       @class([
-                           'flex items-center gap-3 rounded-xl border-l-4 px-3 py-2.5 font-medium transition',
-                           'border-emerald-500 bg-gradient-to-r from-emerald-500/25 to-emerald-600/10 font-bold text-white' => request()->routeIs('template-dokumen.*'),
-                           'border-transparent text-slate-300 hover:bg-white/5 hover:text-white' => ! request()->routeIs('template-dokumen.*'),
-                       ])>
-                        <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 3h7l5 5v13a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2zm7 0v5h5"/></svg>
-                        Template Dokumen
-                    </a>
+                    @if (auth()->user()?->role?->nama_role === 'Admin Aset')
+                        <a href="{{ route('template-dokumen.index') }}"
+                           @class([
+                               'flex items-center gap-3 rounded-xl border-l-4 px-3 py-2.5 font-medium transition',
+                               'border-emerald-500 bg-gradient-to-r from-emerald-500/25 to-emerald-600/10 font-bold text-white' => request()->routeIs('template-dokumen.*'),
+                               'border-transparent text-slate-300 hover:bg-white/5 hover:text-white' => ! request()->routeIs('template-dokumen.*'),
+                           ])>
+                            <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 3h7l5 5v13a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2zm7 0v5h5"/></svg>
+                            Template Dokumen
+                        </a>
+                    @endif
                 </div>
             @endif
 

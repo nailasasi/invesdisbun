@@ -339,6 +339,8 @@ class AsetRuanganController extends Controller
     {
         $this->authorizeAdminAset('Akses ditolak: hanya Admin Aset yang dapat memasang aset ke ruangan.');
 
+        $q = trim((string) request('q', ''));
+
         $daftar = $this->asetPasangKandidat();
         $kelompok = $daftar->groupBy('id_barang')->map(function ($items) {
             $first = $items->first();
@@ -349,6 +351,12 @@ class AsetRuanganController extends Controller
                 'tersedia' => $items->count(),
             ];
         })->sortBy('nama_barang')->values();
+
+        if ($q !== '') {
+            $kelompok = $kelompok->filter(function ($item) use ($q) {
+                return str_contains(mb_strtolower($item['nama_barang']), mb_strtolower($q));
+            })->values();
+        }
 
         return response()->json([
             'success' => true,
@@ -935,24 +943,23 @@ class AsetRuanganController extends Controller
 
     /**
      * Unduh Kartu Inventaris Ruangan (KIR) (.docx).
-     * Berbasis template Word 'kir': placeholder nama ruangan bisa berupa
-     * ${NAMA_RUANGAN}/${nama_ruangan} maupun {NAMA_RUANGAN}/{nama_ruangan} tanpa
-     * tanda dollar (ditangani via patch XML sebelum saveAs). Placeholder lain:
-     * ${tanggal_cetak}, ${nama_pejabat_1}/${nip_pejabat_1},
-     * ${nama_pejabat_2}/${nip_pejabat_2}, dan baris tabel ${no}, ${nama_barang},
-     * ${merk}, ${volume}, ${kondisi_layak}, ${kondisi_tidak} yang di-clone per
-     * kelompok (nama_barang + merk) aset aktif.
+     * Berbasis master template Word 'kir' dari menu Template Dokumen.
+     * Data dokumen dinamis berdasarkan ruangan: nama ruangan, lantai, SKPD,
+     * daftar barang, spesifikasi (merk), volume, dan kondisi barang (layak/tidak layak).
+     * Bagian tanda tangan tetap tersedia dengan nama dan NIP kosong (garis titik-titik)
+     * agar dapat diisi manual setelah dokumen dicetak.
      */
     public function downloadKIR(Request $request, $id_ruangan)
     {
-        $ruangan = Ruangan::findOrFail($id_ruangan);
+        $ruangan = $id_ruangan instanceof Ruangan ? $id_ruangan : Ruangan::with(['skpd', 'lokasi'])->findOrFail($id_ruangan);
+        $ruangan->loadMissing(['skpd', 'lokasi']);
         $this->authorizeRuangan($ruangan, 'mengunduh Kartu Inventaris Ruangan (KIR)');
 
         // 1. Ambil aset resmi yang melekat pada ruangan dan SUDAH DIFINALISASI (is_finalized = 1).
         // Aset belum difinalisasi (is_finalized = 0 atau NULL) tidak boleh dimasukkan ke dalam KIR.
         // Tidak termasuk kendaraan, yang sedang dipegang pegawai, status non-user, atau kondisi Rusak Berat.
         $penempatanQuery = PenempatanAset::with(['aset.barang'])
-            ->where('id_ruangan', $id_ruangan)
+            ->where('id_ruangan', $ruangan->id_ruangan)
             ->where('status', 'aktif')
             ->whereHas('aset', fn ($a) => $a->where('is_kendaraan', false)
                 ->whereDoesntHave('pemegangSaatIni')
@@ -967,7 +974,7 @@ class AsetRuanganController extends Controller
         $penempatanList = $penempatanQuery->get();
 
         // 2. Ambil seluruh inventaris lokal ruangan berstatus aktif dan BUKAN Rusak Berat (inventaris lokal tidak memerlukan proses finalisasi)
-        $inventarisList = InventarisRuangan::where('id_ruangan', $id_ruangan)
+        $inventarisList = InventarisRuangan::where('id_ruangan', $ruangan->id_ruangan)
             ->where('status', InventarisRuangan::STATUS_AKTIF)
             ->where(function ($q) {
                 $q->where('kondisi', '!=', 'Rusak Berat')
@@ -1040,7 +1047,7 @@ class AsetRuanganController extends Controller
             ];
         })->values();
 
-        // 5. Load Template Word KIR
+        // 5. Load Template Word KIR dari Master Template Dokumen
         $templateDoc = TemplateDokumen::where('kode_template', 'kir')->first();
         if (!$templateDoc || !$templateDoc->fileExists()) {
             return back()->with('error', 'File template KIR belum diunggah. Silakan unggah di menu Pengaturan Template Dokumen.');
@@ -1049,49 +1056,48 @@ class AsetRuanganController extends Controller
         $templatePath = $templateDoc->realPath();
         $phpWord = new TemplateProcessor($templatePath);
 
-        // 6. Set Header Ruangan, Lokasi, SKPD & Tanggal
+        // 6. Data Dinamis Ruangan, Lantai, SKPD, Lokasi & Tanggal
         $namaRuangUpper = Str::upper($ruangan->nama_ruangan);
-        $namaLokasi = $ruangan->lokasi?->nama_lokasi ?? 'Kantor Dinas Perkebunan Provinsi Jawa Timur';
-        $namaSkpd = $ruangan->skpd?->nama_skpd ?? '-';
+        $namaLokasi     = $ruangan->lokasi?->nama_lokasi ?? 'Kantor Dinas Perkebunan Provinsi Jawa Timur';
+        $namaSkpd       = $ruangan->skpd?->nama_skpd ?? '-';
+        $lantaiStr      = $ruangan->lantai ? ('Lantai ' . $ruangan->lantai) : '-';
+        $lantaiRaw      = (string) ($ruangan->lantai ?? '-');
+        $tanggalCetak   = now()->translatedFormat('d F Y');
 
-        $phpWord->setValue('nama_ruangan', $namaRuangUpper);
-        $phpWord->setValue('NAMA_RUANGAN', $namaRuangUpper);
-        $phpWord->setValue('ruangan', $ruangan->nama_ruangan);
-        $phpWord->setValue('nama_lokasi', $namaLokasi);
-        $phpWord->setValue('lokasi', $namaLokasi);
-        $phpWord->setValue('nama_skpd', $namaSkpd);
-        $phpWord->setValue('skpd', $namaSkpd);
-        // 7. Data Pejabat Penandatangan & Tanggal Cetak (Diisi Manual oleh Pengguna)
-        $namaPejabat1 = is_string($request->query('nama_pejabat_1')) ? trim($request->query('nama_pejabat_1')) : '';
-        $nipPejabat1  = is_string($request->query('nip_pejabat_1')) ? trim($request->query('nip_pejabat_1')) : '';
-        $namaPejabat2 = is_string($request->query('nama_pejabat_2')) ? trim($request->query('nama_pejabat_2')) : '';
-        $nipPejabat2  = is_string($request->query('nip_pejabat_2')) ? trim($request->query('nip_pejabat_2')) : '';
-        $rawTanggal   = is_string($request->query('tanggal_cetak')) ? trim($request->query('tanggal_cetak')) : '';
+        // 7. Bagian tanda tangan: nama dan NIP kosong (titik-titik) untuk diisi manual basah setelah dicetak
+        $namaPejabat1 = '( .................................................... )';
+        $nipPejabat1  = '....................................................';
+        $namaPejabat2 = '( .................................................... )';
+        $nipPejabat2  = '....................................................';
 
-        // Batasi panjang string ke batas wajar
-        if (mb_strlen($namaPejabat1) > 150) $namaPejabat1 = mb_substr($namaPejabat1, 0, 150);
-        if (mb_strlen($nipPejabat1) > 50) $nipPejabat1 = mb_substr($nipPejabat1, 0, 50);
-        if (mb_strlen($namaPejabat2) > 150) $namaPejabat2 = mb_substr($namaPejabat2, 0, 150);
-        if (mb_strlen($nipPejabat2) > 50) $nipPejabat2 = mb_substr($nipPejabat2, 0, 50);
+        $replacements = [
+            'nama_ruangan'   => $namaRuangUpper,
+            'NAMA_RUANGAN'   => $namaRuangUpper,
+            'ruangan'        => $ruangan->nama_ruangan,
+            'RUANGAN'        => $namaRuangUpper,
+            'lantai'         => $lantaiRaw,
+            'LANTAI'         => Str::upper($lantaiRaw),
+            'lantai_ruangan' => $lantaiStr,
+            'LANTAI_RUANGAN' => Str::upper($lantaiStr),
+            'skpd'           => $namaSkpd,
+            'SKPD'           => Str::upper($namaSkpd),
+            'nama_skpd'      => $namaSkpd,
+            'NAMA_SKPD'      => Str::upper($namaSkpd),
+            'lokasi'         => $namaLokasi,
+            'LOKASI'         => Str::upper($namaLokasi),
+            'nama_lokasi'    => $namaLokasi,
+            'NAMA_LOKASI'    => Str::upper($namaLokasi),
+            'tanggal_cetak'  => $tanggalCetak,
+            'TANGGAL_CETAK'  => Str::upper($tanggalCetak),
+            'nama_pejabat_1' => $namaPejabat1,
+            'nip_pejabat_1'  => $nipPejabat1,
+            'nama_pejabat_2' => $namaPejabat2,
+            'nip_pejabat_2'  => $nipPejabat2,
+        ];
 
-        // Format tanggal cetak: gunakan tanggal manual yang valid (Y-m-d), fallback ke hari ini
-        $tanggalCetakTampil = now()->translatedFormat('d F Y');
-        if ($rawTanggal !== '') {
-            try {
-                $parsedDate = \Carbon\Carbon::createFromFormat('Y-m-d', $rawTanggal);
-                if ($parsedDate && $parsedDate->format('Y-m-d') === $rawTanggal) {
-                    $tanggalCetakTampil = $parsedDate->translatedFormat('d F Y');
-                }
-            } catch (\Throwable) {
-                // Abaikan kesalahan format, fallback ke tanggal hari ini
-            }
+        foreach ($replacements as $key => $val) {
+            $phpWord->setValue($key, $val);
         }
-
-        $phpWord->setValue('tanggal_cetak', $tanggalCetakTampil);
-        $phpWord->setValue('nama_pejabat_1', $namaPejabat1 !== '' ? $namaPejabat1 : '( .................................................... )');
-        $phpWord->setValue('nip_pejabat_1', $nipPejabat1 !== '' ? $nipPejabat1 : '....................................................');
-        $phpWord->setValue('nama_pejabat_2', $namaPejabat2 !== '' ? $namaPejabat2 : '( .................................................... )');
-        $phpWord->setValue('nip_pejabat_2', $nipPejabat2 !== '' ? $nipPejabat2 : '....................................................');
 
         // 8. Gandakan Baris Tabel (cloneRow)
         $phpWord->cloneRow('no', $groupedItems->count());
@@ -1106,9 +1112,7 @@ class AsetRuanganController extends Controller
             $phpWord->setValue("kondisi_tidak#{$no}", $row['kondisi_tidak']);
         }
 
-        // 9. Simpan & Unduh
-        // Patch langsung ke XML untuk placeholder tanpa tanda dollar ($),
-        // misal {NAMA_RUANGAN} / {nama_ruangan} yang tidak diproses setValue().
+        // 9. Patch langsung ke XML untuk placeholder tanpa prefix dollar ({...}) atau yang terbelah tag XML
         try {
             $ref = new \ReflectionClass($phpWord);
             foreach (['tempDocumentMainPart', 'tempDocumentHeaders', 'tempDocumentFooters'] as $propName) {
@@ -1121,17 +1125,20 @@ class AsetRuanganController extends Controller
                 if (!is_string($partXML) || $partXML === '') {
                     continue;
                 }
-                $partXML = str_replace(
-                    ['{NAMA_RUANGAN}', '{nama_ruangan}', '${NAMA_RUANGAN}', '${nama_ruangan}'],
-                    htmlspecialchars($namaRuangUpper),
-                    $partXML
-                );
+                foreach ($replacements as $key => $val) {
+                    $partXML = str_replace(
+                        ['{' . $key . '}', '${' . $key . '}'],
+                        htmlspecialchars((string) $val),
+                        $partXML
+                    );
+                }
                 $prop->setValue($phpWord, $partXML);
             }
         } catch (\Throwable $th) {
             // Abaikan; fallback ke nilai placeholder yang masih tersisa di template.
         }
 
+        // 10. Nama file unduhan otomatis berdasarkan nama ruangan
         $namaFile = 'KIR_' . Str::slug($ruangan->nama_ruangan, '_') . '.docx';
         $tempPath = tempnam(sys_get_temp_dir(), 'KIR_');
         $phpWord->saveAs($tempPath);

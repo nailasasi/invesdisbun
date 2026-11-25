@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Lokasi;
 use App\Services\AsetScope;
 use App\Services\LaporanEksekutifExporter;
 use App\Services\LaporanEksekutifService;
@@ -27,7 +28,7 @@ class LaporanController extends Controller
      */
     public function index(Request $request)
     {
-        abort_unless($this->scope->isAdminAset(), 403, 'Hanya Admin Aset yang berwenang mengakses Modul Laporan.');
+        abort_unless($this->scope->isAdminAset() || $this->scope->isAdminUpt(), 403, 'Hanya Admin Aset dan Admin UPT yang berwenang mengakses Modul Laporan.');
 
         $data = $this->resolveReportContext($request);
 
@@ -39,6 +40,7 @@ class LaporanController extends Controller
             'unitLokasiId' => $data['unitLokasiId'],
             'namaUnitTerpilih' => $data['meta']['nama_unit'],
             'isAdminAset' => $data['meta']['is_admin_aset'],
+            'isAdminUpt' => $data['meta']['is_admin_upt'],
             'daftarTahun' => $data['daftarTahun'],
             'daftarBulan' => $data['daftarBulan'],
             'lokasiList' => $data['lokasiList'],
@@ -52,7 +54,7 @@ class LaporanController extends Controller
      */
     public function exportExcel(Request $request)
     {
-        abort_unless($this->scope->isAdminAset(), 403, 'Hanya Admin Aset yang berwenang mengekspor Laporan.');
+        abort_unless($this->scope->isAdminAset() || $this->scope->isAdminUpt(), 403, 'Hanya Admin Aset dan Admin UPT yang berwenang mengekspor Laporan.');
 
         $data = $this->resolveReportContext($request);
 
@@ -80,7 +82,7 @@ class LaporanController extends Controller
      */
     public function exportPdf(Request $request)
     {
-        abort_unless($this->scope->isAdminAset(), 403, 'Hanya Admin Aset yang berwenang mengekspor Laporan.');
+        abort_unless($this->scope->isAdminAset() || $this->scope->isAdminUpt(), 403, 'Hanya Admin Aset dan Admin UPT yang berwenang mengekspor Laporan.');
 
         $data = $this->resolveReportContext($request);
 
@@ -103,10 +105,64 @@ class LaporanController extends Controller
 
     /**
      * Resolusi terpusat parameter request, hak akses unit, dan data kalkulasi (Single Source of Truth).
+     * Menerapkan pembatasan role ketat di backend:
+     * - Admin Aset: hanya dapat mengakses dan mengekspor aset Dinas.
+     * - Admin UPT PSBP: hanya dapat mengakses dan mengekspor aset UPT PSBP.
+     * - Admin UPT P2BTP: hanya dapat mengakses dan mengekspor aset UPT P2BTP.
      */
     private function resolveReportContext(Request $request): array
     {
-        abort_unless($this->scope->isAdminAset(), 403, 'Hanya Admin Aset yang berwenang mengakses data Modul Laporan.');
+        abort_unless($this->scope->isAdminAset() || $this->scope->isAdminUpt(), 403, 'Hanya Admin Aset dan Admin UPT yang berwenang mengakses data Modul Laporan.');
+
+        // Tentukan unit kewenangan resmi berdasarkan role & SKPD pegawai pengguna
+        if ($this->scope->isAdminAset()) {
+            $unitParam = $request->query('unit');
+            if ($unitParam === null || $unitParam === '' || $unitParam === 'semua') {
+                $unitLokasiId = null;
+                $authorizedUnitName = 'Semua Unit';
+            } else {
+                $unitInt = (int) $unitParam;
+                $lokasiModel = Lokasi::find($unitInt);
+                if (! $lokasiModel) {
+                    abort(404, 'Unit kerja / lokasi tidak ditemukan.');
+                }
+                $unitLokasiId = $unitInt;
+                $authorizedUnitName = $lokasiModel->nama_lokasi;
+            }
+
+            // Dropdown untuk Admin Aset menampilkan seluruh unit:
+            // Semua Unit, Kantor Dinas Perkebunan (1), UPT PSBP (3), UPT P2BTP (2)
+            $lokasiList = Lokasi::where('status', 'Aktif')
+                ->orderByRaw('FIELD(id_lokasi, 1, 3, 2)')
+                ->get();
+        } elseif ($this->scope->isAdminUpt()) {
+            $skpdId = (int) $this->scope->skpdId();
+            if ($skpdId === 7) {
+                $authorizedUnitId = 3;
+                $authorizedUnitName = 'Kantor UPT PSBP';
+            } elseif ($skpdId === 6) {
+                $authorizedUnitId = 2;
+                $authorizedUnitName = 'Kantor UPT P2BTP';
+            } else {
+                $lokasiUpt = $this->scope->idLokasi();
+                $authorizedUnitId = ! empty($lokasiUpt) ? (int) $lokasiUpt[0] : 0;
+                $lokasiModel = Lokasi::find($authorizedUnitId);
+                $authorizedUnitName = $lokasiModel?->nama_lokasi ?? 'Kantor UPT';
+            }
+
+            // Pembatasan Backend untuk Admin UPT: Cegah manipulasi request unit lain atau konsolidasi seluruh unit
+            $unitParam = $request->query('unit');
+            if ($unitParam !== null && $unitParam !== '') {
+                if ($unitParam === 'semua' || (int) $unitParam !== $authorizedUnitId) {
+                    abort(403, 'Akses ditolak: Anda tidak memiliki wewenang untuk mengakses laporan unit lain.');
+                }
+            }
+
+            $unitLokasiId = $authorizedUnitId;
+            $lokasiList = Lokasi::where('id_lokasi', $authorizedUnitId)->get();
+        } else {
+            abort(403, 'Anda tidak memiliki hak akses untuk Modul Laporan.');
+        }
 
         $jenis = strtolower(trim((string) $request->query('jenis', 'bulanan')));
         if (! in_array($jenis, ['bulanan', 'tahunan'], true)) {
@@ -126,15 +182,6 @@ class LaporanController extends Controller
 
         // Tentukan periode dan tanggal acuan
         $periode = $this->service->resolvePeriode($jenis, $tahun, $bulan);
-
-        // Penanganan Unit Filter (hanya Admin Aset yang boleh memilih unit)
-        $isAdminAset = $this->scope->cakupanPenuh();
-        $unitParam = $request->query('unit');
-        $unitLokasiId = null;
-
-        if ($isAdminAset && $unitParam && is_numeric($unitParam)) {
-            $unitLokasiId = (int) $unitParam;
-        }
 
         // Eksekusi kalkulasi seluruh KPI dan indikator
         $kalkulasi = $this->service->kalkulasi(
@@ -172,20 +219,11 @@ class LaporanController extends Controller
             12 => 'Desember',
         ];
 
-        $lokasiList = $isAdminAset ? $this->scope->lokasiTerlihat() : collect();
-
-        // Nama unit terpilih yang akurat sesuai hak akses
-        $namaUnitTerpilih = 'Seluruh Unit Kerja (Konsolidasi)';
-        if (! $isAdminAset) {
-            $namaUnitTerpilih = $this->scope->user()?->pegawai?->skpd?->nama_skpd ?? 'Unit Saya';
-        } elseif ($unitLokasiId !== null) {
-            $lokasiModel = $lokasiList->firstWhere('id_lokasi', $unitLokasiId);
-            $namaUnitTerpilih = $lokasiModel?->nama_lokasi ?? 'Unit Terpilih';
-        }
 
         $meta = [
-            'nama_unit' => $namaUnitTerpilih,
-            'is_admin_aset' => $isAdminAset,
+            'nama_unit' => $authorizedUnitName,
+            'is_admin_aset' => $this->scope->isAdminAset(),
+            'is_admin_upt' => $this->scope->isAdminUpt(),
             'unit_lokasi_id' => $unitLokasiId,
             'jenis' => $jenis,
             'tahun' => $tahun,

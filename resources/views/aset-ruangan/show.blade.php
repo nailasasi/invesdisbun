@@ -46,7 +46,7 @@
             </button>
 
             {{-- Cetak KIR (Admin Aset & Admin UPT) --}}
-            <button type="button" id="btn-kir-scope"
+            <a href="{{ route('aset-ruangan.kir.download', $ruangan->id_ruangan) }}" id="btn-kir-scope"
                class="inline-flex items-center gap-1.5 rounded-xl border border-sky-200 bg-sky-50/80 px-3 py-1.5 text-xs font-bold text-sky-700 shadow-2xs transition hover:bg-sky-100"
                title="{{ ($jumlahItemKIR ?? 0) === 0 ? 'Ruangan belum memiliki aset terfinalisasi/inventaris aktif untuk dicetak pada KIR' : 'Unduh Kartu Inventaris Ruangan (KIR)' }}">
                 <svg class="h-3.5 w-3.5 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
@@ -54,7 +54,7 @@
                 @if (($jumlahItemKIR ?? 0) > 0)
                     <span class="ml-0.5 rounded-full bg-sky-200/70 px-1.5 py-0.2 text-[10px] text-sky-800 font-semibold">{{ $jumlahItemKIR }}</span>
                 @endif
-            </button>
+            </a>
             @endif
 
             {{-- Pasang Aset (Admin Aset only: existing master, tanpa pemegang) --}}
@@ -109,7 +109,6 @@
 
     {{-- Modal-modal --}}
     @include('aset-ruangan.partials.modal-cetak-label')
-    @include('aset-ruangan.partials.modal-cetak-kir')
     @include('aset-ruangan.partials.modal-inventaris')
     @include('aset-ruangan.partials.modal-mutasi-ruangan')
     @include('aset-ruangan.partials.modal-pasang-aset')
@@ -162,17 +161,6 @@
                         if (labelScopeError) labelScopeError.classList.remove('hidden');
                     }
                 });
-            }
-
-            // ---- Modal Cetak KIR (Kartu Inventaris Ruangan) ----
-            const kirScopeModal = document.getElementById('kir-scope-modal');
-            const btnKirScope = document.getElementById('btn-kir-scope');
-
-            if (btnKirScope && kirScopeModal) {
-                btnKirScope.addEventListener('click', () => {
-                    openModal(kirScopeModal);
-                });
-                bindClose(kirScopeModal, '[data-kir-scope-close]');
             }
 
             // ---- Inventaris Lokal (Kelola & Mutasi) ----
@@ -380,6 +368,7 @@
             const pasangKandidatUrl = @json(route('aset-ruangan.aset.pasang.kandidat', ['ruangan' => $ruangan->id_ruangan]));
             const pasangMassalUrl = @json(route('aset-ruangan.aset.pasang-massal', ['ruangan' => $ruangan->id_ruangan]));
             const jenisSelect = document.getElementById('field-jenis-select');
+            const jenisSearch = document.getElementById('field-jenis-search');
             const jumlahInput = document.getElementById('field-jumlah');
             const pasangTersedia = document.getElementById('pasang-tersedia');
             const pasangRingkasan = document.getElementById('pasang-ringkasan');
@@ -402,9 +391,22 @@
                 });
             }
 
+            function filterJenisOptions() {
+                if (!jenisSelect) return;
+                const term = jenisSearch ? jenisSearch.value.toLowerCase().trim() : '';
+                Array.from(jenisSelect.options).forEach(opt => {
+                    if (opt.disabled && !opt.value) return;
+                    opt.style.display = opt.text.toLowerCase().includes(term) ? '' : 'none';
+                });
+            }
+
+            if (jenisSearch && jenisSelect) {
+                jenisSearch.addEventListener('input', filterJenisOptions);
+            }
+
             function refreshRingkasan() {
-                const opt = jenisSelect && jenisSelect.options[jenisSelect.selectedIndex];
-                const idBarang = jenisSelect ? jenisSelect.value : '';
+                const opt = jenisSelect && jenisSelect.selectedIndex >= 0 ? jenisSelect.options[jenisSelect.selectedIndex] : null;
+                const idBarang = (opt && opt.value) ? opt.value : '';
                 const ditemukan = pasangKandidat.find(k => String(k.id_barang) === String(idBarang));
                 const tersedia = ditemukan ? ditemukan.tersedia : 0;
 
@@ -415,7 +417,7 @@
 
                 if (pasangRingkasan && jumlah > 0 && opt && opt.value) {
                     pasangRingkasan.classList.remove('hidden');
-                    ringkasanJenis.textContent = opt.textContent;
+                    ringkasanJenis.textContent = opt.dataset.nama || opt.textContent;
                     ringkasanJumlah.textContent = jumlah;
                 } else if (pasangRingkasan) {
                     pasangRingkasan.classList.add('hidden');
@@ -430,14 +432,29 @@
                     pasangKandidat = data.kandidat || [];
 
                     const current = jenisSelect.value;
-                    jenisSelect.innerHTML = '<option value="">-- Pilih Jenis Barang --</option>';
-                    pasangKandidat.forEach(k => {
+                    jenisSelect.innerHTML = '';
+                    if (pasangKandidat.length === 0) {
                         const opt = document.createElement('option');
-                        opt.value = k.id_barang;
-                        opt.textContent = k.nama_barang + ' (' + k.tersedia + ' tersedia)';
+                        opt.value = '';
+                        opt.disabled = true;
+                        opt.textContent = '-- Tidak ada barang yang dapat dipasang --';
                         jenisSelect.appendChild(opt);
-                    });
-                    jenisSelect.value = current;
+                    } else {
+                        pasangKandidat.forEach(k => {
+                            const opt = document.createElement('option');
+                            opt.value = k.id_barang;
+                            opt.textContent = k.nama_barang + ' (' + k.tersedia + ' tersedia)';
+                            opt.setAttribute('data-nama', k.nama_barang);
+                            opt.className = 'py-1 px-2 cursor-pointer hover:bg-slate-100';
+                            jenisSelect.appendChild(opt);
+                        });
+                    }
+
+                    if (current) {
+                        jenisSelect.value = current;
+                    }
+
+                    filterJenisOptions();
                     refreshRingkasan();
                 } catch (err) {
                     pasangKandidat = [];
@@ -448,10 +465,19 @@
                 if (!pasangModal) return;
                 openModal(pasangModal);
                 clearPasangErrors();
-                if (jenisSelect) jenisSelect.value = '';
+                if (jenisSearch) {
+                    jenisSearch.value = '';
+                }
+                if (jenisSelect) {
+                    jenisSelect.value = '';
+                    Array.from(jenisSelect.options).forEach(o => o.style.display = '');
+                }
                 if (jumlahInput) jumlahInput.value = '';
                 refreshRingkasan();
                 muatKandidat();
+                setTimeout(() => {
+                    if (jenisSearch) jenisSearch.focus();
+                }, 50);
             }
 
             function closePasangModal() {
@@ -463,9 +489,13 @@
             if (btnPasang && pasangModal) {
                 btnPasang.addEventListener('click', openPasangModal);
                 bindClose(pasangModal, '[data-pasang-close]');
+                muatKandidat();
             }
 
-            if (jenisSelect) jenisSelect.addEventListener('change', refreshRingkasan);
+            if (jenisSelect) {
+                jenisSelect.addEventListener('change', refreshRingkasan);
+                jenisSelect.addEventListener('click', refreshRingkasan);
+            }
             if (jumlahInput) jumlahInput.addEventListener('input', refreshRingkasan);
 
             if (pasangForm) {

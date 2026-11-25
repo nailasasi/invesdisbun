@@ -25,6 +25,14 @@ class RetribusiOtorisasiSuksesTest extends TestCase
     use MembuatFotoBukti;
     use RefreshDatabase;
 
+    protected function beforeRefreshingDatabase(): void
+    {
+        config([
+            'database.default' => 'sqlite',
+            'database.connections.sqlite.database' => ':memory:',
+        ]);
+    }
+
     private const PASSWORD = 'rahasia123';
 
     private function adminAset(): User

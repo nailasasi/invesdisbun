@@ -6,11 +6,14 @@ use App\Models\Aset;
 use App\Models\DetailMutasiAset;
 use App\Models\Kendaraan;
 use App\Models\Lokasi;
+use App\Models\MasterBarang;
 use App\Models\MutasiAset;
 use App\Models\Pegawai;
 use App\Models\Skpd;
+use App\Models\TemplateDokumen;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class MutasiKendaraanBastTest extends TestCase
@@ -29,6 +32,24 @@ class MutasiKendaraanBastTest extends TestCase
 
     private Skpd $skpdPsbp;
 
+    private array $filesDibuatSementara = [];
+
+    private MutasiAset $mutasiPsbp1;
+
+    private MutasiAset $mutasiPsbp2;
+
+    private MutasiAset $mutasiPsbp3;
+
+    private MutasiAset $mutasiP2btp1;
+
+    private MutasiAset $mutasiP2btp2;
+
+    private MutasiAset $mutasiDinas1;
+
+    private MutasiAset $mutasiDinas2;
+
+    private MutasiAset $mutasiDinas3;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -46,22 +67,19 @@ class MutasiKendaraanBastTest extends TestCase
     protected function tearDown(): void
     {
         DB::rollBack();
+
+        foreach ($this->filesDibuatSementara as $path) {
+            if (file_exists($path)) {
+                @unlink($path);
+            }
+        }
+
         parent::tearDown();
     }
 
     private function namaDatabase(): string
     {
-        if (file_exists(base_path('.env'))) {
-            foreach (file(base_path('.env')) as $line) {
-                if (str_starts_with(trim($line), 'DB_DATABASE=')) {
-                    $nilai = trim(explode('=', $line, 2)[1]);
-
-                    return $nilai === '' ? 'invesdisbun' : $nilai;
-                }
-            }
-        }
-
-        return 'invesdisbun';
+        return $this->namaDatabasePengujian();
     }
 
     private function siapkanData(): void
@@ -76,11 +94,113 @@ class MutasiKendaraanBastTest extends TestCase
             ->whereHas('pegawai.skpd', fn ($q) => $q->where('nama_skpd', 'like', '%PSBP%'))
             ->firstOrFail();
 
-        $this->adminBidang = User::whereHas('role', fn ($q) => $q->where('nama_role', 'Admin Bidang'))->firstOrFail();
-        $this->pegawai = User::whereHas('role', fn ($q) => $q->where('nama_role', 'Pegawai'))->firstOrFail();
+        $this->adminBidang = $this->ambilAtauBuatUserRole('Admin Bidang');
+        $this->pegawai = $this->ambilAtauBuatUserRole('Pegawai');
 
         $this->skpdP2btp = Skpd::where('nama_skpd', 'like', '%P2BTP%')->firstOrFail();
         $this->skpdPsbp = Skpd::where('nama_skpd', 'like', '%PSBP%')->firstOrFail();
+        $skpdDinas = Skpd::where('nama_skpd', 'like', '%Sekretariat%')->firstOrFail();
+
+        $lokasiPsbp = Lokasi::find(3) ?? Lokasi::where('nama_lokasi', 'like', '%PSBP%')->firstOrFail();
+        $lokasiP2btp = Lokasi::find(2) ?? Lokasi::where('nama_lokasi', 'like', '%P2BTP%')->firstOrFail();
+        $lokasiDinas = Lokasi::find(1) ?? Lokasi::where('nama_lokasi', 'like', '%Dinas%')->firstOrFail();
+
+        $this->pastikanBerkasBastTersedia();
+
+        $this->mutasiPsbp1 = $this->buatMutasiKendaraan($this->skpdPsbp, $lokasiPsbp, 'PSBP 1');
+        $this->mutasiPsbp2 = $this->buatMutasiKendaraan($this->skpdPsbp, $lokasiPsbp, 'PSBP 2');
+        $this->mutasiPsbp3 = $this->buatMutasiKendaraan($this->skpdPsbp, $lokasiPsbp, 'PSBP 3');
+
+        $this->mutasiP2btp1 = $this->buatMutasiKendaraan($this->skpdP2btp, $lokasiP2btp, 'P2BTP 1');
+        $this->mutasiP2btp2 = $this->buatMutasiKendaraan($this->skpdP2btp, $lokasiP2btp, 'P2BTP 2');
+
+        $this->mutasiDinas1 = $this->buatMutasiKendaraan($skpdDinas, $lokasiDinas, 'Dinas 1');
+        $this->mutasiDinas2 = $this->buatMutasiKendaraan($skpdDinas, $lokasiDinas, 'Dinas 2');
+        $this->mutasiDinas3 = $this->buatMutasiKendaraan($skpdDinas, $lokasiDinas, 'Dinas 3');
+    }
+
+    private function pastikanBerkasBastTersedia(): void
+    {
+        $sampleDocx = storage_path('app/private/templates/kir_20261119_154822_d125383b.docx');
+
+        foreach (['bast_kendaraan', 'bast_barang'] as $kode) {
+            $tpl = TemplateDokumen::where('kode_template', $kode)->first();
+            if ($tpl && $tpl->file_path && ! $tpl->fileExists()) {
+                $targetPath = Storage::disk(TemplateDokumen::DISK)->path($tpl->file_path);
+                $dir = dirname($targetPath);
+                if (! is_dir($dir)) {
+                    @mkdir($dir, 0777, true);
+                }
+                if (file_exists($sampleDocx)) {
+                    copy($sampleDocx, $targetPath);
+                    $this->filesDibuatSementara[] = $targetPath;
+                }
+            }
+        }
+    }
+
+    private function buatMutasiKendaraan(Skpd $skpd, Lokasi $lokasi, string $label): MutasiAset
+    {
+        $masterBarang = MasterBarang::first() ?? MasterBarang::create([
+            'kode_barang' => 'TEST-' . uniqid(),
+            'nama_barang' => 'Kendaraan Roda 4 ' . $label,
+        ]);
+
+        $pegawaiLama = Pegawai::create([
+            'nip' => '9' . str_pad((string) random_int(10000000, 99999999), 8, '0') . substr(uniqid(), -8),
+            'nama_pegawai' => 'Pegawai Lama ' . $label,
+            'id_skpd' => $skpd->id_skpd,
+            'jabatan' => 'Staff Lama ' . $skpd->nama_skpd,
+        ]);
+
+        $pegawaiBaru = Pegawai::create([
+            'nip' => '9' . str_pad((string) random_int(10000000, 99999999), 8, '0') . substr(uniqid(), -8),
+            'nama_pegawai' => 'Pegawai Baru ' . $label,
+            'id_skpd' => $skpd->id_skpd,
+            'jabatan' => 'Staff Baru ' . $skpd->nama_skpd,
+        ]);
+
+        $aset = Aset::create([
+            'id_barang' => $masterBarang->id_barang,
+            'id_skpd' => $skpd->id_skpd,
+            'id_lokasi' => $lokasi->id_lokasi,
+            'nomor_kartu_barang' => 'NKB-' . uniqid(),
+            'merk' => 'Toyota ' . $label,
+            'tanggal_pengadaan' => '2022-01-01',
+            'nilai_perolehan' => 150000000,
+            'kondisi' => 'Baik',
+            'status_aset' => 'Aktif',
+            'is_kendaraan' => true,
+        ]);
+
+        Kendaraan::create([
+            'id_aset' => $aset->id_aset,
+            'nama_kendaraan' => 'Kendaraan Dinas ' . $label,
+            'jenis_kendaraan' => 'Roda 4',
+            'nomor_rangka' => 'MHK' . strtoupper(substr(uniqid(), -8)),
+            'nomor_mesin' => '2NR' . strtoupper(substr(uniqid(), -8)),
+            'merk' => 'Toyota',
+            'tipe' => 'Avanza',
+            'pemegang' => $pegawaiBaru->nama_pegawai,
+            'status_penggunaan' => 'Operasional',
+        ]);
+
+        $mutasi = MutasiAset::create([
+            'tanggal_mutasi' => now()->format('Y-m-d'),
+            'jenis_mutasi' => 'Ganti Pemegang',
+            'keterangan' => 'Ganti Pemegang dari ' . $pegawaiLama->nama_pegawai . ' ke ' . $pegawaiBaru->nama_pegawai,
+            'id_user_penginput' => $this->adminAset->id_user,
+            'status_mutasi' => 'Selesai',
+        ]);
+
+        DetailMutasiAset::create([
+            'id_mutasi' => $mutasi->id_mutasi,
+            'id_aset' => $aset->id_aset,
+            'pegawai_lama' => $pegawaiLama->id_pegawai,
+            'pegawai_baru' => $pegawaiBaru->id_pegawai,
+        ]);
+
+        return $mutasi;
     }
 
     /**
@@ -98,7 +218,16 @@ class MutasiKendaraanBastTest extends TestCase
         $ids = $mutasiList->pluck('id_mutasi')->toArray();
 
         // Admin Aset melihat seluruh transaksi kendaraan (lintas UPT dan Dinas)
-        $expectedIds = [259, 335, 346, 347, 503, 1178, 1179, 1186];
+        $expectedIds = [
+            $this->mutasiPsbp1->id_mutasi,
+            $this->mutasiPsbp2->id_mutasi,
+            $this->mutasiPsbp3->id_mutasi,
+            $this->mutasiP2btp1->id_mutasi,
+            $this->mutasiP2btp2->id_mutasi,
+            $this->mutasiDinas1->id_mutasi,
+            $this->mutasiDinas2->id_mutasi,
+            $this->mutasiDinas3->id_mutasi,
+        ];
         foreach ($expectedIds as $id) {
             $this->assertContains($id, $ids, "Admin Aset harus dapat melihat mutasi kendaraan #{$id}");
         }
@@ -119,9 +248,9 @@ class MutasiKendaraanBastTest extends TestCase
         $this->assertNotNull($mutasiList);
         $ids = $mutasiList->pluck('id_mutasi')->toArray();
 
-        $this->assertContains(259, $ids, 'Admin UPT PSBP harus dapat melihat mutasi #259');
-        $this->assertContains(335, $ids, 'Admin UPT PSBP harus dapat melihat mutasi #335');
-        $this->assertContains(503, $ids, 'Admin UPT PSBP harus dapat melihat mutasi #503');
+        $this->assertContains($this->mutasiPsbp1->id_mutasi, $ids, 'Admin UPT PSBP harus dapat melihat mutasi PSBP 1');
+        $this->assertContains($this->mutasiPsbp2->id_mutasi, $ids, 'Admin UPT PSBP harus dapat melihat mutasi PSBP 2');
+        $this->assertContains($this->mutasiPsbp3->id_mutasi, $ids, 'Admin UPT PSBP harus dapat melihat mutasi PSBP 3');
     }
 
     /**
@@ -139,8 +268,8 @@ class MutasiKendaraanBastTest extends TestCase
         $this->assertNotNull($mutasiList);
         $ids = $mutasiList->pluck('id_mutasi')->toArray();
 
-        $this->assertContains(347, $ids, 'Admin UPT P2BTP harus dapat melihat mutasi #347');
-        $this->assertContains(1178, $ids, 'Admin UPT P2BTP harus dapat melihat mutasi #1178');
+        $this->assertContains($this->mutasiP2btp1->id_mutasi, $ids, 'Admin UPT P2BTP harus dapat melihat mutasi P2BTP 1');
+        $this->assertContains($this->mutasiP2btp2->id_mutasi, $ids, 'Admin UPT P2BTP harus dapat melihat mutasi P2BTP 2');
     }
 
     /**
@@ -148,28 +277,28 @@ class MutasiKendaraanBastTest extends TestCase
      */
     public function test_skenario_04_admin_upt_tidak_dapat_melihat_mutasi_kendaraan_di_luar_upt_miliknya(): void
     {
-        // Admin UPT PSBP tidak boleh melihat mutasi P2BTP (#347, #1178) maupun mutasi Dinas (#346, #1179, #1186)
+        // Admin UPT PSBP tidak boleh melihat mutasi P2BTP maupun mutasi Dinas
         $resPsbp = $this->actingAs($this->adminUptPsbp)
             ->get(route('mutasi-aset.index', ['kategori' => 'kendaraan']));
         $idsPsbp = $resPsbp->viewData('mutasiList')->pluck('id_mutasi')->toArray();
 
-        $this->assertNotContains(347, $idsPsbp);
-        $this->assertNotContains(1178, $idsPsbp);
-        $this->assertNotContains(346, $idsPsbp);
-        $this->assertNotContains(1179, $idsPsbp);
-        $this->assertNotContains(1186, $idsPsbp);
+        $this->assertNotContains($this->mutasiP2btp1->id_mutasi, $idsPsbp);
+        $this->assertNotContains($this->mutasiP2btp2->id_mutasi, $idsPsbp);
+        $this->assertNotContains($this->mutasiDinas1->id_mutasi, $idsPsbp);
+        $this->assertNotContains($this->mutasiDinas2->id_mutasi, $idsPsbp);
+        $this->assertNotContains($this->mutasiDinas3->id_mutasi, $idsPsbp);
 
-        // Admin UPT P2BTP tidak boleh melihat mutasi PSBP (#259, #335, #503) maupun mutasi Dinas (#346, #1179, #1186)
+        // Admin UPT P2BTP tidak boleh melihat mutasi PSBP maupun mutasi Dinas
         $resP2btp = $this->actingAs($this->adminUptP2btp)
             ->get(route('mutasi-aset.index', ['kategori' => 'kendaraan']));
         $idsP2btp = $resP2btp->viewData('mutasiList')->pluck('id_mutasi')->toArray();
 
-        $this->assertNotContains(259, $idsP2btp);
-        $this->assertNotContains(335, $idsP2btp);
-        $this->assertNotContains(503, $idsP2btp);
-        $this->assertNotContains(346, $idsP2btp);
-        $this->assertNotContains(1179, $idsP2btp);
-        $this->assertNotContains(1186, $idsP2btp);
+        $this->assertNotContains($this->mutasiPsbp1->id_mutasi, $idsP2btp);
+        $this->assertNotContains($this->mutasiPsbp2->id_mutasi, $idsP2btp);
+        $this->assertNotContains($this->mutasiPsbp3->id_mutasi, $idsP2btp);
+        $this->assertNotContains($this->mutasiDinas1->id_mutasi, $idsP2btp);
+        $this->assertNotContains($this->mutasiDinas2->id_mutasi, $idsP2btp);
+        $this->assertNotContains($this->mutasiDinas3->id_mutasi, $idsP2btp);
     }
 
     /**
@@ -177,9 +306,9 @@ class MutasiKendaraanBastTest extends TestCase
      */
     public function test_skenario_05_admin_upt_dapat_mengunduh_bast_mutasi_dalam_scopenya(): void
     {
-        // Admin UPT PSBP mengunduh BAST untuk mutasi #259 (Ganti Pemegang dalam scope PSBP)
+        // Admin UPT PSBP mengunduh BAST untuk mutasi PSBP 1
         $resPsbp = $this->actingAs($this->adminUptPsbp)
-            ->get(route('kendaraan.bast.download', 259));
+            ->get(route('kendaraan.bast.download', $this->mutasiPsbp1->id_mutasi));
         $resPsbp->assertOk();
         $this->assertTrue(
             str_contains($resPsbp->headers->get('content-type') ?? '', 'wordprocessingml')
@@ -187,9 +316,9 @@ class MutasiKendaraanBastTest extends TestCase
             'Response unduh BAST oleh Admin UPT PSBP harus mengembalikan berkas Word .docx'
         );
 
-        // Admin UPT P2BTP mengunduh BAST untuk mutasi #347 & #1178 (Ganti Pemegang dalam scope P2BTP)
+        // Admin UPT P2BTP mengunduh BAST untuk mutasi P2BTP 1 & 2
         $resP2btp1 = $this->actingAs($this->adminUptP2btp)
-            ->get(route('kendaraan.bast.download', 347));
+            ->get(route('kendaraan.bast.download', $this->mutasiP2btp1->id_mutasi));
         $resP2btp1->assertOk();
         $this->assertTrue(
             str_contains($resP2btp1->headers->get('content-type') ?? '', 'wordprocessingml')
@@ -198,7 +327,7 @@ class MutasiKendaraanBastTest extends TestCase
         );
 
         $resP2btp2 = $this->actingAs($this->adminUptP2btp)
-            ->get(route('kendaraan.bast.download', 1178));
+            ->get(route('kendaraan.bast.download', $this->mutasiP2btp2->id_mutasi));
         $resP2btp2->assertOk();
     }
 
@@ -207,23 +336,23 @@ class MutasiKendaraanBastTest extends TestCase
      */
     public function test_skenario_06_admin_upt_tidak_dapat_mengunduh_bast_milik_upt_lain_atau_dinas(): void
     {
-        // Admin UPT PSBP mencoba mengunduh BAST mutasi milik P2BTP (#347)
+        // Admin UPT PSBP mencoba mengunduh BAST mutasi milik P2BTP
         $resPsbpToP2btp = $this->actingAs($this->adminUptPsbp)
-            ->get(route('kendaraan.bast.download', 347));
+            ->get(route('kendaraan.bast.download', $this->mutasiP2btp1->id_mutasi));
         $resPsbpToP2btp->assertStatus(403);
 
-        // Admin UPT P2BTP mencoba mengunduh BAST mutasi milik PSBP (#259)
+        // Admin UPT P2BTP mencoba mengunduh BAST mutasi milik PSBP
         $resP2btpToPsbp = $this->actingAs($this->adminUptP2btp)
-            ->get(route('kendaraan.bast.download', 259));
+            ->get(route('kendaraan.bast.download', $this->mutasiPsbp1->id_mutasi));
         $resP2btpToPsbp->assertStatus(403);
 
-        // Admin UPT PSBP & P2BTP mencoba mengunduh BAST mutasi milik Dinas (#346 dan #1186)
+        // Admin UPT PSBP & P2BTP mencoba mengunduh BAST mutasi milik Dinas
         $resPsbpToDinas = $this->actingAs($this->adminUptPsbp)
-            ->get(route('kendaraan.bast.download', 346));
+            ->get(route('kendaraan.bast.download', $this->mutasiDinas1->id_mutasi));
         $resPsbpToDinas->assertStatus(403);
 
         $resP2btpToDinas = $this->actingAs($this->adminUptP2btp)
-            ->get(route('kendaraan.bast.download', 1186));
+            ->get(route('kendaraan.bast.download', $this->mutasiDinas2->id_mutasi));
         $resP2btpToDinas->assertStatus(403);
     }
 
@@ -239,7 +368,7 @@ class MutasiKendaraanBastTest extends TestCase
 
         // Akses endpoint unduh BAST kendaraan
         $resBast = $this->actingAs($this->adminBidang)
-            ->get(route('kendaraan.bast.download', 259));
+            ->get(route('kendaraan.bast.download', $this->mutasiPsbp1->id_mutasi));
         $resBast->assertStatus(403);
     }
 
@@ -255,7 +384,7 @@ class MutasiKendaraanBastTest extends TestCase
 
         // Akses endpoint unduh BAST kendaraan
         $resBast = $this->actingAs($this->pegawai)
-            ->get(route('kendaraan.bast.download', 259));
+            ->get(route('kendaraan.bast.download', $this->mutasiPsbp1->id_mutasi));
         $resBast->assertStatus(403);
     }
 
@@ -345,14 +474,14 @@ class MutasiKendaraanBastTest extends TestCase
 
         // 3. Pencarian numerik ID mutasi untuk Admin UPT PSBP
         $resSearch = $this->actingAs($this->adminUptPsbp)
-            ->get(route('mutasi-aset.index', ['kategori' => 'kendaraan', 'search' => '259']));
+            ->get(route('mutasi-aset.index', ['kategori' => 'kendaraan', 'search' => (string) $this->mutasiPsbp1->id_mutasi]));
         $resSearch->assertOk();
         $listSearch = $resSearch->viewData('mutasiList');
-        $this->assertTrue($listSearch->contains('id_mutasi', 259));
+        $this->assertTrue($listSearch->contains('id_mutasi', $this->mutasiPsbp1->id_mutasi));
 
         // Pencarian transaksi UPT lain oleh Admin UPT PSBP menghasilkan 0 data
         $resSearchLain = $this->actingAs($this->adminUptPsbp)
-            ->get(route('mutasi-aset.index', ['kategori' => 'kendaraan', 'search' => '347']));
+            ->get(route('mutasi-aset.index', ['kategori' => 'kendaraan', 'search' => (string) $this->mutasiP2btp1->id_mutasi]));
         $resSearchLain->assertOk();
         $this->assertCount(0, $resSearchLain->viewData('mutasiList'));
     }

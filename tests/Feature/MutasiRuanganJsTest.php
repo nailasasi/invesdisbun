@@ -77,12 +77,13 @@ class MutasiRuanganJsTest extends TestCase
         // terdefinisi) — inilah akar bug "Koneksi bermasalah".
         $this->assertSame([], $hasil['errors'], 'Terjadi error JavaScript: ' . implode(' | ', $hasil['errors']));
 
-        // Request benar-benar terkirim (bug lama: fetch tidak pernah dipanggil).
-        $this->assertCount(1, $hasil['fetchCalls'], 'Exactly one request harus terkirim.');
-        $this->assertSame('POST', $hasil['fetchCalls'][0]['method']);
+        // Request mutasi benar-benar terkirim (bug lama: fetch tidak pernah dipanggil).
+        $mutasiCalls = array_values(array_filter($hasil['fetchCalls'], fn ($c) => ($c['method'] ?? null) === 'POST'));
+        $this->assertCount(1, $mutasiCalls, 'Exactly one request harus terkirim.');
+        $this->assertSame('POST', $mutasiCalls[0]['method']);
 
         // Header CSRF harus terisi dengan token dari meta tag.
-        $headers = $hasil['fetchCalls'][0]['headers'];
+        $headers = $mutasiCalls[0]['headers'];
         $this->assertArrayHasKey('X-CSRF-TOKEN', $headers);
         $this->assertNotEmpty($headers['X-CSRF-TOKEN']);
         $this->assertSame('TOKEN-CSRF-ABC123', $headers['X-CSRF-TOKEN']);

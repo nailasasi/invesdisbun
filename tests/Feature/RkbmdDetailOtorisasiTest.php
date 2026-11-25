@@ -33,7 +33,7 @@ class RkbmdDetailOtorisasiTest extends TestCase
 
         config([
             'database.default' => 'mysql',
-            'database.connections.mysql.database' => 'invesdisbun',
+            'database.connections.mysql.database' => $this->namaDatabasePengujian(),
         ]);
         DB::purge('mysql');
         DB::reconnect('mysql');

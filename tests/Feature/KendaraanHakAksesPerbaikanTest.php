@@ -47,15 +47,7 @@ class KendaraanHakAksesPerbaikanTest extends TestCase
 
     private function namaDatabase(): string
     {
-        foreach (file(base_path('.env')) as $line) {
-            if (str_starts_with(trim($line), 'DB_DATABASE=')) {
-                $nilai = trim(explode('=', $line, 2)[1]);
-
-                return $nilai === '' ? 'invesdisbun' : $nilai;
-            }
-        }
-
-        return 'invesdisbun';
+        return $this->namaDatabasePengujian();
     }
 
     private function loginSebagai(User $user): void
@@ -64,8 +56,16 @@ class KendaraanHakAksesPerbaikanTest extends TestCase
         $this->actingAs($user);
     }
 
-    private function buatUserRole(string $namaRole, int $idSkpd = 1): User
+    private function buatUserRole(string $namaRole, ?int $idSkpd = null): User
     {
+        if ($idSkpd === null) {
+            $idSkpd = match ($namaRole) {
+                'Admin UPT' => 6,
+                'Admin Bidang' => 2,
+                default => 1,
+            };
+        }
+
         $role = Role::firstOrCreate(
             ['nama_role' => $namaRole],
             ['deskripsi' => $namaRole]
@@ -74,7 +74,11 @@ class KendaraanHakAksesPerbaikanTest extends TestCase
         $skpd = Skpd::find($idSkpd) ?? Skpd::create([
             'id_skpd' => $idSkpd,
             'nama_skpd' => 'SKPD Test ' . $idSkpd,
-            'jenis_skpd' => $namaRole === 'Admin UPT' ? 'UPT' : 'Bidang',
+            'jenis_skpd' => match ($namaRole) {
+                'Admin UPT' => 'UPT',
+                'Admin Bidang' => 'Bidang',
+                default => 'Sekretariat',
+            },
         ]);
 
         $pegawai = Pegawai::create([
@@ -95,6 +99,8 @@ class KendaraanHakAksesPerbaikanTest extends TestCase
 
     private function buatKendaraanLengkap(int $idSkpd = 1, ?Pegawai $pemegang = null): array
     {
+        $idLokasi = $idSkpd === 6 ? 2 : 1;
+
         $barang = MasterBarang::firstOrCreate(
             ['kode_barang' => 'KD-TEST-' . rand(1000, 9999)],
             ['nama_barang' => 'Mobil Dinas Test', 'id_kategori' => 1]
@@ -103,7 +109,7 @@ class KendaraanHakAksesPerbaikanTest extends TestCase
         $aset = Aset::create([
             'id_barang' => $barang->id_barang,
             'id_skpd' => $idSkpd,
-            'id_lokasi' => 1,
+            'id_lokasi' => $idLokasi,
             'nomor_kartu_barang' => 'KIB-KD-' . uniqid(),
             'status_aset' => 'aktif',
             'kondisi' => 'Baik',
@@ -114,7 +120,7 @@ class KendaraanHakAksesPerbaikanTest extends TestCase
 
         $ruangan = Ruangan::firstOrCreate(
             ['id_skpd' => $idSkpd, 'nama_ruangan' => 'Ruang Dinas Test ' . $idSkpd],
-            ['kode_ruangan' => 'R-KD-' . rand(100, 999), 'id_lokasi' => 1]
+            ['kode_ruangan' => 'R-KD-' . rand(100, 999), 'id_lokasi' => $idLokasi]
         );
 
         $penempatan = PenempatanAset::create([
@@ -242,11 +248,20 @@ class KendaraanHakAksesPerbaikanTest extends TestCase
         $resShowAset->assertOk();
         $resShowAset->assertSee($expectedPegawaiUrl, false);
 
-        // 3.2 Admin UPT: dapat tautan ke profil pegawai
+        // 3.2 Admin UPT: dapat tautan ke profil pegawai untuk kendaraan di unit UPT-nya
+        $pemegangUpt = Pegawai::create([
+            'nama_pegawai' => 'Drs. Pemegang UPT Test',
+            'nip' => '198501012005011002',
+            'id_skpd' => 6,
+            'jabatan' => 'Staf UPT',
+        ]);
+        [$kendaraanUpt] = $this->buatKendaraanLengkap(idSkpd: 6, pemegang: $pemegangUpt);
+        $expectedPegawaiUptUrl = route('master-data.pegawai.show', $pemegangUpt->id_pegawai);
+
         $this->loginSebagai($adminUpt);
         $resIndexUpt = $this->get(route('kendaraan.index'));
         $resIndexUpt->assertOk();
-        $resIndexUpt->assertSee($expectedPegawaiUrl, false);
+        $resIndexUpt->assertSee($expectedPegawaiUptUrl, false);
 
         // 3.3 Admin Bidang: teks biasa, TIDAK ada link ke profil pegawai dan TIDAK ada aset-barang.show
         $this->loginSebagai($adminBidang);

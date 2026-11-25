@@ -23,7 +23,7 @@ class LaporanEksekutifExporter
      */
     private const FORMAT_RUPIAH = '"Rp "#,##0;("Rp "#,##0);"-"';
     private const FORMAT_JUMLAH = '#,##0';
-    private const FORMAT_PERSEN = '0.0"%"';
+    private const FORMAT_PERSEN = '0.0%';
 
     /**
      * Hasilkan objek PhpSpreadsheet dengan 6 sheet resmi.
@@ -114,6 +114,21 @@ class LaporanEksekutifExporter
         $dompdf->loadHtml($html);
         $dompdf->setPaper('A4', 'landscape');
         $dompdf->render();
+
+        $canvas = $dompdf->getCanvas();
+        $fontMetrics = $dompdf->getFontMetrics();
+        $font = $fontMetrics->getFont('Helvetica', 'normal');
+        $fontBold = $fontMetrics->getFont('Helvetica', 'bold');
+        $size = 8;
+        $color = [0.35, 0.40, 0.45];
+        $w = $canvas->get_width();
+        $h = $canvas->get_height();
+
+        // Kiri Bawah: Identitas Sistem & Kerahasiaan
+        $canvas->page_text(35, $h - 26, "INVENSBUN | Dokumen Resmi Eksekutif Pengelolaan BMD - Pemerintah Provinsi Jawa Timur", $font, $size, $color);
+
+        // Kanan Bawah: Halaman X dari Y di setiap halaman
+        $canvas->page_text($w - 110, $h - 26, "Halaman {PAGE_NUM} dari {PAGE_COUNT}", $fontBold, $size, $color);
 
         return $dompdf->output();
     }
@@ -221,7 +236,7 @@ class LaporanEksekutifExporter
         $hRow = $row;
         $sheet->fromArray([
             'No', 'Indikator Neraca / Portofolio', 'Jumlah Fisik', 'Satuan', 'Nilai Finansial (Rp)', 'Keterangan Metodologi'
-        ], null, "A{$hRow}");
+        ], null, "A{$hRow}", true);
         $this->styleTableHeaders($sheet, "A{$hRow}:F{$hRow}");
         $row++;
 
@@ -242,7 +257,7 @@ class LaporanEksekutifExporter
         }
 
         foreach ($items as $item) {
-            $sheet->fromArray($item, null, "A{$row}");
+            $sheet->fromArray($item, null, "A{$row}", true);
             $sheet->getStyle("A{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
             $sheet->getStyle("C{$row}")->getNumberFormat()->setFormatCode(self::FORMAT_JUMLAH);
             $sheet->getStyle("C{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
@@ -255,6 +270,10 @@ class LaporanEksekutifExporter
         $this->styleDataBorders($sheet, "A{$startData}:F" . ($row - 1));
         $this->styleTotalRow($sheet, "A" . ($row - 1) . ":F" . ($row - 1));
 
+        $sheet->setCellValue("A{$row}", "* Catatan Pemisahan Populasi: Jumlah aset pengadaan mengikuti tahun pengadaan yang dipilih pada filter laporan (Tahun {$meta['tahun']}: {$k['jumlah_aset_pengadaan']} unit senilai Rp " . number_format($k['nilai_pengadaan_tahun'], 0, ',', '.') . "). Rekap kondisi fisik dan portofolio neraca saldo mencakup seluruh aset aktif berdasarkan data kondisi terakhir.");
+        $sheet->mergeCells("A{$row}:F{$row}");
+        $sheet->getStyle("A{$row}")->getFont()->setItalic(true)->setSize(9)->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color(self::COLOR_TEXT_MUTED));
+
         $row += 2;
 
         // Seksi 2: Indikator Tata Kelola Operasional
@@ -264,7 +283,7 @@ class LaporanEksekutifExporter
         $hRow2 = $row;
         $sheet->fromArray([
             'No', 'Indikator Tata Kelola', 'Capaian Riil', 'Target / Populasi', 'Rasio (%)', 'Keterangan Analitis'
-        ], null, "A{$hRow2}");
+        ], null, "A{$hRow2}", true);
         $this->styleTableHeaders($sheet, "A{$hRow2}:F{$hRow2}");
         $row++;
 
@@ -305,7 +324,7 @@ class LaporanEksekutifExporter
         ];
 
         foreach ($indikatorOperasional as $io) {
-            $sheet->fromArray($io, null, "A{$row}");
+            $sheet->fromArray($io, null, "A{$row}", true);
             $sheet->getStyle("A{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
             $sheet->getStyle("C{$row}:D{$row}")->getNumberFormat()->setFormatCode(self::FORMAT_JUMLAH);
             $sheet->getStyle("C{$row}:D{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
@@ -333,7 +352,7 @@ class LaporanEksekutifExporter
         $hRow = $row;
         $sheet->fromArray([
             'No', 'Kategori Aset', 'Jumlah Unit / Bidang', 'Persentase (%)', 'Klasifikasi Portofolio'
-        ], null, "A{$hRow}");
+        ], null, "A{$hRow}", true);
         $this->styleTableHeaders($sheet, "A{$hRow}:E{$hRow}");
         $row++;
 
@@ -346,7 +365,7 @@ class LaporanEksekutifExporter
             $persen = $totalKat > 0 ? ($cnt / $totalKat) : 0.0;
             $klasifikasi = str_contains($label, 'Kendaraan') ? 'Aset Kendaraan Bergerak' : (str_contains($label, 'Tanah') ? 'Aset Tetap Tidak Bergerak' : 'Aset Peralatan & Mesin');
 
-            $sheet->fromArray([$no++, $label, $cnt, $persen, $klasifikasi], null, "A{$row}");
+            $sheet->fromArray([$no++, $label, $cnt, $persen, $klasifikasi], null, "A{$row}", true);
             $sheet->getStyle("A{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
             $sheet->getStyle("C{$row}")->getNumberFormat()->setFormatCode(self::FORMAT_JUMLAH);
             $sheet->getStyle("C{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
@@ -371,14 +390,14 @@ class LaporanEksekutifExporter
 
         $row += 2;
 
-        // Bagian B: Tren Pengadaan Historis
-        $this->styleSectionBanner($sheet, "A{$row}", 'II. TREN PENGADAAN ASET BERDASARKAN TAHUN PEROLEHAN (HISTORIS)', "A{$row}:E{$row}");
+        // Bagian B: Tren Pengadaan Historis 5 Tahun Terakhir
+        $this->styleSectionBanner($sheet, "A{$row}", 'II. TREN PENGADAAN ASET 5 TAHUN TERAKHIR', "A{$row}:E{$row}");
         $row += 2;
 
         $hRow2 = $row;
         $sheet->fromArray([
             'No', 'Tahun Pengadaan', 'Jumlah Unit Terdaftar', 'Total Nilai Perolehan (Rp)', 'Rata-rata Nilai per Unit (Rp)'
-        ], null, "A{$hRow2}");
+        ], null, "A{$hRow2}", true);
         $this->styleTableHeaders($sheet, "A{$hRow2}:E{$hRow2}");
         $row++;
 
@@ -390,7 +409,7 @@ class LaporanEksekutifExporter
             $nilai = $grafik['tren_pengadaan']['data_nilai'][$idx] ?? 0.0;
             $avgFormula = "=IF(C{$row}>0, D{$row}/C{$row}, 0)";
 
-            $sheet->fromArray([$no2++, "Tahun {$tahunLabel}", $count, $nilai, $avgFormula], null, "A{$row}");
+            $sheet->fromArray([$no2++, "Tahun {$tahunLabel}", $count, $nilai, $avgFormula], null, "A{$row}", true);
             $sheet->getStyle("A{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
             $sheet->getStyle("B{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
             $sheet->getStyle("C{$row}")->getNumberFormat()->setFormatCode(self::FORMAT_JUMLAH);
@@ -401,7 +420,7 @@ class LaporanEksekutifExporter
         }
 
         // Baris Total Tren
-        $sheet->setCellValue("A{$row}", 'TOTAL PENGADAAN TERDATA');
+        $sheet->setCellValue("A{$row}", 'TOTAL PENGADAAN 5 TAHUN TERAKHIR');
         $sheet->mergeCells("A{$row}:B{$row}");
         $sheet->setCellValue("C{$row}", "=SUM(C{$startData2}:C" . ($row - 1) . ")");
         $sheet->setCellValue("D{$row}", "=SUM(D{$startData2}:D" . ($row - 1) . ")");
@@ -431,7 +450,7 @@ class LaporanEksekutifExporter
         $hRow = $row;
         $sheet->fromArray([
             'No', 'Kelompok Aset', 'Nilai Perolehan (Rp)', 'Akumulasi Penyusutan (Rp)', 'Nilai Buku Bersih (Rp)', 'Sisa Nilai (%)', 'Status Akuntansi'
-        ], null, "A{$hRow}");
+        ], null, "A{$hRow}", true);
         $this->styleTableHeaders($sheet, "A{$hRow}:G{$hRow}");
         $row++;
 
@@ -460,7 +479,7 @@ class LaporanEksekutifExporter
         }
 
         foreach ($finansialItems as $fi) {
-            $sheet->fromArray($fi, null, "A{$row}");
+            $sheet->fromArray($fi, null, "A{$row}", true);
             $sheet->getStyle("A{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
             $sheet->getStyle("C{$row}:E{$row}")->getNumberFormat()->setFormatCode(self::FORMAT_RUPIAH);
             $sheet->getStyle("C{$row}:E{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
@@ -494,19 +513,19 @@ class LaporanEksekutifExporter
         $hRow2 = $row;
         $sheet->fromArray([
             'No', 'Status Masa Manfaat', 'Jumlah Unit', 'Rasio Populasi (%)', 'Kriteria & Implikasi Manajerial', '', ''
-        ], null, "A{$hRow2}");
+        ], null, "A{$hRow2}", true);
         $sheet->mergeCells("E{$hRow2}:G{$hRow2}");
         $this->styleTableHeaders($sheet, "A{$hRow2}:G{$hRow2}");
         $row++;
 
         $startData2 = $row;
-        $totAset = $k['total_barang_dan_kendaraan'] ?: 1;
+        $totAset = (int) ($k['total_barang_dan_kendaraan'] ?? 0);
 
         $masaManfaatItems = [
-            [1, 'Masa Manfaat Normal', $k['masa_normal'], $k['masa_normal'] / $totAset, 'Masa pakai aman (> 30 hari tersisa)'],
-            [2, 'Masa Manfaat Kritis', $k['masa_kritis'], $k['masa_kritis'] / $totAset, 'Mendekati habis pakai (<= 30 hari), perlu perencanaan peremajaan'],
-            [3, 'Masa Manfaat Habis', $k['masa_habis'], $k['masa_habis'] / $totAset, 'Telah melampaui masa manfaat SAP, valuasi nilai buku = Rp 1 / residu'],
-            [4, 'Belum Terdefinisi (NaN)', $k['masa_nan'], $k['masa_nan'] / $totAset, 'Tanggal pengadaan / habis pakai belum lengkap'],
+            [1, 'Masa Manfaat Normal', $k['masa_normal'], $totAset > 0 ? ($k['masa_normal'] / $totAset) : 0.0, 'Masa pakai aman (> 30 hari tersisa)'],
+            [2, 'Masa Manfaat Kritis', $k['masa_kritis'], $totAset > 0 ? ($k['masa_kritis'] / $totAset) : 0.0, 'Mendekati habis pakai (<= 30 hari), perlu perencanaan peremajaan'],
+            [3, 'Masa Manfaat Habis', $k['masa_habis'], $totAset > 0 ? ($k['masa_habis'] / $totAset) : 0.0, 'Telah melampaui masa manfaat SAP, valuasi nilai buku = Rp 1 / residu'],
+            [4, 'Belum Terdefinisi (NaN)', $k['masa_nan'], $totAset > 0 ? ($k['masa_nan'] / $totAset) : 0.0, 'Tanggal pengadaan / habis pakai belum lengkap'],
         ];
 
         foreach ($masaManfaatItems as $mmi) {
@@ -551,31 +570,32 @@ class LaporanEksekutifExporter
         $row = $this->buildHeaderBlock($sheet, 'Sheet 4: Kondisi Fisik, Kepatuhan Pajak, & Risiko', $periode, $meta);
 
         // Bagian A: Kondisi Fisik Master Aset
-        $this->styleSectionBanner($sheet, "A{$row}", 'I. DISTRIBUSI KONDISI FISIK MASTER ASET', "A{$row}:F{$row}");
+        $this->styleSectionBanner($sheet, "A{$row}", 'I. DISTRIBUSI KONDISI FISIK SELURUH ASET AKTIF', "A{$row}:F{$row}");
+        $row++;
+        $sheet->setCellValue("A{$row}", 'Keterangan: Kondisi seluruh aset aktif berdasarkan data kondisi terakhir.');
+        $sheet->mergeCells("A{$row}:F{$row}");
+        $sheet->getStyle("A{$row}")->getFont()->setItalic(true)->setSize(9)->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color(self::COLOR_TEXT_MUTED));
         $row += 2;
 
         $hRow = $row;
         $sheet->fromArray([
             'No', 'Status Kondisi Fisik', 'Jumlah Unit', 'Rasio (%)', 'Tingkat Risiko Operasional', 'Catatan Kebijakan'
-        ], null, "A{$hRow}");
+        ], null, "A{$hRow}", true);
         $this->styleTableHeaders($sheet, "A{$hRow}:F{$hRow}");
         $row++;
 
         $startData = $row;
-        $totAset = $k['total_barang_dan_kendaraan'] ?: 1;
+        $totAset = (int) ($k['total_barang_dan_kendaraan'] ?? 0);
 
         $kondisiItems = [
-            [1, 'Baik', $k['kondisi_baik'], $k['kondisi_baik'] / $totAset, 'Rendah', 'Aset siap operasi penuh dan layak pakai'],
-            [2, 'Rusak Ringan', $k['kondisi_rusak_ringan'], $k['kondisi_rusak_ringan'] / $totAset, 'Sedang', 'Memerlukan pemeliharaan rutin / suku cadang'],
-            [3, 'Rusak Berat', $k['kondisi_rusak_berat'], $k['kondisi_rusak_berat'] / $totAset, 'Tinggi', 'Tidak dapat beroperasi optimal, prioritas perbaikan / usulan mutasi'],
+            [1, 'Baik', $k['kondisi_baik'], $totAset > 0 ? ($k['kondisi_baik'] / $totAset) : 0.0, 'Rendah', 'Aset siap operasi penuh dan layak pakai'],
+            [2, 'Rusak Ringan', $k['kondisi_rusak_ringan'], $totAset > 0 ? ($k['kondisi_rusak_ringan'] / $totAset) : 0.0, 'Sedang', 'Memerlukan pemeliharaan rutin / suku cadang'],
+            [3, 'Rusak Berat', $k['kondisi_rusak_berat'], $totAset > 0 ? ($k['kondisi_rusak_berat'] / $totAset) : 0.0, 'Tinggi', 'Tidak dapat beroperasi optimal, prioritas perbaikan / usulan mutasi'],
+            [4, 'Belum Diisi / Lainnya', $k['kondisi_lainnya'], $totAset > 0 ? ($k['kondisi_lainnya'] / $totAset) : 0.0, 'Perlu Audit', 'Perlu pembaruan data kondisi fisik master'],
         ];
 
-        if ($k['kondisi_lainnya'] > 0) {
-            $kondisiItems[] = [4, 'Belum Diisi / Lainnya', $k['kondisi_lainnya'], $k['kondisi_lainnya'] / $totAset, 'Perlu Audit', 'Perlu pembaruan data kondisi fisik master'];
-        }
-
         foreach ($kondisiItems as $ki) {
-            $sheet->fromArray($ki, null, "A{$row}");
+            $sheet->fromArray($ki, null, "A{$row}", true);
             $sheet->getStyle("A{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
             $sheet->getStyle("C{$row}")->getNumberFormat()->setFormatCode(self::FORMAT_JUMLAH);
             $sheet->getStyle("C{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
@@ -590,7 +610,7 @@ class LaporanEksekutifExporter
         $sheet->setCellValue("C{$row}", "=SUM(C{$startData}:C" . ($row - 1) . ")");
         $sheet->setCellValue("D{$row}", "=SUM(D{$startData}:D" . ($row - 1) . ")");
         $sheet->setCellValue("E{$row}", '-');
-        $sheet->setCellValue("F{$row}", 'Kondisi bersumber dari aset.kondisi (master data terkini)');
+        $sheet->setCellValue("F{$row}", 'Kondisi seluruh aset aktif berdasarkan data kondisi terakhir.');
 
         $sheet->getStyle("A{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
         $sheet->getStyle("C{$row}")->getNumberFormat()->setFormatCode(self::FORMAT_JUMLAH);
@@ -608,22 +628,22 @@ class LaporanEksekutifExporter
         $hRow2 = $row;
         $sheet->fromArray([
             'No', 'Kategori Kepatuhan Pajak (PKB)', 'Jumlah Unit', 'Rasio Kendaraan (%)', 'Status Kepatuhan', 'Tindakan Manajerial'
-        ], null, "A{$hRow2}");
+        ], null, "A{$hRow2}", true);
         $this->styleTableHeaders($sheet, "A{$hRow2}:F{$hRow2}");
         $row++;
 
         $startData2 = $row;
-        $totKendaraan = $k['total_kendaraan'] ?: 1;
+        $totKendaraan = (int) ($k['total_kendaraan'] ?? 0);
 
         $pajakItems = [
-            [1, 'Pajak Aman', $k['pajak_snapshot_aman'], $k['pajak_snapshot_aman'] / $totKendaraan, 'Aman', 'Masa berlaku pajak > 30 hari'],
-            [2, 'Pajak Kritis', $k['pajak_snapshot_kritis'], $k['pajak_snapshot_kritis'] / $totKendaraan, 'Peringatan', 'Jatuh tempo dalam <= 30 hari, segera proses pembayaran'],
-            [3, 'Pajak Terlambat', $k['pajak_snapshot_terlambat'], $k['pajak_snapshot_terlambat'] / $totKendaraan, 'Pelanggaran / Denda', 'Masa berlaku telah kedaluwarsa, potensi sanksi administrasi'],
-            [4, 'Belum Ada Data Pajak', $k['pajak_snapshot_tanpa_data'], $k['pajak_snapshot_tanpa_data'] / $totKendaraan, 'Data Kosong', 'Riwayat PKB / STNK belum diunggah ke sistem'],
+            [1, 'Pajak Aman', $k['pajak_snapshot_aman'], $totKendaraan > 0 ? ($k['pajak_snapshot_aman'] / $totKendaraan) : 0.0, 'Aman', 'Masa berlaku pajak > 30 hari'],
+            [2, 'Pajak Kritis', $k['pajak_snapshot_kritis'], $totKendaraan > 0 ? ($k['pajak_snapshot_kritis'] / $totKendaraan) : 0.0, 'Peringatan', 'Jatuh tempo dalam <= 30 hari, segera proses pembayaran'],
+            [3, 'Pajak Terlambat', $k['pajak_snapshot_terlambat'], $totKendaraan > 0 ? ($k['pajak_snapshot_terlambat'] / $totKendaraan) : 0.0, 'Pelanggaran / Denda', 'Masa berlaku telah kedaluwarsa, potensi sanksi administrasi'],
+            [4, 'Belum Ada Data Pajak', $k['pajak_snapshot_tanpa_data'], $totKendaraan > 0 ? ($k['pajak_snapshot_tanpa_data'] / $totKendaraan) : 0.0, 'Data Kosong', 'Riwayat PKB / STNK belum diunggah ke sistem'],
         ];
 
         foreach ($pajakItems as $pi) {
-            $sheet->fromArray($pi, null, "A{$row}");
+            $sheet->fromArray($pi, null, "A{$row}", true);
             $sheet->getStyle("A{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
             $sheet->getStyle("C{$row}")->getNumberFormat()->setFormatCode(self::FORMAT_JUMLAH);
             $sheet->getStyle("C{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
@@ -649,8 +669,8 @@ class LaporanEksekutifExporter
 
         $row += 2;
 
-        // Catatan Keterbatasan Data Historis
-        $sheet->setCellValue("A{$row}", '* Catatan Keterbatasan Data: Kolom aset.kondisi merupakan kondisi master mutakhir. Jika laporan dibuka untuk periode lampau, riwayat kondisi fisik pada tanggal acuan historis tersebut merefleksikan kondisi master terkini karena ketiadaan log perubahan kondisi sebelum sistem berjalan.');
+        // Catatan Keterbatasan Data Historis & Pemisahan Populasi
+        $sheet->setCellValue("A{$row}", '* Catatan: Kondisi seluruh aset aktif berdasarkan data kondisi terakhir. Rekap kondisi mencakup seluruh aset yang masih aktif dalam cakupan unit laporan, tanpa membatasi tahun pengadaan. Aset dari tahun pengadaan sebelumnya tetap dihitung selama masih menjadi aset aktif Disbun.');
         $sheet->mergeCells("A{$row}:F{$row}");
         $sheet->getStyle("A{$row}")->getFont()->setItalic(true)->setSize(9)->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color(self::COLOR_TEXT_MUTED));
 
@@ -745,7 +765,7 @@ class LaporanEksekutifExporter
                 "=G{$row}+L{$row}",
                 $adaRuang, $tanpaRuang,
                 $adaPemegang, $tanpaPemegang
-            ], null, "A{$row}");
+            ], null, "A{$row}", true);
 
             $sheet->getStyle("A{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
             $sheet->getStyle("C{$row}:Q{$row}")->getNumberFormat()->setFormatCode(self::FORMAT_JUMLAH);
@@ -790,7 +810,7 @@ class LaporanEksekutifExporter
         $hRow = $row;
         $sheet->fromArray([
             'No', 'Interval Waktu / Bulan', 'Pengadaan Baru (Unit)', 'Mutasi Aset (Transaksi)', 'Keterangan Aktivitas'
-        ], null, "A{$hRow}");
+        ], null, "A{$hRow}", true);
         $this->styleTableHeaders($sheet, "A{$hRow}:E{$hRow}");
         $row++;
 
@@ -804,7 +824,7 @@ class LaporanEksekutifExporter
             $p = $dataPengadaan[$idx] ?? 0;
             $m = $dataMutasi[$idx] ?? 0;
 
-            $sheet->fromArray([$no++, $lbl, $p, $m, 'Aktivitas riil pada interval tersebut'], null, "A{$row}");
+            $sheet->fromArray([$no++, $lbl, $p, $m, 'Aktivitas riil pada interval tersebut'], null, "A{$row}", true);
             $sheet->getStyle("A{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
             $sheet->getStyle("B{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
             $sheet->getStyle("C{$row}:D{$row}")->getNumberFormat()->setFormatCode(self::FORMAT_JUMLAH);
@@ -834,7 +854,7 @@ class LaporanEksekutifExporter
         $hRow2 = $row;
         $sheet->fromArray([
             'No', 'Indikator Realisasi Pajak', 'Capaian Riil', 'Satuan', 'Keterangan Finansial'
-        ], null, "A{$hRow2}");
+        ], null, "A{$hRow2}", true);
         $this->styleTableHeaders($sheet, "A{$hRow2}:E{$hRow2}");
         $row++;
 
@@ -846,7 +866,7 @@ class LaporanEksekutifExporter
         ];
 
         foreach ($realisasiPajak as $rp) {
-            $sheet->fromArray($rp, null, "A{$row}");
+            $sheet->fromArray($rp, null, "A{$row}", true);
             $sheet->getStyle("A{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
             if ($rp[3] === 'Rupiah') {
                 $sheet->getStyle("C{$row}")->getNumberFormat()->setFormatCode(self::FORMAT_RUPIAH);

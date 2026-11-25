@@ -13,9 +13,11 @@ use App\Models\PenempatanAset;
 use App\Models\Role;
 use App\Models\Ruangan;
 use App\Models\Skpd;
+use App\Models\TemplateDokumen;
 use App\Models\User;
 use App\Services\AsetScope;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
@@ -28,6 +30,8 @@ use Tests\TestCase;
  */
 class AsetBarangHakAksesTest extends TestCase
 {
+    protected array $filesDibuatSementara = [];
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -38,25 +42,59 @@ class AsetBarangHakAksesTest extends TestCase
         ]);
 
         DB::beginTransaction();
+
+        $this->pastikanBerkasTemplateTersedia();
     }
 
     protected function tearDown(): void
     {
         DB::rollBack();
+
+        foreach ($this->filesDibuatSementara as $path) {
+            if (file_exists($path)) {
+                @unlink($path);
+            }
+        }
+
         parent::tearDown();
+    }
+
+    private function pastikanBerkasTemplateTersedia(): void
+    {
+        $sampleDocx = storage_path('app/private/templates/kir_20261119_154822_d125383b.docx');
+
+        foreach (['label', 'sppbi'] as $kode) {
+            $tpl = TemplateDokumen::where('kode_template', $kode)->first();
+            if ($tpl && $tpl->file_path && ! $tpl->fileExists()) {
+                $targetPath = Storage::disk(TemplateDokumen::DISK)->path($tpl->file_path);
+                $dir = dirname($targetPath);
+                if (! is_dir($dir)) {
+                    @mkdir($dir, 0777, true);
+                }
+
+                if ($tpl->tipe_berkas === 'excel') {
+                    $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+                    $sheet = $spreadsheet->getActiveSheet();
+                    $sheet->setTitle('Template');
+                    for ($r = 1; $r <= 25; $r++) {
+                        for ($c = 1; $c <= 10; $c++) {
+                            $sheet->setCellValue([$c, $r], "Dummy cell data {$c}-{$r}");
+                        }
+                    }
+                    $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+                    $writer->save($targetPath);
+                    $this->filesDibuatSementara[] = $targetPath;
+                } elseif (file_exists($sampleDocx)) {
+                    copy($sampleDocx, $targetPath);
+                    $this->filesDibuatSementara[] = $targetPath;
+                }
+            }
+        }
     }
 
     private function namaDatabase(): string
     {
-        foreach (file(base_path('.env')) as $line) {
-            if (str_starts_with(trim($line), 'DB_DATABASE=')) {
-                $nilai = trim(explode('=', $line, 2)[1]);
-
-                return $nilai === '' ? 'invesdisbun' : $nilai;
-            }
-        }
-
-        return 'invesdisbun';
+        return $this->namaDatabasePengujian();
     }
 
     private function loginSebagai(User $user): void

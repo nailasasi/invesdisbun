@@ -70,17 +70,7 @@ class PerbaikanDropdownDanSiklusSensusTest extends TestCase
 
     private function namaDatabase(): string
     {
-        if (file_exists(base_path('.env'))) {
-            foreach (file(base_path('.env')) as $line) {
-                if (str_starts_with(trim($line), 'DB_DATABASE=')) {
-                    $nilai = trim(explode('=', $line, 2)[1]);
-
-                    return $nilai === '' ? 'invesdisbun' : $nilai;
-                }
-            }
-        }
-
-        return 'invesdisbun';
+        return $this->namaDatabasePengujian();
     }
 
     private function siapkanPenggunaDanMaster(): void
@@ -90,8 +80,8 @@ class PerbaikanDropdownDanSiklusSensusTest extends TestCase
             ->whereHas('pegawai.skpd', fn ($q) => $q->where('nama_skpd', 'UPT P2BTP'))
             ->firstOrFail();
 
-        $this->adminBidang = User::whereHas('role', fn ($q) => $q->where('nama_role', 'Admin Bidang'))->firstOrFail();
-        $this->pegawai = User::whereHas('role', fn ($q) => $q->where('nama_role', 'Pegawai'))->firstOrFail();
+        $this->adminBidang = $this->ambilAtauBuatUserRole('Admin Bidang');
+        $this->pegawai = $this->ambilAtauBuatUserRole('Pegawai');
 
         $this->skpdP2btp = Skpd::where('nama_skpd', 'UPT P2BTP')->firstOrFail();
         $this->lokasiP2btp = Lokasi::where('id_skpd', $this->skpdP2btp->id_skpd)->firstOrFail();

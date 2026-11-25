@@ -1281,11 +1281,36 @@ class AsetBarangController extends Controller
             if ($lokasiUpt && count($lokasiUpt) > 0) {
                 $data['id_lokasi'] = $lokasiUpt[0];
             }
+        } elseif ($this->scope->isAdminAset()) {
+            // Lokasi yang dipilih saat input aset oleh Admin Aset tidak otomatis ditimpa menjadi lokasi Dinas.
+            $chosenLokasi = $request->input('id_lokasi');
+            $chosenSkpd = $request->input('id_skpd');
+            if ($chosenLokasi) {
+                $data['id_lokasi'] = (int) $chosenLokasi;
+                if (! $chosenSkpd) {
+                    $lokasiObj = Lokasi::find($chosenLokasi);
+                    $data['id_skpd'] = $lokasiObj?->id_skpd;
+                } else {
+                    $data['id_skpd'] = (int) $chosenSkpd;
+                }
+            } else {
+                $data['id_lokasi'] = $data['id_lokasi'] ?? (Lokasi::dinas()?->id_lokasi ?? 1);
+                if ($chosenSkpd) {
+                    $data['id_skpd'] = (int) $chosenSkpd;
+                }
+            }
         }
 
         // Penambahan aset hanya membuat data induk aset (tanpa penempatan/pemegang)
         // Ruangan/pegawai tidak diproses untuk penempatan awal pada tahap tambah.
         $aset = Aset::create($data);
+
+        // Jika request penambahan menyertakan id_ruangan spesifik, lakukan penempatan ruangan
+        if ($request->filled('id_ruangan')) {
+            $ruanganId = (int) $request->input('id_ruangan');
+            $this->placeAtRoom($aset, $ruanganId, false);
+            AsetPenempatan::sinkronAset($aset, null, $ruanganId);
+        }
 
         // Pemicu otomatis: aset baru dengan kondisi Rusak Berat langsung
         // masuk antrean usulan penghapusan (keluar dari daftar aktif).

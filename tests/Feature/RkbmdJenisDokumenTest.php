@@ -51,15 +51,7 @@ class RkbmdJenisDokumenTest extends TestCase
 
     private function namaDatabase(): string
     {
-        foreach (file(base_path('.env')) as $line) {
-            if (str_starts_with(trim($line), 'DB_DATABASE=')) {
-                $nilai = trim(explode('=', $line, 2)[1]);
-
-                return $nilai === '' ? 'invesdisbun' : $nilai;
-            }
-        }
-
-        return 'invesdisbun';
+        return $this->namaDatabasePengujian();
     }
 
     /**
@@ -75,14 +67,7 @@ class RkbmdJenisDokumenTest extends TestCase
 
     private function adminAset(): User
     {
-        $role = Role::firstOrCreate(['nama_role' => 'Admin Aset']);
-
-        return User::create([
-            'id_role' => $role->id_role,
-            'username' => 'admin_aset_'.$role->id_role,
-            'password' => self::PASSWORD,
-            'status_user' => 'aktif',
-        ]);
+        return $this->ambilAtauBuatUserRole('Admin Aset');
     }
 
     private function skpd(): Skpd

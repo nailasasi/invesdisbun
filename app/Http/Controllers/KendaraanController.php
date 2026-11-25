@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Aset;
 use App\Models\DetailMutasiAset;
 use App\Models\Kendaraan;
+use App\Models\Lokasi;
 use App\Models\MutasiAset;
 use App\Models\PajakKendaraan;
 use App\Models\Pegawai;
@@ -695,15 +696,38 @@ class KendaraanController extends Controller
         // (Kendaraan/RiwayatPlat/pajak/usulan) gagal, Aset yang sudah dibuat
         // tidak tertinggal separuh jalan.
         DB::transaction(function () use ($data, $request) {
+            $idLokasi = null;
+            $idSkpd = null;
+            if ($this->scope->isAdminUpt()) {
+                $idSkpd = $this->scope->skpdId();
+                $lokasiUpt = $this->scope->idLokasi();
+                if ($lokasiUpt && count($lokasiUpt) > 0) {
+                    $idLokasi = $lokasiUpt[0];
+                }
+            } elseif ($this->scope->isAdminAset()) {
+                // Lokasi yang dipilih saat input aset oleh Admin Aset tidak otomatis ditimpa menjadi lokasi Dinas.
+                $chosenLokasi = $request->input('id_lokasi');
+                $chosenSkpd = $request->input('id_skpd');
+                if ($chosenLokasi) {
+                    $idLokasi = (int) $chosenLokasi;
+                    $idSkpd = $chosenSkpd ? (int) $chosenSkpd : Lokasi::find($chosenLokasi)?->id_skpd;
+                } else {
+                    $idLokasi = Lokasi::dinas()?->id_lokasi ?? 1;
+                    $idSkpd = $chosenSkpd ? (int) $chosenSkpd : null;
+                }
+            }
+
             $aset = Aset::create([
                 'nomor_kartu_barang' => $this->nomorKartuFallback($data['nomor_kartu_barang'] ?? null),
                 'merk' => $data['merk'] ?? null,
-            'tanggal_pengadaan' => $data['tanggal_pengadaan'] ?? null,
+                'tanggal_pengadaan' => $data['tanggal_pengadaan'] ?? null,
                 'tanggal_habis_pakai' => $data['tanggal_habis_pakai'] ?? null,
                 'nilai_perolehan' => $data['nilai_perolehan'] ?? null,
                 'kondisi' => $data['kondisi'] ?? null,
                 'status_aset' => $data['status_aset'] ?? 'aktif',
                 'is_kendaraan' => true,
+                'id_lokasi' => $idLokasi,
+                'id_skpd' => $idSkpd,
             ]);
 
             $kendaraan = Kendaraan::create([

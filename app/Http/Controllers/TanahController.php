@@ -183,10 +183,21 @@ class TanahController extends Controller
 
             'foto' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
             'video_url' => ['nullable', 'url', 'max:500'],
+
+            // Konfirmasi ulang password akun yang sedang login (step-up
+            // otorisasi). Diverifikasi server-side, tidak pernah disimpan.
+            'password_otorisasi' => ['required', 'current_password:web'],
+
+            // Foto bukti kamera langsung (data URL). Wajib; divalidasi isi file.
+            'foto_bukti_otentikasi' => ['required', 'string', new FotoKameraValid],
+        ], [
+            'password_otorisasi.required' => 'Password otorisasi wajib diisi.',
+            'password_otorisasi.current_password' => 'Password otorisasi tidak cocok dengan akun Anda.',
+            'foto_bukti_otentikasi.required' => 'Silakan ambil foto konfirmasi terlebih dahulu sebelum menyimpan.',
         ]);
 
         $data = $validated;
-        unset($data['foto'], $data['video_url']);
+        unset($data['foto'], $data['video_url'], $data['password_otorisasi'], $data['foto_bukti_otentikasi']);
 
         $fotoBaru = null;
         if ($request->hasFile('foto')) {
@@ -195,20 +206,33 @@ class TanahController extends Controller
         }
         $data['video_tanah'] = ($validated['video_url'] ?? null) ?: null;
 
-        // Data + riwayat ditulis dalam SATU transaksi database agar tidak ada
-        // kondisi "data tersimpan tetapi riwayat gagal".
         try {
-            DB::transaction(function () use ($data) {
-                $tanah = Tanah::create($data);
-                $this->riwayat->catat($tanah, 'CREATE', 'tanah', null, null, $tanah->fresh()->toArray(), null);
-            });
+            $fotoBukti = $this->bukti->simpan($validated['foto_bukti_otentikasi']);
         } catch (\Throwable $e) {
             if ($fotoBaru) {
                 Storage::disk('public')->delete($fotoBaru);
             }
 
             return back()
-                ->withInput()
+                ->withInput($request->except(['password_otorisasi', 'foto_bukti_otentikasi']))
+                ->withErrors(['foto_bukti_otentikasi' => 'Foto bukti gagal disimpan. Silakan ambil foto ulang.']);
+        }
+
+        // Data + riwayat ditulis dalam SATU transaksi database agar tidak ada
+        // kondisi "data tersimpan tetapi riwayat gagal".
+        try {
+            DB::transaction(function () use ($data, $fotoBukti) {
+                $tanah = Tanah::create($data);
+                $this->riwayat->catat($tanah, 'CREATE', 'tanah', null, null, $tanah->fresh()->toArray(), $fotoBukti);
+            });
+        } catch (\Throwable $e) {
+            $this->bukti->hapus($fotoBukti);
+            if ($fotoBaru) {
+                Storage::disk('public')->delete($fotoBaru);
+            }
+
+            return back()
+                ->withInput($request->except(['password_otorisasi', 'foto_bukti_otentikasi']))
                 ->withErrors(['error' => 'Data gagal disimpan: '.$e->getMessage()]);
         }
 

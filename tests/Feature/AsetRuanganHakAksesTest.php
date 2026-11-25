@@ -8,12 +8,16 @@ use App\Models\Lokasi;
 use App\Models\Pegawai;
 use App\Models\PenempatanAset;
 use App\Models\Ruangan;
+use App\Models\TemplateDokumen;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class AsetRuanganHakAksesTest extends TestCase
 {
+    protected array $filesDibuatSementara = [];
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -24,25 +28,59 @@ class AsetRuanganHakAksesTest extends TestCase
         ]);
 
         DB::beginTransaction();
+
+        $this->pastikanBerkasTemplateTersedia();
     }
 
     protected function tearDown(): void
     {
         DB::rollBack();
+
+        foreach ($this->filesDibuatSementara as $path) {
+            if (file_exists($path)) {
+                @unlink($path);
+            }
+        }
+
         parent::tearDown();
+    }
+
+    private function pastikanBerkasTemplateTersedia(): void
+    {
+        $sampleDocx = storage_path('app/private/templates/kir_20261119_154822_d125383b.docx');
+
+        foreach (['label', 'kir'] as $kode) {
+            $tpl = TemplateDokumen::where('kode_template', $kode)->first();
+            if ($tpl && $tpl->file_path && ! $tpl->fileExists()) {
+                $targetPath = Storage::disk(TemplateDokumen::DISK)->path($tpl->file_path);
+                $dir = dirname($targetPath);
+                if (! is_dir($dir)) {
+                    @mkdir($dir, 0777, true);
+                }
+
+                if ($tpl->tipe_berkas === 'excel') {
+                    $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+                    $sheet = $spreadsheet->getActiveSheet();
+                    $sheet->setTitle('Template');
+                    for ($r = 1; $r <= 25; $r++) {
+                        for ($c = 1; $c <= 10; $c++) {
+                            $sheet->setCellValue([$c, $r], "Dummy cell data {$c}-{$r}");
+                        }
+                    }
+                    $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+                    $writer->save($targetPath);
+                    $this->filesDibuatSementara[] = $targetPath;
+                } elseif (file_exists($sampleDocx)) {
+                    copy($sampleDocx, $targetPath);
+                    $this->filesDibuatSementara[] = $targetPath;
+                }
+            }
+        }
     }
 
     private function namaDatabase(): string
     {
-        foreach (file(base_path('.env')) as $line) {
-            if (str_starts_with(trim($line), 'DB_DATABASE=')) {
-                $nilai = trim(explode('=', $line, 2)[1]);
-
-                return $nilai === '' ? 'invesdisbun' : $nilai;
-            }
-        }
-
-        return 'invesdisbun';
+        return $this->namaDatabasePengujian();
     }
 
     private function userByRole(string $roleName): ?User
@@ -671,15 +709,18 @@ class AsetRuanganHakAksesTest extends TestCase
         // Tombol Cetak KIR ada di halaman
         $res->assertSee('id="btn-kir-scope"', false);
 
-        // Modal Cetak KIR ada di halaman
-        $res->assertSee('id="kir-scope-modal"', false);
+        // Tautan cetak KIR mengarah ke route kir.download
+        $res->assertSee(route('aset-ruangan.kir.download', $ruangan->id_ruangan), false);
 
-        // Form TIDAK menggunakan target="_blank"
-        $res->assertDontSee('id="kir-scope-form" method="GET" action="' . route('aset-ruangan.kir.download', $ruangan->id_ruangan) . '" target="_blank"', false);
-        $res->assertSee('id="kir-scope-form" method="GET" action="' . route('aset-ruangan.kir.download', $ruangan->id_ruangan) . '"', false);
+        // Tombol Cetak KIR TIDAK menggunakan target="_blank"
+        $this->assertFalse(
+            str_contains($res->getContent(), 'id="btn-kir-scope" target="_blank"') ||
+            str_contains($res->getContent(), 'target="_blank" id="btn-kir-scope"'),
+            'Tombol Cetak KIR tidak boleh membuka tab kosong (target="_blank").'
+        );
 
-        // Script listener untuk btn-kir-scope ada di halaman
-        $res->assertSee('btnKirScope.addEventListener', false);
+        // Modal Cetak Label Ruangan tetap ada di halaman
+        $res->assertSee('id="label-scope-modal"', false);
     }
 
     public function test_download_kir_ditolak_dengan_error_jika_ruangan_tanpa_item_terfinalisasi(): void
@@ -700,10 +741,10 @@ class AsetRuanganHakAksesTest extends TestCase
         $res->assertRedirect();
         $res->assertSessionHas('error');
 
-        // Buka halaman show ruangan kosong, pastikan ada peringatan di modal
+        // Buka halaman show ruangan kosong, pastikan ada peringatan di tombol atau halaman
         $resShow = $this->actingAs($adminAset)->get(route('aset-ruangan.show', $ruanganKosong->id_ruangan));
         $resShow->assertOk();
-        $resShow->assertSee('Belum Ada Barang yang Memenuhi Syarat Cetak KIR');
+        $resShow->assertSee('Ruangan belum memiliki aset terfinalisasi/inventaris aktif untuk dicetak pada KIR');
     }
 
     public function test_download_kir_berhasil_menghasilkan_dokumen_word_jika_memiliki_item(): void

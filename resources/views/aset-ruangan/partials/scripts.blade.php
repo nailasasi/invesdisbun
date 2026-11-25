@@ -47,17 +47,6 @@
                 }
             });
         }
-
-        // ---- Modal Cetak KIR (Kartu Inventaris Ruangan) ----
-        const kirScopeModal = document.getElementById('kir-scope-modal');
-        const btnKirScope = document.getElementById('btn-kir-scope');
-
-        if (btnKirScope && kirScopeModal) {
-            btnKirScope.addEventListener('click', () => {
-                openModal(kirScopeModal);
-            });
-            bindClose(kirScopeModal, '[data-kir-scope-close]');
-        }
         @endif
 
         @if ($bolehKelolaRuangan)
@@ -270,6 +259,7 @@
         const pasangKandidatUrl = @json(route('aset-ruangan.aset.pasang.kandidat', ['ruangan' => $ruangan->id_ruangan]));
         const pasangMassalUrl = @json(route('aset-ruangan.aset.pasang-massal', ['ruangan' => $ruangan->id_ruangan]));
         const jenisSelect = document.getElementById('field-jenis-select');
+        const jenisSearch = document.getElementById('field-jenis-search');
         const jumlahInput = document.getElementById('field-jumlah');
         const pasangTersedia = document.getElementById('pasang-tersedia');
         const pasangRingkasan = document.getElementById('pasang-ringkasan');
@@ -292,9 +282,22 @@
             });
         }
 
+        function filterJenisOptions() {
+            if (!jenisSelect) return;
+            const term = jenisSearch ? jenisSearch.value.toLowerCase().trim() : '';
+            Array.from(jenisSelect.options).forEach(opt => {
+                if (opt.disabled && !opt.value) return;
+                opt.style.display = opt.text.toLowerCase().includes(term) ? '' : 'none';
+            });
+        }
+
+        if (jenisSearch && jenisSelect) {
+            jenisSearch.addEventListener('input', filterJenisOptions);
+        }
+
         function refreshRingkasan() {
-            const opt = jenisSelect && jenisSelect.options[jenisSelect.selectedIndex];
-            const idBarang = jenisSelect ? jenisSelect.value : '';
+            const opt = jenisSelect && jenisSelect.selectedIndex >= 0 ? jenisSelect.options[jenisSelect.selectedIndex] : null;
+            const idBarang = (opt && opt.value) ? opt.value : '';
             const ditemukan = pasangKandidat.find(k => String(k.id_barang) === String(idBarang));
             const tersedia = ditemukan ? ditemukan.tersedia : 0;
 
@@ -305,7 +308,7 @@
 
             if (pasangRingkasan && jumlah > 0 && opt && opt.value) {
                 pasangRingkasan.classList.remove('hidden');
-                ringkasanJenis.textContent = opt.textContent;
+                ringkasanJenis.textContent = opt.dataset.nama || opt.textContent;
                 ringkasanJumlah.textContent = jumlah;
             } else if (pasangRingkasan) {
                 pasangRingkasan.classList.add('hidden');
@@ -320,14 +323,29 @@
                 pasangKandidat = data.kandidat || [];
 
                 const current = jenisSelect.value;
-                jenisSelect.innerHTML = '<option value="">-- Pilih Jenis Barang --</option>';
-                pasangKandidat.forEach(k => {
+                jenisSelect.innerHTML = '';
+                if (pasangKandidat.length === 0) {
                     const opt = document.createElement('option');
-                    opt.value = k.id_barang;
-                    opt.textContent = k.nama_barang + ' (' + k.tersedia + ' tersedia)';
+                    opt.value = '';
+                    opt.disabled = true;
+                    opt.textContent = '-- Tidak ada barang yang dapat dipasang --';
                     jenisSelect.appendChild(opt);
-                });
-                jenisSelect.value = current;
+                } else {
+                    pasangKandidat.forEach(k => {
+                        const opt = document.createElement('option');
+                        opt.value = k.id_barang;
+                        opt.textContent = k.nama_barang + ' (' + k.tersedia + ' tersedia)';
+                        opt.setAttribute('data-nama', k.nama_barang);
+                        opt.className = 'py-1 px-2 cursor-pointer hover:bg-slate-100';
+                        jenisSelect.appendChild(opt);
+                    });
+                }
+
+                if (current) {
+                    jenisSelect.value = current;
+                }
+
+                filterJenisOptions();
                 refreshRingkasan();
             } catch (err) {
                 pasangKandidat = [];
@@ -338,10 +356,19 @@
             if (!pasangModal) return;
             openModal(pasangModal);
             clearPasangErrors();
-            if (jenisSelect) jenisSelect.value = '';
+            if (jenisSearch) {
+                jenisSearch.value = '';
+            }
+            if (jenisSelect) {
+                jenisSelect.value = '';
+                Array.from(jenisSelect.options).forEach(o => o.style.display = '');
+            }
             if (jumlahInput) jumlahInput.value = '';
             refreshRingkasan();
             muatKandidat();
+            setTimeout(() => {
+                if (jenisSearch) jenisSearch.focus();
+            }, 50);
         }
 
         function closePasangModal() {
@@ -353,9 +380,13 @@
         if (btnPasang && pasangModal) {
             btnPasang.addEventListener('click', openPasangModal);
             bindClose(pasangModal, '[data-pasang-close]');
+            muatKandidat();
         }
 
-        if (jenisSelect) jenisSelect.addEventListener('change', refreshRingkasan);
+        if (jenisSelect) {
+            jenisSelect.addEventListener('change', refreshRingkasan);
+            jenisSelect.addEventListener('click', refreshRingkasan);
+        }
         if (jumlahInput) jumlahInput.addEventListener('input', refreshRingkasan);
 
         if (pasangForm) {

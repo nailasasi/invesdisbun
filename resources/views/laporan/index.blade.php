@@ -51,9 +51,9 @@
                     @if ($isAdminAset)
                         <select id="unit" name="unit"
                             class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-400/30">
-                            <option value="semua" {{ $unitLokasiId === null ? 'selected' : '' }}>Semua Unit (Konsolidasi)</option>
+                            <option value="semua" {{ $unitLokasiId === null ? 'selected' : '' }}>Semua Unit</option>
                             @foreach ($lokasiList as $lok)
-                                <option value="{{ $lok->id_lokasi }}" {{ $unitLokasiId === $lok->id_lokasi ? 'selected' : '' }}>
+                                <option value="{{ $lok->id_lokasi }}" {{ (string)$unitLokasiId === (string)$lok->id_lokasi ? 'selected' : '' }}>
                                     {{ $lok->nama_lokasi }}
                                 </option>
                             @endforeach
@@ -61,6 +61,7 @@
                     @else
                         <input type="text" readonly value="{{ $namaUnitTerpilih }}"
                             class="w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600 shadow-sm cursor-not-allowed">
+                        <input type="hidden" name="unit" value="{{ $unitLokasiId }}">
                     @endif
                 </div>
 
@@ -115,37 +116,38 @@
 
     {{-- KARTU KPI UTAMA --}}
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {{-- Total Barang & Kendaraan --}}
+        {{-- Jumlah Aset Pengadaan Tahun Laporan --}}
         <x-card>
             <div class="p-4">
                 <div class="flex items-center justify-between">
-                    <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Aset Fisik</p>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Jumlah Aset Pengadaan</p>
                     <span class="rounded-lg bg-emerald-50 p-2 text-emerald-600">
                         <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
                     </span>
                 </div>
-                <p class="text-3xl font-extrabold text-slate-800 mt-2">{{ number_format($k['total_barang_dan_kendaraan'], 0, ',', '.') }}</p>
+                <p class="text-3xl font-extrabold text-slate-800 mt-2">{{ number_format($k['jumlah_aset_pengadaan'], 0, ',', '.') }}</p>
                 <div class="flex items-center gap-2 mt-2 text-xs text-slate-500">
-                    <span class="font-medium text-slate-700">{{ $k['total_barang'] }} Barang</span>
+                    <span class="font-medium text-slate-700">{{ $k['pengadaan_barang_count'] }} Barang</span>
                     <span>&bull;</span>
-                    <span class="font-medium text-emerald-700">{{ $k['total_kendaraan'] }} Kendaraan</span>
+                    <span class="font-medium text-emerald-700">{{ $k['pengadaan_kendaraan_count'] }} Kendaraan</span>
                 </div>
+                <p class="text-[11px] text-slate-400 mt-2">Aset diperoleh Tahun {{ $periode['tahun'] }}</p>
             </div>
         </x-card>
 
-        {{-- Total Nilai Perolehan Gabungan --}}
+        {{-- Nilai Pengadaan Aset Tahun Laporan --}}
         <x-card>
             <div class="p-4">
                 <div class="flex items-center justify-between">
-                    <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Nilai Perolehan</p>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Nilai Pengadaan Aset</p>
                     <span class="rounded-lg bg-blue-50 p-2 text-blue-600">
                         <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     </span>
                 </div>
-                <p class="text-2xl font-bold text-slate-800 mt-2 truncate" title="Rp {{ number_format($k['total_nilai_perolehan_gabungan'], 0, ',', '.') }}">
-                    Rp {{ number_format($k['total_nilai_perolehan_gabungan'], 0, ',', '.') }}
+                <p class="text-2xl font-bold text-slate-800 mt-2 truncate" title="Rp {{ number_format($k['nilai_pengadaan_tahun'], 0, ',', '.') }}">
+                    Rp {{ number_format($k['nilai_pengadaan_tahun'], 0, ',', '.') }}
                 </p>
-                <p class="text-xs text-slate-400 mt-2">Modal Pengadaan Historis</p>
+                <p class="text-[11px] text-slate-400 mt-2">Belanja pengadaan Tahun {{ $periode['tahun'] }}</p>
             </div>
         </x-card>
 
@@ -180,6 +182,27 @@
                 <p class="text-xs text-slate-400 mt-2">Valuasi Riil per Akhir Periode</p>
             </div>
         </x-card>
+    </div>
+
+    {{-- BANNER PEMISAHAN POPULASI PENGADAAN VS SELURUH ASET AKTIF --}}
+    <div class="rounded-2xl border border-emerald-200/80 bg-white p-4 shadow-sm text-xs text-slate-600 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div class="flex items-center gap-2.5">
+            <span class="inline-flex h-2.5 w-2.5 rounded-full bg-blue-500 shrink-0"></span>
+            <div>
+                <span class="font-bold text-slate-800">Jumlah Pengadaan Tahun {{ $periode['tahun'] }}:</span>
+                <span class="font-bold text-blue-700 ml-1">{{ number_format($k['jumlah_aset_pengadaan'], 0, ',', '.') }} Unit</span>
+                <span class="text-slate-500">(Rp {{ number_format($k['nilai_pengadaan_tahun'], 0, ',', '.') }})</span>
+                <span class="text-slate-400 block sm:inline sm:ml-1">&mdash; Hanya aset yang tanggal perolehannya berada dalam Tahun {{ $periode['tahun'] }}.</span>
+            </div>
+        </div>
+        <div class="flex items-center gap-2.5">
+            <span class="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+            <div>
+                <span class="font-bold text-slate-800">Populasi Seluruh Aset Aktif:</span>
+                <span class="font-bold text-emerald-700 ml-1">{{ number_format($k['total_aset_aktif'], 0, ',', '.') }} Unit</span>
+                <span class="text-slate-500 block sm:inline sm:ml-1">&mdash; Kondisi seluruh aset aktif berdasarkan data kondisi terakhir.</span>
+            </div>
+        </div>
     </div>
 
     {{-- DUA KARTU TATA KELOLA & ARUS --}}
@@ -258,8 +281,8 @@
             <x-card :padding="false">
                 <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
                     <div>
-                        <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wide">A. Distribusi Kondisi Aset</h3>
-                        <p class="text-xs text-slate-500 mt-0.5">Kondisi Fisik Terkini pada Populasi Saldo Aset Periode Laporan</p>
+                        <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wide">A. Distribusi Kondisi Seluruh Aset Aktif</h3>
+                        <p class="text-xs text-emerald-700 font-medium mt-0.5">Kondisi seluruh aset aktif berdasarkan data kondisi terakhir.</p>
                     </div>
                     <span class="rounded-lg bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">Donut</span>
                 </div>
@@ -291,7 +314,7 @@
                             <div class="flex items-start gap-2.5">
                                 <svg class="h-4 w-4 text-blue-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                                 <div class="text-[11px] leading-relaxed text-blue-900/90">
-                                    <strong class="font-semibold text-blue-950">Catatan Metodologi:</strong> Grafik menyajikan kondisi fisik terkini berdasarkan data master aset dari populasi saldo aset pada periode laporan. Sistem belum mencatat histori perubahan kondisi fisik aset, sehingga kondisi yang ditampilkan tidak merepresentasikan kondisi fisik pada tanggal laporan historis.
+                                    <strong class="font-semibold text-blue-950">Catatan Metodologi:</strong> Kondisi seluruh aset aktif berdasarkan data kondisi terakhir. Rekap kondisi mencakup seluruh aset yang masih aktif dalam cakupan unit laporan, tanpa membatasi tahun pengadaan. Aset dari tahun pengadaan sebelumnya tetap dihitung selama masih menjadi aset aktif Disbun.
                                 </div>
                             </div>
                         </div>
@@ -361,8 +384,8 @@
             <x-card :padding="false">
                 <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
                     <div>
-                        <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wide">D. Tren Pengadaan Aset</h3>
-                        <p class="text-xs text-slate-400 mt-0.5">Historis pengadaan per tahun perolehan (abaikan tanggal kosong)</p>
+                        <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wide">D. Tren Pengadaan Aset (5 Tahun Terakhir)</h3>
+                        <p class="text-xs text-slate-400 mt-0.5">Historis pengadaan 5 tahun terakhir per tahun perolehan (abaikan tanggal kosong)</p>
                     </div>
                     <span class="rounded-lg bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">Tren Line</span>
                 </div>
@@ -534,10 +557,10 @@
         <x-card :padding="false">
             <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
                 <div>
-                    <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide">1. Kondisi Fisik Inventaris</h2>
-                    <p class="text-xs text-slate-400 mt-0.5">Sumber data: status kondisi master pada tabel aset</p>
+                    <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide">1. Kondisi Fisik Seluruh Aset Aktif</h2>
+                    <p class="text-xs text-emerald-700 font-medium mt-0.5">Kondisi seluruh aset aktif berdasarkan data kondisi terakhir.</p>
                 </div>
-                <span class="text-xs font-semibold text-slate-500">{{ $k['total_barang_dan_kendaraan'] }} Unit</span>
+                <span class="text-xs font-semibold text-slate-500">{{ $k['total_aset_aktif'] }} Unit Aktif</span>
             </div>
             <div class="p-5 space-y-3">
                 <div class="flex items-center justify-between p-3 rounded-xl border border-emerald-100 bg-emerald-50/40">
@@ -550,7 +573,7 @@
                     </div>
                     <div class="text-right">
                         <p class="text-base font-bold text-emerald-700">{{ $k['kondisi_baik'] }} Unit</p>
-                        <p class="text-[11px] text-slate-400">{{ $k['total_barang_dan_kendaraan'] > 0 ? round(($k['kondisi_baik'] / $k['total_barang_dan_kendaraan']) * 100, 1) : 0 }}%</p>
+                        <p class="text-[11px] text-slate-400">{{ $k['total_aset_aktif'] > 0 ? round(($k['kondisi_baik'] / $k['total_aset_aktif']) * 100, 1) : 0 }}%</p>
                     </div>
                 </div>
 
@@ -564,7 +587,7 @@
                     </div>
                     <div class="text-right">
                         <p class="text-base font-bold text-amber-700">{{ $k['kondisi_rusak_ringan'] }} Unit</p>
-                        <p class="text-[11px] text-slate-400">{{ $k['total_barang_dan_kendaraan'] > 0 ? round(($k['kondisi_rusak_ringan'] / $k['total_barang_dan_kendaraan']) * 100, 1) : 0 }}%</p>
+                        <p class="text-[11px] text-slate-400">{{ $k['total_aset_aktif'] > 0 ? round(($k['kondisi_rusak_ringan'] / $k['total_aset_aktif']) * 100, 1) : 0 }}%</p>
                     </div>
                 </div>
 
@@ -578,7 +601,7 @@
                     </div>
                     <div class="text-right">
                         <p class="text-base font-extrabold text-red-700">{{ $k['kondisi_rusak_berat'] }} Unit</p>
-                        <p class="text-[11px] font-semibold text-red-500">{{ $k['total_barang_dan_kendaraan'] > 0 ? round(($k['kondisi_rusak_berat'] / $k['total_barang_dan_kendaraan']) * 100, 1) : 0 }}%</p>
+                        <p class="text-[11px] font-semibold text-red-500">{{ $k['total_aset_aktif'] > 0 ? round(($k['kondisi_rusak_berat'] / $k['total_aset_aktif']) * 100, 1) : 0 }}%</p>
                     </div>
                 </div>
             </div>
@@ -752,6 +775,11 @@
                         <p class="text-xs text-slate-400 mt-1">Tanpa Penyusutan (SAP No. 07)</p>
                     </div>
                 </div>
+                @if (! $isAdminAset || in_array($unitLokasiId, [2, 3], true))
+                    <div class="mt-3 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+                        <span class="font-semibold text-slate-700">Catatan Kewenangan KIB A:</span> Sesuai ketentuan, aset tanah daerah dikelola terpusat pada tingkat Dinas. Nilai KIB A pada unit kerja UPT disajikan bernilai 0.
+                    </div>
+                @endif
             @else
                 <div class="rounded-xl border border-slate-200 bg-slate-50/80 p-6 text-center text-sm text-slate-500">
                     <svg class="h-8 w-8 text-slate-400 mx-auto mb-2" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/></svg>

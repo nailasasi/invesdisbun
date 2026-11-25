@@ -28,15 +28,7 @@ class SidebarNavTest extends TestCase
 
     private function namaDatabase(): string
     {
-        foreach (file(base_path('.env')) as $line) {
-            if (str_starts_with(trim($line), 'DB_DATABASE=')) {
-                $nilai = trim(explode('=', $line, 2)[1]);
-
-                return $nilai === '' ? 'invesdisbun' : $nilai;
-            }
-        }
-
-        return 'invesdisbun';
+        return $this->namaDatabasePengujian();
     }
 
     /** 1. Verifikasi kelompok Administrasi & Pengaturan telah dihapus dari sidebar */
@@ -88,7 +80,7 @@ class SidebarNavTest extends TestCase
         // Menu operasional lainnya tetap ada
         $this->assertStringContainsString('Monitoring Aset', $html);
         $this->assertStringContainsString('Mutasi Aset', $html);
-        $this->assertStringContainsString('Penghapusan Aset', $html);
+        $this->assertStringContainsString('Usulan Penghapusan', $html);
         $this->assertStringContainsString('Kendaraan', $html);
         $this->assertStringContainsString('Laporan', $html);
         $this->assertStringContainsString('Template Dokumen', $html);
@@ -97,7 +89,7 @@ class SidebarNavTest extends TestCase
     /** 3. Verifikasi hak akses role Pegawai tidak dapat melihat Master Data */
     public function test_role_pegawai_tidak_melihat_master_data(): void
     {
-        $pegawai = User::whereHas('role', fn ($q) => $q->where('nama_role', 'Pegawai'))->first();
+        $pegawai = $this->ambilAtauBuatUserRole('Pegawai');
         $this->actingAs($pegawai);
 
         $response = $this->get(route('dashboard'));

@@ -29,15 +29,7 @@ class AsetBarangKondisiFilterTest extends TestCase
 
     private function namaDatabase(): string
     {
-        foreach (file(base_path('.env')) as $line) {
-            if (str_starts_with(trim($line), 'DB_DATABASE=')) {
-                $nilai = trim(explode('=', $line, 2)[1]);
-
-                return $nilai === '' ? 'invesdisbun' : $nilai;
-            }
-        }
-
-        return 'invesdisbun';
+        return $this->namaDatabasePengujian();
     }
 
     private function adminAset(): User
@@ -92,6 +84,11 @@ class AsetBarangKondisiFilterTest extends TestCase
 
     public function test_filter_kondisi_rusak_ringan_hanya_menampilkan_aset_rusak_ringan(): void
     {
+        $asetFixture = Aset::query()->barang()->where('status_aset', 'aktif')->first();
+        if ($asetFixture) {
+            $asetFixture->update(['kondisi' => 'Rusak Ringan']);
+        }
+
         $response = $this->actingAs($this->adminAset())
             ->get(route('aset-barang.index', ['kondisi' => 'Rusak Ringan']));
 
@@ -123,6 +120,11 @@ class AsetBarangKondisiFilterTest extends TestCase
 
     public function test_kombinasi_filter_kondisi_dengan_pencarian(): void
     {
+        $epsonFixture = Aset::query()->barang()->where('status_aset', 'aktif')->where('merk', 'like', '%EPSON%')->first();
+        if ($epsonFixture) {
+            $epsonFixture->update(['kondisi' => 'Rusak Ringan']);
+        }
+
         // Cari aset Rusak Ringan dengan search 'EPSON'
         $response = $this->actingAs($this->adminAset())
             ->get(route('aset-barang.index', [
@@ -132,6 +134,7 @@ class AsetBarangKondisiFilterTest extends TestCase
 
         $response->assertOk();
         $asetList = $response->viewData('asetList');
+        $this->assertNotEmpty($asetList);
 
         foreach ($asetList as $aset) {
             $this->assertSame('Rusak Ringan', $aset->kondisi);

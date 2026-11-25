@@ -52,15 +52,15 @@ class LaporanEksekutifService
         $tahun = max(1990, min(2100, $tahun));
         $bulan = max(1, min(12, $bulan));
 
+        $now = Carbon::now();
+
         if ($jenis === 'tahunan') {
             $startDate = Carbon::create($tahun, 1, 1)->startOfYear();
-            $endDate = Carbon::create($tahun, 12, 31)->endOfYear();
-            $acuan = $endDate->copy()->endOfDay();
+            $nominalEnd = Carbon::create($tahun, 12, 31)->endOfYear();
             $judulPeriode = "Tahun Anggaran {$tahun}";
         } else {
             $startDate = Carbon::create($tahun, $bulan, 1)->startOfMonth();
-            $endDate = Carbon::create($tahun, $bulan, 1)->endOfMonth();
-            $acuan = $endDate->copy()->endOfDay();
+            $nominalEnd = Carbon::create($tahun, $bulan, 1)->endOfMonth();
             $namaBulan = match ($bulan) {
                 1 => 'Januari',
                 2 => 'Februari',
@@ -77,6 +77,17 @@ class LaporanEksekutifService
                 default => 'Januari',
             };
             $judulPeriode = "Bulan {$namaBulan} {$tahun}";
+        }
+
+        // Tanggal acuan snapshot: jika periode melewati waktu saat ini, batasi ke hari ini (akhir hari ini)
+        // agar laporan aktual tidak menghitung data dari masa depan.
+        // Laporan tahun atau bulan sebelumnya yang sudah lampau tetap menggunakan akhir periode nominal secara utuh.
+        if ($nominalEnd->isFuture()) {
+            $endDate = $now->copy()->endOfDay();
+            $acuan = $now->copy()->endOfDay();
+        } else {
+            $endDate = $nominalEnd;
+            $acuan = $nominalEnd->copy()->endOfDay();
         }
 
         return [
@@ -126,15 +137,138 @@ class LaporanEksekutifService
                     ->where('usulan_penghapusan.tanggal_sk', '<=', $acuan);
             });
 
-        // Terapkan isolasi lokasi multi-tenant AsetScope
-        $this->scope->terapkan($query);
-
-        // Filter lokasi tambahan khusus bila Admin Aset memilih unit tertentu
-        if ($unitLokasiId !== null && $this->scope->cakupanPenuh()) {
-            $query->where('aset.id_lokasi', $unitLokasiId);
-        }
+        // Filter unit kepemilikan aset
+        $this->filterAsetByUnit($query, $unitLokasiId);
 
         return $query;
+    }
+
+    /**
+     * Filter query aset berdasarkan unit kepemilikan/penempatan secara konsisten:
+     * 1. Aset dengan penempatan aktif: dikelompokkan sesuai lokasi penempatan terbarunya (ruangan penempatan aktif),
+     *    terlepas dari siapa yang menginput aset.
+     * 2. Aset dengan pemegang aktif (tanpa penempatan ruangan, mis. kendaraan): mengikuti unit pegawai pemegang.
+     * 3. Aset tanpa penempatan & tanpa pemegang: dikelompokkan sementara berdasarkan unit kerja (SKPD) / lokasi pembuat aset.
+     * 4. Setelah mutasi, aset otomatis masuk ke unit sesuai penempatan terbarunya.
+     * 5. null ($unitLokasiId === null): Konsolidasi seluruh unit.
+     */
+    public function filterAsetByUnit(Builder $query, ?int $unitLokasiId): Builder
+    {
+        if ($unitLokasiId === null) {
+            if ($this->scope->isAdminUpt()) {
+                $skpdId = (int) $this->scope->skpdId();
+                if ($skpdId === 7) {
+                    return $this->filterAsetByUnit($query, 3);
+                }
+                if ($skpdId === 6) {
+                    return $this->filterAsetByUnit($query, 2);
+                }
+                $lokasiUpt = $this->scope->idLokasi();
+                if (! empty($lokasiUpt)) {
+                    return $this->filterAsetByUnit($query, (int) $lokasiUpt[0]);
+                }
+            }
+
+            return $query;
+        }
+
+        if ($unitLokasiId === 3) {
+            // UPT PSBP (Lokasi 3 / SKPD 7)
+            return $query->where(function ($q) {
+                // Skenario 1: Memiliki penempatan ruangan aktif di UPT PSBP
+                $q->whereHas('penempatanAktif.ruangan', function ($r) {
+                    $r->where('id_lokasi', 3)->orWhere('id_skpd', 7);
+                })
+                // Skenario 2: Tidak memiliki penempatan ruangan aktif, tetapi memiliki pemegang aktif di UPT PSBP
+                ->orWhere(function ($qPemegang) {
+                    $qPemegang->whereDoesntHave('penempatanAktif')
+                        ->whereHas('pemegangSaatIni.pegawai', function ($p) {
+                            $p->where('id_skpd', 7)
+                              ->orWhereHas('ruangan', fn ($r) => $r->where('id_lokasi', 3)->orWhere('id_skpd', 7));
+                        });
+                })
+                // Skenario 3: Tidak memiliki penempatan & tidak memiliki pemegang (unplaced), milik UPT PSBP
+                ->orWhere(function ($qUnplaced) {
+                    $qUnplaced->whereDoesntHave('penempatanAktif')
+                        ->whereDoesntHave('pemegangSaatIni')
+                        ->where(function ($sub) {
+                            $sub->where('aset.id_lokasi', 3)
+                                ->orWhere('aset.id_skpd', 7);
+                        });
+                });
+            });
+        }
+
+        if ($unitLokasiId === 2) {
+            // UPT P2BTP (Lokasi 2 / SKPD 6)
+            return $query->where(function ($q) {
+                // Skenario 1: Memiliki penempatan ruangan aktif di UPT P2BTP
+                $q->whereHas('penempatanAktif.ruangan', function ($r) {
+                    $r->where('id_lokasi', 2)->orWhere('id_skpd', 6);
+                })
+                // Skenario 2: Tidak memiliki penempatan ruangan aktif, tetapi memiliki pemegang aktif di UPT P2BTP
+                ->orWhere(function ($qPemegang) {
+                    $qPemegang->whereDoesntHave('penempatanAktif')
+                        ->whereHas('pemegangSaatIni.pegawai', function ($p) {
+                            $p->where('id_skpd', 6)
+                              ->orWhereHas('ruangan', fn ($r) => $r->where('id_lokasi', 2)->orWhere('id_skpd', 6));
+                        });
+                })
+                // Skenario 3: Tidak memiliki penempatan & tidak memiliki pemegang (unplaced), milik UPT P2BTP
+                ->orWhere(function ($qUnplaced) {
+                    $qUnplaced->whereDoesntHave('penempatanAktif')
+                        ->whereDoesntHave('pemegangSaatIni')
+                        ->where(function ($sub) {
+                            $sub->where('aset.id_lokasi', 2)
+                                ->orWhere('aset.id_skpd', 6);
+                        });
+                });
+            });
+        }
+
+        if ($unitLokasiId === 1) {
+            // Kantor Dinas Perkebunan (Lokasi 1 / SKPD 1..5 / Bukan UPT)
+            return $query->where(function ($q) {
+                // Skenario 1: Memiliki penempatan ruangan aktif di Dinas (ruangan bukan di UPT)
+                $q->whereHas('penempatanAktif.ruangan', function ($r) {
+                    $r->where(function ($sub) {
+                        $sub->where('id_lokasi', 1)
+                            ->orWhere(function ($s) {
+                                $s->whereNotIn('id_lokasi', [2, 3])
+                                  ->where(function ($sk) {
+                                      $sk->whereNull('id_skpd')->orWhereNotIn('id_skpd', [6, 7]);
+                                  });
+                            });
+                    });
+                })
+                // Skenario 2: Tidak memiliki penempatan ruangan aktif, tetapi memiliki pemegang aktif di Dinas (pegawai bukan UPT)
+                ->orWhere(function ($qPemegang) {
+                    $qPemegang->whereDoesntHave('penempatanAktif')
+                        ->whereHas('pemegangSaatIni.pegawai', function ($p) {
+                            $p->where(function ($sub) {
+                                $sub->whereNull('id_skpd')->orWhereNotIn('id_skpd', [6, 7]);
+                            })->whereDoesntHave('ruangan', fn ($r) => $r->whereIn('id_lokasi', [2, 3])->orWhereIn('id_skpd', [6, 7]));
+                        });
+                })
+                // Skenario 3: Tidak memiliki penempatan & tidak memiliki pemegang (unplaced), aset Dinas (bukan UPT)
+                ->orWhere(function ($qUnplaced) {
+                    $qUnplaced->whereDoesntHave('penempatanAktif')
+                        ->whereDoesntHave('pemegangSaatIni')
+                        ->where(function ($sub) {
+                            $sub->where(function ($s) {
+                                $s->whereNull('aset.id_lokasi')
+                                  ->orWhere('aset.id_lokasi', 1)
+                                  ->orWhereNotIn('aset.id_lokasi', [2, 3]);
+                            })->where(function ($s) {
+                                $s->whereNull('aset.id_skpd')
+                                  ->orWhereNotIn('aset.id_skpd', [6, 7]);
+                            });
+                        });
+                });
+            });
+        }
+
+        return $this->scope->terapkan($query);
     }
 
     /**
@@ -150,8 +284,8 @@ class LaporanEksekutifService
         $asetList = $this->asetQueryAt($acuan, $unitLokasiId)
             ->with([
                 'barang.kategori',
-                'pemegangSaatIni',
-                'penempatanAktif',
+                'pemegangSaatIni.pegawai.ruangan.lokasi',
+                'penempatanAktif.ruangan.lokasi',
                 'lokasi',
                 'skpd',
             ])
@@ -220,13 +354,16 @@ class LaporanEksekutifService
             : 0.0;
 
         // 2. Register Tanah KIB A (Terpisah dari Aset Bergerak)
-        $bisaAksesTanah = $this->tanahScope->bolehAkses();
+        // Khusus Admin UPT PSBP dan Admin UPT P2BTP, nilai KIB A pada ekspor bernilai 0.
+        // Admin Aset Dinas menampilkan nilai sesuai data nyata.
+        $isDinas = ($unitLokasiId === 1 || ($unitLokasiId === null && $this->scope->isAdminAset()));
+        $bisaAksesTanah = $isDinas;
         $totalBidangTanah = 0;
         $totalLuasTanah = 0.0;
         $totalNilaiPerolehanTanah = 0.0;
         $totalNilaiBukuTanah = 0.0;
 
-        if ($bisaAksesTanah) {
+        if ($isDinas) {
             $tanahQuery = Tanah::query()
                 ->where(function ($q) use ($acuan) {
                     $q->whereNotNull('tanggal_perolehan')
@@ -340,11 +477,49 @@ class LaporanEksekutifService
         $pengadaanBaruNilai = (float) $asetList->whereBetween('tanggal_pengadaan', [$startDate, $endDate])->sum('nilai_perolehan');
 
         $mutasiAsetCount = MutasiAset::whereBetween('tanggal_mutasi', [$startDate, $endDate])
-            ->whereHas('details.aset', fn ($a) => $this->scope->terapkan($a))
+            ->whereHas('details.aset', fn ($a) => $this->filterAsetByUnit($a, $unitLokasiId))
             ->count();
 
+        // 6. Pemisahan Populasi: Pengadaan Tahun Laporan vs Seluruh Aset Aktif
+        $tahunLaporan = (int) $acuan->year;
+        $asetPengadaanTahun = $asetList->filter(function ($a) use ($tahunLaporan, $acuan) {
+            return $a->tanggal_pengadaan !== null
+                && (int) $a->tanggal_pengadaan->year === $tahunLaporan
+                && $a->tanggal_pengadaan <= $acuan;
+        });
+
+        $jumlahAsetPengadaan = $asetPengadaanTahun->count();
+        $pengadaanBarangCount = $asetPengadaanTahun->where('is_kendaraan', false)->count();
+        $pengadaanKendaraanCount = $asetPengadaanTahun->where('is_kendaraan', true)->count();
+        $nilaiPengadaanTahun = (float) $asetPengadaanTahun->sum('nilai_perolehan');
+        $nilaiPengadaanBarang = (float) $asetPengadaanTahun->where('is_kendaraan', false)->sum('nilai_perolehan');
+        $nilaiPengadaanKendaraan = (float) $asetPengadaanTahun->where('is_kendaraan', true)->sum('nilai_perolehan');
+
+        $totalAsetAktif = $totalAset;
+        $totalBarangAktif = $barangCount;
+        $totalKendaraanAktif = $kendaraanCount;
+        $keteranganKondisi = 'Kondisi seluruh aset aktif berdasarkan data kondisi terakhir.';
+        $keteranganPengadaan = "Aset yang diperoleh pada Tahun {$tahunLaporan}.";
+
         return [
-            // KPI Utama
+            // KPI Utama (Pengadaan Tahun Laporan Terpilih)
+            'tahun_laporan' => $tahunLaporan,
+            'jumlah_aset_pengadaan' => $jumlahAsetPengadaan,
+            'pengadaan_barang_count' => $pengadaanBarangCount,
+            'pengadaan_kendaraan_count' => $pengadaanKendaraanCount,
+            'nilai_pengadaan_tahun' => $nilaiPengadaanTahun,
+            'nilai_pengadaan_barang' => $nilaiPengadaanBarang,
+            'nilai_pengadaan_kendaraan' => $nilaiPengadaanKendaraan,
+            'keterangan_pengadaan' => $keteranganPengadaan,
+
+            // Seluruh Aset Aktif (Portofolio Saldo & Rekapitulasi Kondisi)
+            'total_aset_aktif' => $totalAsetAktif,
+            'total_barang_aktif' => $totalBarangAktif,
+            'total_kendaraan_aktif' => $totalKendaraanAktif,
+            'total_kondisi_aset' => $totalAsetAktif,
+            'keterangan_kondisi' => $keteranganKondisi,
+
+            // Portofolio Aset Bergerak (Saldo Neraca)
             'total_barang_dan_kendaraan' => $totalAset,
             'total_barang' => $barangCount,
             'total_kendaraan' => $kendaraanCount,
@@ -488,6 +663,7 @@ class LaporanEksekutifService
             'data' => $dataKondisi,
             'persen' => $persenKondisi,
             'total' => $totalAset,
+            'keterangan' => 'Kondisi seluruh aset aktif berdasarkan data kondisi terakhir.',
         ];
 
         // -------------------------------------------------------------
@@ -527,9 +703,10 @@ class LaporanEksekutifService
         $labelsKategori[] = 'Kendaraan Bermotor';
         $dataKategori[] = $kendaraanCount;
 
-        // Tambahkan Tanah KIB A secara terpisah bila user memiliki hak akses (TanahScope)
+        // Tambahkan Tanah KIB A secara terpisah (Khusus Admin UPT PSBP & P2BTP bernilai 0)
+        $isDinas = ($unitLokasiId === 1 || ($unitLokasiId === null && $this->scope->isAdminAset()));
         $totalBidangTanah = 0;
-        if ($bisaAksesTanah) {
+        if ($isDinas) {
             $totalBidangTanah = Tanah::query()
                 ->where(function ($q) use ($acuan) {
                     $q->whereNotNull('tanggal_perolehan')
@@ -606,10 +783,9 @@ class LaporanEksekutifService
             $trenPerTahun[$thn]['nilai'] += ($a->nilai_perolehan !== null ? (float) $a->nilai_perolehan : 0.0);
         }
 
-        // Tentukan rentang tahun (minimal 5 tahun ke belakang sampai tahun acuan)
-        $tahunAcuan = $acuan->year;
-        $tahunTerkecil = ! empty($trenPerTahun) ? min(array_keys($trenPerTahun)) : $tahunAcuan - 4;
-        $startTahun = max($tahunAcuan - 9, min($tahunTerkecil, $tahunAcuan - 4));
+        // Tentukan rentang tahun: tepat 5 tahun terakhir sampai dengan tahun acuan
+        $tahunAcuan = (int) $acuan->year;
+        $startTahun = $tahunAcuan - 4;
 
         $labelsTren = [];
         $dataTrenCount = [];
@@ -637,7 +813,7 @@ class LaporanEksekutifService
         // Dilengkapi ringkasan penempatan ruangan & pemegang tanpa drilldown.
         // -------------------------------------------------------------
         $lokasiRef = $this->scope->lokasiTerlihat();
-        if ($unitLokasiId !== null && $this->scope->cakupanPenuh()) {
+        if ($unitLokasiId !== null) {
             $lokasiRef = $lokasiRef->where('id_lokasi', $unitLokasiId);
         }
 
@@ -656,6 +832,8 @@ class LaporanEksekutifService
             $namaLokasiList = array_values(array_intersect($urutanResmi, $namaLokasiList));
             $namaLokasiList[] = 'Belum Ditetapkan Lokasi';
         }
+
+        $fallbackUnitNama = $unitLokasiId !== null ? Lokasi::find($unitLokasiId)?->nama_lokasi : null;
 
         $rekapLokasi = [];
         foreach ($namaLokasiList as $nl) {
@@ -687,18 +865,70 @@ class LaporanEksekutifService
         }
 
         foreach ($asetList as $aset) {
-            // Tentukan lokasi fisik murni dari relasi lokasi (TIDAK BOLEH fallback ke skpd)
+            // Tentukan lokasi penempatan / unit aset:
+            // 1. Lokasi penempatan ruangan aktif terbaru
+            // 2. Lokasi ruangan pemegang aktif terkini
+            // 3. Fallback unit kerja (SKPD) / lokasi pembuat aset
+            $namaLokasi = null;
+
             if ($aset->is_kendaraan) {
-                // Khusus Kendaraan Bermotor:
-                // 1. Gunakan aset.id_lokasi apabila terisi dan valid
-                // 2. Jika NULL, gunakan lokasi dari pemegang aktif/terkini (aset -> pemegangSaatIni -> pegawai -> ruangan -> lokasi)
-                // 3. Jika lokasi dari ruangan juga tidak tersedia, masukkan ke "Belum Ditetapkan Lokasi"
-                $namaLokasi = $aset->lokasi?->nama_lokasi
-                    ?? $aset->pemegangSaatIni?->pegawai?->ruangan?->lokasi?->nama_lokasi
-                    ?? 'Belum Ditetapkan Lokasi';
+                // Skenario 5C: Prioritas Lokasi Kendaraan
+                // Prioritas 1: Master Lokasi (aset.id_lokasi)
+                if ($aset->id_lokasi) {
+                    if ($aset->id_lokasi === 3) {
+                        $namaLokasi = 'Kantor UPT PSBP';
+                    } elseif ($aset->id_lokasi === 2) {
+                        $namaLokasi = 'Kantor UPT P2BTP';
+                    } elseif ($aset->id_lokasi === 1) {
+                        $namaLokasi = 'Kantor Dinas Perkebunan Provinsi Jawa Timur';
+                    } else {
+                        $namaLokasi = $aset->lokasi?->nama_lokasi ?? 'Kantor Dinas Perkebunan Provinsi Jawa Timur';
+                    }
+                } elseif ($aset->pemegangSaatIni?->pegawai) {
+                    // Prioritas 2: Fallback ke Ruangan Pemegang Aktif jika master NULL
+                    $p = $aset->pemegangSaatIni->pegawai;
+                    $rLokId = $p->ruangan?->id_lokasi;
+                    if ($rLokId === 3 || $p->id_skpd === 7) {
+                        $namaLokasi = 'Kantor UPT PSBP';
+                    } elseif ($rLokId === 2 || $p->id_skpd === 6) {
+                        $namaLokasi = 'Kantor UPT P2BTP';
+                    } elseif ($rLokId === 1) {
+                        $namaLokasi = 'Kantor Dinas Perkebunan Provinsi Jawa Timur';
+                    } elseif ($rLokId !== null) {
+                        $namaLokasi = $p->ruangan?->lokasi?->nama_lokasi;
+                    }
+                }
+                // Prioritas 3: Masuk ke Belum Ditetapkan Lokasi jika master NULL dan tanpa ruangan pemegang
+                if (! $namaLokasi) {
+                    $namaLokasi = 'Belum Ditetapkan Lokasi';
+                }
             } else {
-                // Barang Inventaris: tetap menggunakan aset.id_lokasi sebagai sumber lokasi
-                $namaLokasi = $aset->lokasi?->nama_lokasi ?? 'Belum Ditetapkan Lokasi';
+                // Barang Inventaris
+                // Prioritas 1: Penempatan Ruangan Aktif
+                if ($aset->penempatanAktif?->ruangan) {
+                    $r = $aset->penempatanAktif->ruangan;
+                    if ($r->id_lokasi === 3 || $r->id_skpd === 7) {
+                        $namaLokasi = 'Kantor UPT PSBP';
+                    } elseif ($r->id_lokasi === 2 || $r->id_skpd === 6) {
+                        $namaLokasi = 'Kantor UPT P2BTP';
+                    } else {
+                        $namaLokasi = $r->lokasi?->nama_lokasi ?? 'Kantor Dinas Perkebunan Provinsi Jawa Timur';
+                    }
+                } elseif ($aset->id_lokasi) {
+                    // Prioritas 2: Master Lokasi aset
+                    if ($aset->id_lokasi === 3) {
+                        $namaLokasi = 'Kantor UPT PSBP';
+                    } elseif ($aset->id_lokasi === 2) {
+                        $namaLokasi = 'Kantor UPT P2BTP';
+                    } elseif ($aset->id_lokasi === 1) {
+                        $namaLokasi = 'Kantor Dinas Perkebunan Provinsi Jawa Timur';
+                    } else {
+                        $namaLokasi = $aset->lokasi?->nama_lokasi ?? 'Kantor Dinas Perkebunan Provinsi Jawa Timur';
+                    }
+                } else {
+                    // Prioritas 3: Belum Ditetapkan Lokasi (Barang TIDAK boleh fallback ke ruangan pemegang)
+                    $namaLokasi = 'Belum Ditetapkan Lokasi';
+                }
             }
 
             // Jika lokasi belum terdaftar di array rekap, daftarkan

@@ -96,9 +96,9 @@ class Kendaraan extends Model
     public function pajakTahunanAktif()
     {
         return $this->hasOne(PajakKendaraan::class, 'id_kendaraan')
-            ->where('pajak_5_tahunan', false)
-            ->where('status', 'Aktif')
-            ->latestOfMany('id_pajak');
+            ->ofMany(['id_pajak' => 'max'], function ($q) {
+                $q->where('pajak_5_tahunan', false)->where('status', 'Aktif');
+            });
     }
 
     /**
@@ -107,9 +107,9 @@ class Kendaraan extends Model
     public function pajakLimaTahunanAktif()
     {
         return $this->hasOne(PajakKendaraan::class, 'id_kendaraan')
-            ->where('pajak_5_tahunan', true)
-            ->where('status', 'Aktif')
-            ->latestOfMany('id_pajak');
+            ->ofMany(['id_pajak' => 'max'], function ($q) {
+                $q->where('pajak_5_tahunan', true)->where('status', 'Aktif');
+            });
     }
 
     /**

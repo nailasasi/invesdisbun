@@ -27,6 +27,14 @@ class DokumenPbbOtorisasiTest extends TestCase
     use MembuatFotoBukti;
     use RefreshDatabase;
 
+    protected function beforeRefreshingDatabase(): void
+    {
+        config([
+            'database.default' => 'sqlite',
+            'database.connections.sqlite.database' => ':memory:',
+        ]);
+    }
+
     private const PASSWORD = 'password123';
 
     private function buatUser(string $namaRole, ?int $idSkpd = null): User

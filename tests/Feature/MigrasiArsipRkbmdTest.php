@@ -42,15 +42,7 @@ class MigrasiArsipRkbmdTest extends TestCase
 
     private function namaDatabase(): string
     {
-        foreach (file(base_path('.env')) as $line) {
-            if (str_starts_with(trim($line), 'DB_DATABASE=')) {
-                $nilai = trim(explode('=', $line, 2)[1]);
-
-                return $nilai === '' ? 'invesdisbun' : $nilai;
-            }
-        }
-
-        return 'invesdisbun';
+        return $this->namaDatabasePengujian();
     }
 
     private function skpd(): Skpd
@@ -162,13 +154,7 @@ class MigrasiArsipRkbmdTest extends TestCase
         Storage::disk(RkbmdController::DISK_ARSIP_LAMA)->put($path, $isi);
         $arsip = $this->arsip($path);
 
-        $role = \App\Models\Role::firstOrCreate(['nama_role' => 'Admin Aset']);
-        $user = \App\Models\User::create([
-            'id_role' => $role->id_role,
-            'username' => 'admin_migrasi_'.$arsip->id_arsip,
-            'password' => 'rahasia123',
-            'status_user' => 'aktif',
-        ]);
+        $user = $this->ambilAtauBuatUserRole('Admin Aset');
 
         $this->actingAs($user);
 

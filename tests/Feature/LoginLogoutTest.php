@@ -19,7 +19,7 @@ class LoginLogoutTest extends TestCase
         parent::setUp();
         config([
             'database.default' => 'mysql',
-            'database.connections.mysql.database' => 'invesdisbun',
+            'database.connections.mysql.database' => $this->namaDatabasePengujian(),
         ]);
         RateLimiter::clear('login-ip|127.0.0.1');
         DB::beginTransaction();

@@ -6,6 +6,7 @@ use App\Http\Controllers\TanahController;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\ActivityLogger;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use ReflectionClassConstant;
 use Tests\TestCase;
@@ -24,6 +25,23 @@ use Tests\TestCase;
  */
 class PasswordOtorisasiTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config([
+            'database.default' => 'mysql',
+            'database.connections.mysql.database' => $this->namaDatabasePengujian(),
+        ]);
+
+        DB::beginTransaction();
+    }
+
+    protected function tearDown(): void
+    {
+        DB::rollBack();
+        parent::tearDown();
+    }
     private const PASSWORD_BENAR = 'rahasia123';
 
     private const RULES = ['password_otorisasi' => ['required', 'current_password:web']];

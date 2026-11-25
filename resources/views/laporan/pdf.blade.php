@@ -196,6 +196,17 @@
         .text-right { text-align: right; }
         .nowrap { white-space: nowrap; }
 
+        .table-data th.text-right,
+        .table-data td.text-right {
+            text-align: right;
+            padding-right: 8px;
+        }
+        .table-data th.text-left,
+        .table-data td.text-left {
+            text-align: left;
+            padding-left: 8px;
+        }
+
         /* GRID / 2 KOLOM */
         .layout-table {
             width: 100%;
@@ -257,23 +268,9 @@
 </head>
 <body>
 
-    {{-- SCRIPT DOMPDF UNTUK NOMOR HALAMAN RESMI --}}
-    <script type="text/php">
-        if (isset($pdf)) {
-            $font = $fontMetrics->get_font("Helvetica", "normal");
-            $fontBold = $fontMetrics->get_font("Helvetica", "bold");
-            $size = 8;
-            $color = array(0.35, 0.40, 0.45);
-            $w = $pdf->get_width();
-            $h = $pdf->get_height();
-
-            // Kiri Bawah: Identitas Sistem & Kerahasiaan
-            $pdf->page_text(35, $h - 26, "INVENSBUN | Dokumen Resmi Eksekutif Pengelolaan BMD - Pemerintah Provinsi Jawa Timur", $font, $size, $color);
-
-            // Kanan Bawah: Halaman X dari Y
-            $pdf->page_text($w - 110, $h - 26, "Halaman {PAGE_NUM} dari {PAGE_COUNT}", $fontBold, $size, $color);
-        }
-    </script>
+    {{-- CATATAN: Penomoran footer resmi (Halaman X dari Y) dan identitas dokumen
+         dirender langsung via Canvas API pada LaporanEksekutifExporter::renderPdf
+         agar nomor halaman terhitung akurat di seluruh halaman cetak (1 sampai n). --}}
 
     {{-- KOP SURAT RESMI PEMPROV JATIM --}}
     <table class="kop-table">
@@ -329,9 +326,11 @@
         <div class="executive-box-title">I. RINGKASAN EKSEKUTIF & TINJAUAN MANAJERIAL PORTOFOLIO ASET</div>
         <p style="margin: 0 0 4px 0;">
             Berdasarkan rekonsiliasi data Barang Milik Daerah (BMD) Dinas Perkebunan Provinsi Jawa Timur per <strong>{{ $periode['acuan']->translatedFormat('d F Y') }} (Pukul 23:59:59 WIB)</strong>,
-            cakupan unit <strong>{{ $meta['nama_unit'] }}</strong> mencatat total aset bergerak aktif sebanyak <strong>{{ number_format($k['total_barang_dan_kendaraan'], 0, ',', '.') }} unit</strong>
-            (terdiri atas {{ number_format($k['total_barang'], 0, ',', '.') }} unit Barang Inventaris dan {{ number_format($k['total_kendaraan'], 0, ',', '.') }} unit Kendaraan Dinas Bermotor).
-            Total nilai perolehan aset bergerak tercatat sebesar <strong>Rp {{ number_format($k['total_nilai_perolehan_aset'], 0, ',', '.') }}</strong> dengan akumulasi beban penyusutan SAP kumulatif sebesar <strong>Rp {{ number_format($k['total_akumulasi_penyusutan_gabungan'], 0, ',', '.') }}</strong>,
+            pada Tahun Anggaran <strong>{{ $periode['tahun'] }}</strong> tercatat realisasi <strong>Pengadaan Aset sebanyak {{ number_format($k['jumlah_aset_pengadaan'], 0, ',', '.') }} unit</strong>
+            ({{ number_format($k['pengadaan_barang_count'], 0, ',', '.') }} unit Barang Inventaris dan {{ number_format($k['pengadaan_kendaraan_count'], 0, ',', '.') }} unit Kendaraan Dinas)
+            dengan total belanja pengadaan sebesar <strong>Rp {{ number_format($k['nilai_pengadaan_tahun'], 0, ',', '.') }}</strong> (hanya aset yang tanggal perolehannya berada dalam tahun {{ $periode['tahun'] }}).
+            Secara kumulatif, cakupan unit <strong>{{ $meta['nama_unit'] }}</strong> mengelola total aset aktif sebanyak <strong>{{ number_format($k['total_aset_aktif'], 0, ',', '.') }} unit</strong>
+            dengan total nilai perolehan historis <strong>Rp {{ number_format($k['total_nilai_perolehan_aset'], 0, ',', '.') }}</strong> dan akumulasi beban penyusutan kumulatif sebesar <strong>Rp {{ number_format($k['total_akumulasi_penyusutan_gabungan'], 0, ',', '.') }}</strong>,
             menghasilkan nilai buku bersih aset bergerak sebesar <strong>Rp {{ number_format($k['total_nilai_buku_aset'], 0, ',', '.') }}</strong>
             (rasio nilai buku terhadap perolehan: <strong>{{ $k['total_nilai_perolehan_aset'] > 0 ? number_format(($k['total_nilai_buku_aset'] / $k['total_nilai_perolehan_aset']) * 100, 1, ',', '.') : '0,0' }}%</strong>).
             @if ($k['bisa_akses_tanah'])
@@ -340,10 +339,11 @@
             @endif
         </p>
         <p style="margin: 0;">
-            Dari aspek fisik, sebanyak <strong>{{ number_format($k['kondisi_baik'], 0, ',', '.') }} unit ({{ $k['total_barang_dan_kendaraan'] > 0 ? number_format(($k['kondisi_baik'] / $k['total_barang_dan_kendaraan']) * 100, 1, ',', '.') : '0,0' }}%)</strong> aset berada dalam kondisi <strong>Baik</strong>,
+            Dari aspek fisik, <strong>Kondisi seluruh aset aktif berdasarkan data kondisi terakhir</strong> mencatat sebanyak <strong>{{ number_format($k['kondisi_baik'], 0, ',', '.') }} unit ({{ $k['total_aset_aktif'] > 0 ? number_format(($k['kondisi_baik'] / $k['total_aset_aktif']) * 100, 1, ',', '.') : '0,0' }}%)</strong> aset berada dalam kondisi <strong>Baik</strong>,
             sementara terdapat <strong>{{ number_format($k['kondisi_rusak_ringan'], 0, ',', '.') }} unit</strong> Rusak Ringan dan <strong>{{ number_format($k['kondisi_rusak_berat'], 0, ',', '.') }} unit</strong> Rusak Berat.
+            Rekap kondisi mencakup seluruh aset yang masih aktif dalam cakupan unit laporan, tanpa membatasi tahun pengadaan.
             Tingkat kepatuhan penempatan ruangan/pemegang mencapai <strong>{{ number_format($k['persentase_penempatan_pemegang'], 1, ',', '.') }}%</strong>
-            ({{ number_format($k['memiliki_penempatan_pemegang_count'], 0, ',', '.') }} dari {{ number_format($k['total_barang_dan_kendaraan'], 0, ',', '.') }} aset telah tercatat ruangan atau penanggung jawab pemegangnya).
+            ({{ number_format($k['memiliki_penempatan_pemegang_count'], 0, ',', '.') }} dari {{ number_format($k['total_aset_aktif'], 0, ',', '.') }} aset telah tercatat ruangan atau penanggung jawab pemegangnya).
         </p>
     </div>
 
@@ -469,7 +469,7 @@
                         <tr class="row-total">
                             <td colspan="2" class="text-center">TOTAL KATEGORI TERDATA</td>
                             <td class="text-right">{{ number_format($katTotal, 0, ',', '.') }} unit</td>
-                            <td class="text-right">100,0%</td>
+                            <td class="text-right">{{ $katTotal > 0 ? '100,0%' : '0,0%' }}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -609,10 +609,10 @@
                 <table class="table-data">
                     <thead>
                         <tr>
-                            <th style="width: 46%;" class="text-left">Kategori Masa Manfaat</th>
-                            <th style="width: 18%;">Jumlah Fisik</th>
-                            <th style="width: 16%;">Proporsi</th>
-                            <th style="width: 20%;" class="text-left">Keterangan Finansial</th>
+                            <th style="width: 38%;" class="text-left">Kategori Masa Manfaat</th>
+                            <th style="width: 16%;" class="text-right">Jumlah Fisik</th>
+                            <th style="width: 14%;" class="text-right">Proporsi</th>
+                            <th style="width: 32%;" class="text-left">Keterangan Finansial</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -624,34 +624,34 @@
                             $pctNan = $totMasa > 0 ? ($k['masa_nan'] / $totMasa) * 100 : 0;
                         @endphp
                         <tr>
-                            <td><strong style="color: #b91c1c;">Habis Masa Manfaat</strong> (Telah Susut Penuh)</td>
-                            <td class="text-right">{{ number_format($k['masa_habis'], 0, ',', '.') }} unit</td>
-                            <td class="text-right">{{ number_format($pctHabis, 1, ',', '.') }}%</td>
-                            <td>Nilai buku residu / nol</td>
+                            <td class="text-left"><strong style="color: #b91c1c;">Habis Masa Manfaat</strong> (Telah Susut Penuh)</td>
+                            <td class="text-right font-bold nowrap">{{ number_format($k['masa_habis'], 0, ',', '.') }} unit</td>
+                            <td class="text-right nowrap">{{ number_format($pctHabis, 1, ',', '.') }}%</td>
+                            <td class="text-left">Nilai buku residu / nol</td>
                         </tr>
                         <tr>
-                            <td><strong style="color: #d97706;">Masa Kritis</strong> (Sisa &le; 1 Tahun)</td>
-                            <td class="text-right">{{ number_format($k['masa_kritis'], 0, ',', '.') }} unit</td>
-                            <td class="text-right">{{ number_format($pctKritis, 1, ',', '.') }}%</td>
-                            <td>Mendekati habis depresiasi</td>
+                            <td class="text-left"><strong style="color: #d97706;">Masa Kritis</strong> (Sisa <= 1 Tahun)</td>
+                            <td class="text-right font-bold nowrap">{{ number_format($k['masa_kritis'], 0, ',', '.') }} unit</td>
+                            <td class="text-right nowrap">{{ number_format($pctKritis, 1, ',', '.') }}%</td>
+                            <td class="text-left">Mendekati habis depresiasi</td>
                         </tr>
                         <tr>
-                            <td><strong style="color: #047857;">Masa Normal</strong> (Sisa &gt; 1 Tahun)</td>
-                            <td class="text-right">{{ number_format($k['masa_normal'], 0, ',', '.') }} unit</td>
-                            <td class="text-right">{{ number_format($pctNormal, 1, ',', '.') }}%</td>
-                            <td>Penyusutan rutin berjalan</td>
+                            <td class="text-left"><strong style="color: #047857;">Masa Normal</strong> (Sisa > 1 Tahun)</td>
+                            <td class="text-right font-bold nowrap">{{ number_format($k['masa_normal'], 0, ',', '.') }} unit</td>
+                            <td class="text-right nowrap">{{ number_format($pctNormal, 1, ',', '.') }}%</td>
+                            <td class="text-left">Penyusutan rutin berjalan</td>
                         </tr>
                         <tr>
-                            <td><span style="color: #64748b;">Tanpa Ketetapan Masa Manfaat</span></td>
-                            <td class="text-right">{{ number_format($k['masa_nan'], 0, ',', '.') }} unit</td>
-                            <td class="text-right">{{ number_format($pctNan, 1, ',', '.') }}%</td>
-                            <td>Aset tanpa batas susut</td>
+                            <td class="text-left"><span style="color: #64748b;">Tanpa Ketetapan Masa Manfaat</span></td>
+                            <td class="text-right nowrap">{{ number_format($k['masa_nan'], 0, ',', '.') }} unit</td>
+                            <td class="text-right nowrap">{{ number_format($pctNan, 1, ',', '.') }}%</td>
+                            <td class="text-left">Aset tanpa batas susut</td>
                         </tr>
                         <tr class="row-total">
-                            <td class="text-center">TOTAL ASET BERGERAK</td>
-                            <td class="text-right">{{ number_format($totMasa, 0, ',', '.') }} unit</td>
-                            <td class="text-right">100,0%</td>
-                            <td>Populasi aset bergerak</td>
+                            <td class="text-left font-bold">TOTAL ASET BERGERAK</td>
+                            <td class="text-right font-bold nowrap">{{ number_format($totMasa, 0, ',', '.') }} unit</td>
+                            <td class="text-right font-bold nowrap">{{ $totMasa > 0 ? '100,0%' : '0,0%' }}</td>
+                            <td class="text-left">Populasi aset bergerak</td>
                         </tr>
                     </tbody>
                 </table>
@@ -664,7 +664,8 @@
         <tr>
             {{-- Kolom Kiri: Kondisi Fisik Master Aset --}}
             <td style="width: 50%; padding-right: 8px;">
-                <div class="section-header">VII. RINGKASAN KONDISI FISIK ASET (STATUS MASTER)</div>
+                <div class="section-header">VII. RINGKASAN KONDISI FISIK SELURUH ASET AKTIF</div>
+                <div style="font-size: 7.2pt; color: #065f46; font-style: italic; margin: 2px 0 4px 0;">Kondisi seluruh aset aktif berdasarkan data kondisi terakhir.</div>
                 <table class="table-data">
                     <thead>
                         <tr>
@@ -676,7 +677,7 @@
                     </thead>
                     <tbody>
                         @php
-                            $totKond = $k['total_barang_dan_kendaraan'];
+                            $totKond = $k['total_aset_aktif'];
                             $pctB = $totKond > 0 ? ($k['kondisi_baik'] / $totKond) * 100 : 0;
                             $pctRR = $totKond > 0 ? ($k['kondisi_rusak_ringan'] / $totKond) * 100 : 0;
                             $pctRB = $totKond > 0 ? ($k['kondisi_rusak_berat'] / $totKond) * 100 : 0;
@@ -709,8 +710,8 @@
                         <tr class="row-total">
                             <td class="text-center">TOTAL KONSOLIDASI FISIK</td>
                             <td class="text-right">{{ number_format($totKond, 0, ',', '.') }} unit</td>
-                            <td class="text-right">100,0%</td>
-                            <td>Status fisik mutakhir</td>
+                            <td class="text-right">{{ $totKond > 0 ? '100,0%' : '0,0%' }}</td>
+                            <td>Kondisi seluruh aset aktif</td>
                         </tr>
                     </tbody>
                 </table>
@@ -744,7 +745,7 @@
                         <tr>
                             <td>Belum Diverifikasi Sensus</td>
                             <td class="text-right" style="color: #b91c1c;">{{ number_format($k['sensus_belum_count'], 0, ',', '.') }} unit</td>
-                            <td class="text-right">{{ number_format(100 - $k['sensus_persentase'], 1, ',', '.') }}%</td>
+                            <td class="text-right">{{ $k['sensus_wajib_count'] > 0 ? number_format(max(0, 100 - $k['sensus_persentase']), 1, ',', '.') . '%' : '0,0%' }}</td>
                             <td>Menunggu jadwal verifikasi</td>
                         </tr>
                         <tr>
@@ -957,51 +958,51 @@
                 <table class="table-data">
                     <thead>
                         <tr>
-                            <th style="width: 52%;" class="text-left">Indikator Pajak Kendaraan Bermotor</th>
-                            <th style="width: 24%;" class="text-right">Realisasi</th>
-                            <th style="width: 24%;" class="text-left">Satuan / Status</th>
+                            <th style="width: 48%;" class="text-left">Indikator Pajak Kendaraan Bermotor</th>
+                            <th style="width: 26%;" class="text-right">Realisasi</th>
+                            <th style="width: 26%;" class="text-left">Satuan / Status</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <td>Pembayaran Pajak Dalam Periode (Flow)</td>
-                            <td class="text-right font-bold">{{ number_format($k['pajak_flow_transaksi_count'], 0, ',', '.') }}</td>
-                            <td>Transaksi Terbayar</td>
+                            <td class="text-left">Pembayaran Pajak Dalam Periode (Flow)</td>
+                            <td class="text-right font-bold nowrap">{{ number_format($k['pajak_flow_transaksi_count'], 0, ',', '.') }}</td>
+                            <td class="text-left">Transaksi Terbayar</td>
                         </tr>
                         <tr>
-                            <td>Jumlah Unit Kendaraan Terbayar Pajak</td>
-                            <td class="text-right font-bold">{{ number_format($k['pajak_flow_kendaraan_count'], 0, ',', '.') }}</td>
-                            <td>Unit Armada</td>
+                            <td class="text-left">Jumlah Unit Kendaraan Terbayar Pajak</td>
+                            <td class="text-right font-bold nowrap">{{ number_format($k['pajak_flow_kendaraan_count'], 0, ',', '.') }}</td>
+                            <td class="text-left">Unit Armada</td>
                         </tr>
                         <tr>
-                            <td>Total Realisasi Belanja Pajak (PKB/SWDKLLJ)</td>
-                            <td class="text-right font-bold" style="color: #065f46;">Rp {{ number_format($k['pajak_flow_total_nominal'], 0, ',', '.') }}</td>
-                            <td>Rupiah Terealisasi</td>
+                            <td class="text-left">Total Realisasi Belanja Pajak (PKB/SWDKLLJ)</td>
+                            <td class="text-right font-bold nowrap" style="color: #065f46;">Rp {{ number_format($k['pajak_flow_total_nominal'], 0, ',', '.') }}</td>
+                            <td class="text-left">Rupiah Terealisasi</td>
                         </tr>
                         <tr style="background-color: #f1f5f9;">
-                            <td colspan="3" style="font-weight: bold; color: #0f172a; font-size: 7.5pt;">
+                            <td colspan="3" style="font-weight: bold; color: #0f172a; font-size: 7.5pt;" class="text-left">
                                 Status Kepatuhan Masa Berlaku Pajak (Snapshot per {{ $periode['acuan']->translatedFormat('d M Y') }}):
                             </td>
                         </tr>
                         <tr>
-                            <td>&bull; Masa Pajak Aman / Aktif (&gt; 30 Hari)</td>
-                            <td class="text-right" style="color: #047857;">{{ number_format($k['pajak_snapshot_aman'], 0, ',', '.') }}</td>
-                            <td>Unit Patuh</td>
+                            <td class="text-left">&bull; Masa Pajak Aman / Aktif (> 30 Hari)</td>
+                            <td class="text-right nowrap" style="color: #047857;">{{ number_format($k['pajak_snapshot_aman'], 0, ',', '.') }}</td>
+                            <td class="text-left">Unit Patuh</td>
                         </tr>
                         <tr>
-                            <td>&bull; Jatuh Tempo Kritis (&le; 30 Hari)</td>
-                            <td class="text-right" style="color: #d97706;">{{ number_format($k['pajak_snapshot_kritis'], 0, ',', '.') }}</td>
-                            <td>Unit Perlu Perhatian</td>
+                            <td class="text-left">&bull; Jatuh Tempo Kritis (<= 30 Hari)</td>
+                            <td class="text-right nowrap" style="color: #d97706;">{{ number_format($k['pajak_snapshot_kritis'], 0, ',', '.') }}</td>
+                            <td class="text-left">Unit Perlu Perhatian</td>
                         </tr>
                         <tr>
-                            <td>&bull; Terlambat / Menunggak Pajak</td>
-                            <td class="text-right" style="color: #b91c1c;">{{ number_format($k['pajak_snapshot_terlambat'], 0, ',', '.') }}</td>
-                            <td>Unit Menunggak</td>
+                            <td class="text-left">&bull; Terlambat / Menunggak Pajak</td>
+                            <td class="text-right nowrap" style="color: #b91c1c;">{{ number_format($k['pajak_snapshot_terlambat'], 0, ',', '.') }}</td>
+                            <td class="text-left">Unit Menunggak</td>
                         </tr>
                         <tr>
-                            <td>&bull; Belum Ada Data Masa Pajak</td>
-                            <td class="text-right" style="color: #64748b;">{{ number_format($k['pajak_snapshot_tanpa_data'], 0, ',', '.') }}</td>
-                            <td>Unit Belum Terdata</td>
+                            <td class="text-left">&bull; Belum Ada Data Masa Pajak</td>
+                            <td class="text-right nowrap" style="color: #64748b;">{{ number_format($k['pajak_snapshot_tanpa_data'], 0, ',', '.') }}</td>
+                            <td class="text-left">Unit Belum Terdata</td>
                         </tr>
                     </tbody>
                 </table>
@@ -1014,10 +1015,10 @@
         <div class="notes-box">
             <strong>XII. METODOLOGI PERHITUNGAN &amp; CATATAN KETERBATASAN DATA (DISCLAIMER):</strong>
             <ol style="margin: 2px 0 0 16px; padding: 0;">
-                <li><strong>Rekonstruksi Saldo Neraca Historis (Opsi A SAP):</strong> Angka saldo aset merekonstruksi data aset yang tanggal perolehannya &le; tanggal acuan laporan ({{ $periode['acuan']->translatedFormat('d F Y') }} pukul 23:59:59 WIB) dan belum dihapuskan sebelum tanggal tersebut (atau berstatus dihapuskan setelah tanggal acuan).</li>
-                <li><strong>Metode Depresiasi:</strong> Nilai penyusutan dihitung secara straight-line (garis lurus) proporsional bulan pemakaian berdasarkan masa manfaat kelompok barang Standar Akuntansi Pemerintahan (SAP).</li>
+                <li><strong>Rekonstruksi Saldo Neraca Historis (Opsi A SAP):</strong> Angka saldo aset merekonstruksi data aset yang tanggal perolehannya <= tanggal acuan laporan ({{ $periode['acuan']->translatedFormat('d F Y') }} pukul 23:59:59 WIB) dan belum dihapuskan sebelum tanggal tersebut (atau berstatus dihapuskan setelah tanggal acuan).</li>
+                <li><strong>Metode Depresiasi:</strong> Nilai penyusutan dihitung menggunakan metode garis lurus (straight-line) tanpa residu berdasarkan tahun penggunaan penuh (siklus tahunan sejak tanggal pengadaan) sesuai masa manfaat kelompok barang Standar Akuntansi Pemerintahan (SAP).</li>
                 <li><strong>Perlakuan Tanah KIB A:</strong> Sesuai SAP, aset tanah daerah tidak disusutkan (nilai buku = nilai perolehan) dan disajikan terpisah dari aset peralatan/mesin. Hanya ditampilkan bagi pengguna berhak akses.</li>
-                <li><strong>Disclaimer Kondisi Fisik Master:</strong> Atribut kondisi fisik aset bersumber dari kolom kondisi master data terkini saat laporan diunduh. Jika laporan dibuka untuk periode lampau, sistem belum mencatat mutasi status fisik historis per tanggal lampau tersebut.</li>
+                <li><strong>Kondisi Seluruh Aset Aktif:</strong> Kondisi seluruh aset aktif berdasarkan data kondisi terakhir (kondisi master data terkini saat laporan diunduh). Rekap kondisi mencakup seluruh aset yang masih aktif dalam cakupan unit laporan, tanpa membatasi tahun pengadaan. Aset dari tahun pengadaan sebelumnya tetap dihitung selama masih menjadi aset aktif Disbun.</li>
                 <li><strong>Penentuan Lokasi Operasional:</strong> Lokasi fisik murni merujuk pada master lokasi aset. Untuk armada kendaraan operasional, jika lokasi master kosong, sistem menggunakan lokasi ruangan pemegang aktif.</li>
                 <li><strong>Strictly No Drilldown:</strong> Laporan eksekutif ini merupakan dokumen agregat manajerial akuntabilitas dan secara sengaja tidak memuat tautan detail individual aset maupun identitas usulan penghapusan.</li>
             </ol>

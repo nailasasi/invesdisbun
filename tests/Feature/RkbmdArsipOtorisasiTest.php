@@ -56,15 +56,7 @@ class RkbmdArsipOtorisasiTest extends TestCase
 
     private function namaDatabase(): string
     {
-        foreach (file(base_path('.env')) as $line) {
-            if (str_starts_with(trim($line), 'DB_DATABASE=')) {
-                $nilai = trim(explode('=', $line, 2)[1]);
-
-                return $nilai === '' ? 'invesdisbun' : $nilai;
-            }
-        }
-
-        return 'invesdisbun';
+        return $this->namaDatabasePengujian();
     }
 
     private function buatRole(string $nama): Role
@@ -179,7 +171,7 @@ class RkbmdArsipOtorisasiTest extends TestCase
         $skpdPsbp = $this->buatSkpd('UPT PSBP', 'UPT');
         $arsipPsbp = $this->buatArsip($skpdPsbp, 'arsip-rkbmd/psbp.pdf');
 
-        $user = $this->buatUser('Admin UPT', $skpdP2btp, 'admin_p2btp');
+        $user = $this->buatUser('Admin UPT', $skpdP2btp, 'admin_p2btp_uji_' . uniqid());
 
         $this->actingAs($user);
 
@@ -193,7 +185,7 @@ class RkbmdArsipOtorisasiTest extends TestCase
         $skpdP2btp = $this->buatSkpd('UPT P2BTP', 'UPT');
         $arsipP2btp = $this->buatArsip($skpdP2btp, 'arsip-rkbmd/p2btp.pdf');
 
-        $user = $this->buatUser('Admin UPT', $skpdPsbp, 'admin_psbp');
+        $user = $this->buatUser('Admin UPT', $skpdPsbp, 'admin_psbp_uji_' . uniqid());
 
         $this->actingAs($user);
 

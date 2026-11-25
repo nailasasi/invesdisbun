@@ -47,18 +47,12 @@ class KonsolidasiMutasiAsetTest extends TestCase
 
     private function namaDatabase(): string
     {
-        foreach (file(base_path('.env')) as $line) {
-            if (str_starts_with(trim($line), 'DB_DATABASE=')) {
-                $nilai = trim(explode('=', $line, 2)[1]);
-                return $nilai === '' ? 'invesdisbun' : $nilai;
-            }
-        }
-        return 'invesdisbun';
+        return $this->namaDatabasePengujian();
     }
 
     private function userByRole(string $namaRole): User
     {
-        return User::whereHas('role', fn ($r) => $r->where('nama_role', $namaRole))->firstOrFail();
+        return $this->ambilAtauBuatUserRole($namaRole);
     }
 
     private function buatRuangan(Skpd $skpd, string $status = 'Aktif'): Ruangan

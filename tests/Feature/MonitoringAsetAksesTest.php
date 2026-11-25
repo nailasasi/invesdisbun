@@ -43,20 +43,12 @@ class MonitoringAsetAksesTest extends TestCase
 
     private function namaDatabase(): string
     {
-        foreach (file(base_path('.env')) as $line) {
-            if (str_starts_with(trim($line), 'DB_DATABASE=')) {
-                $nilai = trim(explode('=', $line, 2)[1]);
-
-                return $nilai === '' ? 'invesdisbun' : $nilai;
-            }
-        }
-
-        return 'invesdisbun';
+        return $this->namaDatabasePengujian();
     }
 
     private function userDenganRole(string $role): User
     {
-        return User::whereHas('role', fn ($q) => $q->where('nama_role', $role))->firstOrFail();
+        return $this->ambilAtauBuatUserRole($role);
     }
 
     private function adminUptP2btp(): User
@@ -398,27 +390,27 @@ class MonitoringAsetAksesTest extends TestCase
         $resAset->assertOk()
             ->assertSee('Monitoring Aset')
             ->assertSee('Mutasi Aset')
-            ->assertSee('Penghapusan Aset');
+            ->assertSee('Usulan Penghapusan');
         $sidebarAset = $this->ambilSidebarHtml($resAset->getContent());
         $this->assertSame(1, substr_count($sidebarAset, 'Monitoring Aset'));
         $this->assertTrue(strpos($sidebarAset, 'Monitoring Aset') > strpos($sidebarAset, 'Pengelolaan Aset'));
 
-        // 2. Admin UPT P2BTP melihat tepat 1 menu Monitoring Aset di sidebar (di bawah Pengelolaan Aset, bukan di Inventaris Aset)
+        // 2. Admin UPT P2BTP melihat menu Monitoring Aset, Mutasi Aset, dan Usulan Penghapusan di sidebar (di bawah Pengelolaan Aset)
         $resP2btp = $this->actingAs($this->adminUptP2btp())->get(route('dashboard'));
         $resP2btp->assertOk()
             ->assertSee('Monitoring Aset')
-            ->assertDontSee('Mutasi Aset')
-            ->assertDontSee('Penghapusan Aset');
+            ->assertSee('Mutasi Aset')
+            ->assertSee('Usulan Penghapusan');
         $sidebarP2btp = $this->ambilSidebarHtml($resP2btp->getContent());
         $this->assertSame(1, substr_count($sidebarP2btp, 'Monitoring Aset'));
         $this->assertTrue(strpos($sidebarP2btp, 'Monitoring Aset') > strpos($sidebarP2btp, 'Pengelolaan Aset'));
 
-        // 3. Admin UPT PSBP melihat tepat 1 menu Monitoring Aset di sidebar (di bawah Pengelolaan Aset)
+        // 3. Admin UPT PSBP melihat menu Monitoring Aset, Mutasi Aset, dan Usulan Penghapusan di sidebar (di bawah Pengelolaan Aset)
         $resPsbp = $this->actingAs($this->adminUptPsbp())->get(route('dashboard'));
         $resPsbp->assertOk()
             ->assertSee('Monitoring Aset')
-            ->assertDontSee('Mutasi Aset')
-            ->assertDontSee('Penghapusan Aset');
+            ->assertSee('Mutasi Aset')
+            ->assertSee('Usulan Penghapusan');
         $sidebarPsbp = $this->ambilSidebarHtml($resPsbp->getContent());
         $this->assertSame(1, substr_count($sidebarPsbp, 'Monitoring Aset'));
         $this->assertTrue(strpos($sidebarPsbp, 'Monitoring Aset') > strpos($sidebarPsbp, 'Pengelolaan Aset'));

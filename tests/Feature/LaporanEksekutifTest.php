@@ -45,15 +45,7 @@ class LaporanEksekutifTest extends TestCase
 
     private function namaDatabase(): string
     {
-        foreach (file(base_path('.env')) as $line) {
-            if (str_starts_with(trim($line), 'DB_DATABASE=')) {
-                $nilai = trim(explode('=', $line, 2)[1]);
-
-                return $nilai === '' ? 'invesdisbun' : $nilai;
-            }
-        }
-
-        return 'invesdisbun';
+        return $this->namaDatabasePengujian();
     }
 
     private function userDenganRole(string $role): User
@@ -519,7 +511,7 @@ class LaporanEksekutifTest extends TestCase
         $response->assertStatus(200);
         $response->assertViewIs('laporan.index');
         $response->assertSee('Laporan Eksekutif');
-        $response->assertSee('Semua Unit (Konsolidasi)');
+        $response->assertSee('Semua Unit');
     }
 
     /** 15. Admin UPT hanya melihat cakupan lokasi fisiknya */
@@ -550,13 +542,20 @@ class LaporanEksekutifTest extends TestCase
             'is_kendaraan' => false,
         ]);
 
-        // Login sebagai Admin P2BTP mencoba mengakses laporan ditolak HTTP 403
+        // Admin P2BTP dapat mengakses laporan unitnya sendiri (HTTP 200)
         $response = $this->actingAs($adminP2btp)->get(route('laporan.index', [
             'jenis' => 'tahunan',
             'tahun' => 2025,
         ]));
+        $response->assertStatus(200);
 
-        $response->assertStatus(403);
+        // Namun mencoba mengakses unit lain atau konsolidasi ditolak HTTP 403
+        $respForbidden = $this->actingAs($adminP2btp)->get(route('laporan.index', [
+            'jenis' => 'tahunan',
+            'tahun' => 2025,
+            'unit' => 'semua',
+        ]));
+        $respForbidden->assertStatus(403);
 
         $service = app(LaporanEksekutifService::class);
         $query = $service->asetQueryAt(Carbon::parse('2025-12-31 23:59:59'));
@@ -670,12 +669,15 @@ class LaporanEksekutifTest extends TestCase
             $resp->assertStatus(200);
         }
 
-        // 2. Admin UPT ditolak (HTTP 403)
+        // 2. Admin UPT diizinkan mengakses unitnya sendiri (HTTP 200), namun ditolak jika mencoba unit=semua (HTTP 403)
         $adminUpt = $this->adminUpt('UPT P2BTP');
         $this->actingAs($adminUpt);
         foreach ($endpoints as $routeName => $params) {
             $resp = $this->get(route($routeName, $params));
-            $resp->assertStatus(403);
+            $resp->assertStatus(200);
+
+            $respForbidden = $this->get(route($routeName, array_merge($params, ['unit' => 'semua'])));
+            $respForbidden->assertStatus(403);
         }
 
         // 3. Admin Bidang ditolak (HTTP 403)
@@ -1309,6 +1311,17 @@ class LaporanEksekutifTest extends TestCase
     {
         $admin = $this->userDenganRole('Admin Aset');
 
+        // Buat data pengadaan uji di periode Oktober 2026 agar chartAktivitas memiliki data
+        Aset::create([
+            'id_lokasi' => Lokasi::first()->id_lokasi,
+            'nomor_kartu_barang' => 'TST-AKT-' . uniqid(),
+            'tanggal_pengadaan' => '2026-10-10',
+            'nilai_perolehan' => 1000000,
+            'kondisi' => 'Baik',
+            'status_aset' => 'aktif',
+            'is_kendaraan' => false,
+        ]);
+
         $response = $this->actingAs($admin)->get(route('laporan.index', [
             'jenis' => 'bulanan',
             'tahun' => 2026,
@@ -1361,14 +1374,14 @@ class LaporanEksekutifTest extends TestCase
         $response->assertStatus(200);
 
         // Judul & Subtitle Grafik A dan E
-        $response->assertSee('A. Distribusi Kondisi Aset', false);
-        $response->assertSee('Kondisi Fisik Terkini pada Populasi Saldo Aset Periode Laporan', false);
+        $response->assertSee('A. Distribusi Kondisi Seluruh Aset Aktif', false);
+        $response->assertSee('Kondisi seluruh aset aktif berdasarkan data kondisi terakhir.', false);
         $response->assertSee('E. Kondisi Aset Berdasarkan Lokasi', false);
         $response->assertSee('Distribusi kondisi Barang Inventaris dan Kendaraan Bermotor berdasarkan lokasi fisik aset.', false);
 
         // Catatan Metodologi Transparansi Data
         $response->assertSee('Catatan Metodologi:', false);
-        $response->assertSee('Grafik menyajikan kondisi fisik terkini berdasarkan data master aset dari populasi saldo aset pada periode laporan. Sistem belum mencatat histori perubahan kondisi fisik aset, sehingga kondisi yang ditampilkan tidak merepresentasikan kondisi fisik pada tanggal laporan historis.', false);
+        $response->assertSee('Kondisi seluruh aset aktif berdasarkan data kondisi terakhir. Rekap kondisi mencakup seluruh aset yang masih aktif dalam cakupan unit laporan', false);
     }
 
     /** 32. Ketahanan Pemuatan: Script mengutamakan file lokal, fallback CDN, dan pesan informatif */
@@ -1403,6 +1416,22 @@ class LaporanEksekutifTest extends TestCase
 
         $lokasiDinas = Lokasi::where('jenis_lokasi', 'Dinas')->firstOrFail();
 
+        $service = app(LaporanEksekutifService::class);
+        $resNov = $service->resolvePeriode('bulanan', 2026, 11);
+        $grafikNovBefore = $service->kalkulasiGrafik(
+            $resNov['start_date'],
+            $resNov['end_date'],
+            $resNov['acuan'],
+            null,
+            'bulanan'
+        );
+        $unitNovBefore = $grafikNovBefore['kondisi_unit'];
+        $idxDinas = array_search('Kantor Dinas Perkebunan Provinsi Jawa Timur', $unitNovBefore['labels'], true);
+        $this->assertNotFalse($idxDinas);
+        $baseKendaraanBaik = $unitNovBefore['kendaraan_baik'][$idxDinas];
+        $baseKendaraanRusakRingan = $unitNovBefore['kendaraan_rusak_ringan'][$idxDinas];
+        $baseKendaraanRusakBerat = $unitNovBefore['kendaraan_rusak_berat'][$idxDinas];
+
         Aset::create([
             'id_lokasi' => $lokasiDinas->id_lokasi,
             'nomor_kartu_barang' => 'TST-KND-B-' . uniqid(),
@@ -1423,8 +1452,6 @@ class LaporanEksekutifTest extends TestCase
             'is_kendaraan' => true,
         ]);
 
-        $service = app(LaporanEksekutifService::class);
-        $resNov = $service->resolvePeriode('bulanan', 2026, 11);
         $grafikNov = $service->kalkulasiGrafik(
             $resNov['start_date'],
             $resNov['end_date'],
@@ -1434,20 +1461,18 @@ class LaporanEksekutifTest extends TestCase
         );
 
         $unitNov = $grafikNov['kondisi_unit'];
-        $idxDinas = array_search('Kantor Dinas Perkebunan Provinsi Jawa Timur', $unitNov['labels'], true);
-        $this->assertNotFalse($idxDinas);
 
         // Verifikasi data Kantor Dinas periode November 2026:
         // Barang Inventaris: 99 unit (atau 100 jika ada aset uji di transaction)
         $totalBarangDinas = $unitNov['barang_baik'][$idxDinas] + $unitNov['barang_rusak_ringan'][$idxDinas] + $unitNov['barang_rusak_berat'][$idxDinas];
         $this->assertGreaterThanOrEqual(99, $totalBarangDinas);
 
-        // Kendaraan Bermotor: 2 unit (1 Baik, 1 Rusak Berat)
-        $this->assertSame(1, $unitNov['kendaraan_baik'][$idxDinas]);
-        $this->assertSame(0, $unitNov['kendaraan_rusak_ringan'][$idxDinas]);
-        $this->assertSame(1, $unitNov['kendaraan_rusak_berat'][$idxDinas]);
+        // Kendaraan Bermotor: delta 2 unit (1 Baik, 1 Rusak Berat)
+        $this->assertSame($baseKendaraanBaik + 1, $unitNov['kendaraan_baik'][$idxDinas]);
+        $this->assertSame($baseKendaraanRusakRingan, $unitNov['kendaraan_rusak_ringan'][$idxDinas]);
+        $this->assertSame($baseKendaraanRusakBerat + 1, $unitNov['kendaraan_rusak_berat'][$idxDinas]);
         $totalKendaraanDinas = $unitNov['kendaraan_baik'][$idxDinas] + $unitNov['kendaraan_rusak_ringan'][$idxDinas] + $unitNov['kendaraan_rusak_berat'][$idxDinas];
-        $this->assertSame(2, $totalKendaraanDinas);
+        $this->assertSame($baseKendaraanBaik + $baseKendaraanRusakRingan + $baseKendaraanRusakBerat + 2, $totalKendaraanDinas);
 
         // Verifikasi view rendering
         $response = $this->get(route('laporan.index', ['periode' => 'bulanan', 'tahun' => 2026, 'bulan' => 11]));

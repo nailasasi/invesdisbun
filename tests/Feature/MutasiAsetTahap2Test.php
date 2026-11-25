@@ -42,15 +42,7 @@ class MutasiAsetTahap2Test extends TestCase
 
     private function namaDatabase(): string
     {
-        foreach (file(base_path('.env')) as $line) {
-            if (str_starts_with(trim($line), 'DB_DATABASE=')) {
-                $nilai = trim(explode('=', $line, 2)[1]);
-
-                return $nilai === '' ? 'invesdisbun' : $nilai;
-            }
-        }
-
-        return 'invesdisbun';
+        return $this->namaDatabasePengujian();
     }
 
     private function loginSebagai(User $user): void
@@ -518,14 +510,52 @@ class MutasiAsetTahap2Test extends TestCase
         $p2btpSkpd = $this->ambilSkpdUptP2btp();
         $adminP2btp = $this->buatUserDenganRole('Admin UPT', $p2btpSkpd);
 
+        $psbpSkpd = $this->ambilSkpdUptPsbp();
+        $lokasiPsbp = Lokasi::where('id_skpd', $psbpSkpd->id_skpd)->first();
+        $ruangPsbp = Ruangan::where('id_skpd', $psbpSkpd->id_skpd)->first();
+
+        // Buat kendaraan milik UPT PSBP
+        $barang = MasterBarang::first() ?? MasterBarang::create(['kode_barang' => 'KD-TEST-' . uniqid(), 'nama_barang' => 'Kendaraan Test']);
+        $asetPsbp = Aset::create([
+            'id_barang' => $barang->id_barang,
+            'id_skpd' => $psbpSkpd->id_skpd,
+            'id_lokasi' => $lokasiPsbp?->id_lokasi ?? 3,
+            'nomor_kartu_barang' => 'KIB-PSBP-' . uniqid(),
+            'status_aset' => 'aktif',
+            'kondisi' => 'Baik',
+            'is_kendaraan' => true,
+        ]);
+        Kendaraan::create([
+            'id_aset' => $asetPsbp->id_aset,
+            'nama_kendaraan' => 'Kendaraan PSBP ' . uniqid(),
+            'jenis_kendaraan' => 'Roda Empat (Mobil)',
+            'nomor_rangka' => 'MHR' . rand(100000, 999999),
+            'nomor_mesin' => 'ENG' . rand(100000, 999999),
+            'merk' => 'Toyota',
+            'tipe' => 'Hilux',
+        ]);
+
+        $mutasiPsbp = MutasiAset::create([
+            'tanggal_mutasi' => now()->toDateString(),
+            'jenis_mutasi' => 'Ganti Pemegang',
+            'keterangan' => 'Mutasi PSBP',
+            'status_mutasi' => 'selesai',
+        ]);
+        DetailMutasiAset::create([
+            'id_mutasi' => $mutasiPsbp->id_mutasi,
+            'id_aset' => $asetPsbp->id_aset,
+            'ruangan_lama' => $ruangPsbp?->id_ruangan,
+            'ruangan_baru' => $ruangPsbp?->id_ruangan,
+        ]);
+
         $this->loginSebagai($adminP2btp);
 
         // Coba unduh SPPKD via id_mutasi (harus tetap 403 Forbidden)
-        $resSppkd = $this->get('/kendaraan/mutasi/1/sppkd');
+        $resSppkd = $this->get('/kendaraan/mutasi/' . $mutasiPsbp->id_mutasi . '/sppkd');
         $this->assertEquals(403, $resSppkd->status());
 
-        // Coba unduh BAST Kendaraan milik UPT PSBP (#259) oleh Admin P2BTP (harus 403 Forbidden)
-        $resBast = $this->get('/kendaraan/mutasi/259/bast');
+        // Coba unduh BAST Kendaraan milik UPT PSBP oleh Admin P2BTP (harus 403 Forbidden)
+        $resBast = $this->get('/kendaraan/mutasi/' . $mutasiPsbp->id_mutasi . '/bast');
         $this->assertEquals(403, $resBast->status());
     }
 

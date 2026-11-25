@@ -109,15 +109,13 @@ class TanahShowViewRefactorTest extends TestCase
         $this->assertStringContainsString('id="tab-history"', $html);
         $this->assertStringContainsString('Riwayat Perubahan', $html);
 
-        // Modals Admin (detail/modal-dokumen-pbb, detail/modal-retribusi, detail/modal-bukti)
+        // Modals Admin (detail/modal-dokumen-pbb, detail/modal-bukti)
         $this->assertStringContainsString('id="dokumen-pbb-modal"', $html);
-        $this->assertStringContainsString('id="hapus-retribusi-modal"', $html);
         $this->assertStringContainsString('id="hapus-pbb-modal"', $html);
         $this->assertStringContainsString('id="bukti-modal"', $html);
 
         // Scripts (detail/scripts.blade.php)
         $this->assertStringContainsString('activateTab', $html);
-        $this->assertStringContainsString('bukaHapus', $html);
         $this->assertStringContainsString('bukaHapusPbb', $html);
         $this->assertStringContainsString('bukaBukti', $html);
     }
@@ -132,7 +130,6 @@ class TanahShowViewRefactorTest extends TestCase
 
         // Modals khusus admin tidak boleh muncul
         $this->assertStringNotContainsString('id="dokumen-pbb-modal"', $html);
-        $this->assertStringNotContainsString('id="hapus-retribusi-modal"', $html);
         $this->assertStringNotContainsString('id="hapus-pbb-modal"', $html);
 
         // Modal bukti otorisasi tetap tersedia untuk melihat transparansi riwayat
@@ -191,10 +188,11 @@ class TanahShowViewRefactorTest extends TestCase
 
         $html = $this->renderShow($tanah, $admin);
 
-        // Baris retribusi
+        // Baris retribusi (tombol Edit menuju form edit retribusi, hapus retribusi ditiadakan)
         $this->assertStringContainsString('Sewa Kebun', $html);
         $this->assertStringContainsString('Rp 25.000.000', $html);
-        $this->assertStringContainsString('data-open-hapus-retribusi', $html);
+        $this->assertStringContainsString(route('tanah.retribusi.edit', $retribusi), $html);
+        $this->assertStringContainsString('Edit', $html);
 
         // Baris dokumen PBB
         $this->assertStringContainsString('2024', $html);

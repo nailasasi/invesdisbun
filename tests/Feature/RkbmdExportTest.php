@@ -16,6 +16,7 @@ use Tests\TestCase;
 class RkbmdExportTest extends TestCase
 {
     private const PASSWORD = 'password-testing-123';
+    private array $temporaryExportFiles = [];
 
     protected function setUp(): void
     {
@@ -23,18 +24,138 @@ class RkbmdExportTest extends TestCase
 
         config([
             'database.default' => 'mysql',
-            'database.connections.mysql.database' => 'invesdisbun',
+            'database.connections.mysql.database' => $this->namaDatabasePengujian(),
         ]);
         DB::purge('mysql');
         DB::reconnect('mysql');
+
+        $this->pastikanBerkasTemplateTersedia();
 
         DB::beginTransaction();
     }
 
     protected function tearDown(): void
     {
+        foreach ($this->temporaryExportFiles as $tmp) {
+            if (file_exists($tmp)) {
+                @unlink($tmp);
+            }
+        }
+
         DB::rollBack();
         parent::tearDown();
+    }
+
+    private function pastikanBerkasTemplateTersedia(): void
+    {
+        $dir = storage_path('app/private/templates');
+        if (! is_dir($dir)) {
+            @mkdir($dir, 0777, true);
+        }
+
+        $templates = [
+            'rkbmd_pengadaan_template.xlsx' => function () {
+                $ss = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+                $s = $ss->getActiveSheet();
+                $s->setTitle('Pengadaan');
+                $s->setCellValue('A3', 'PENGGUNA BARANG');
+                $s->setCellValue('A4', 'TAHUN 2026');
+                for ($c = 'A'; $c <= 'O'; $c++) {
+                    $s->setCellValue("{$c}10", "Header {$c}");
+                    $s->setCellValue("{$c}11", "");
+                }
+                $s->setCellValue('M20', 'Surabaya, 1 Januari 2026');
+                $s->setCellValue('M21', 'Kepala Dinas Perkebunan Provinsi Jawa Timur');
+                $s->setCellValue('M26', 'Dr. Ir. Heru Suseno, M.T.');
+                $s->setCellValue('M27', 'Pembina Utama Madya');
+                $s->setCellValue('M28', 'NIP. 196805301995031003');
+
+                return $ss;
+            },
+            'rkbmd_pemeliharaan_template.xlsx' => function () {
+                $ss = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+                $s = $ss->getActiveSheet();
+                $s->setTitle('Pemeliharaan');
+                $s->setCellValue('A3', 'PENGGUNA BARANG');
+                $s->setCellValue('A4', 'TAHUN 2026');
+                for ($c = 'A'; $c <= 'N'; $c++) {
+                    $s->setCellValue("{$c}11", "Header {$c}");
+                    $s->setCellValue("{$c}12", "");
+                }
+                $s->setCellValue('M20', 'Surabaya, 1 Januari 2026');
+                $s->setCellValue('M21', 'Kepala Dinas Perkebunan Provinsi Jawa Timur');
+                $s->setCellValue('M26', 'Dr. Ir. Heru Suseno, M.T.');
+                $s->setCellValue('M27', 'Pembina Utama Madya');
+                $s->setCellValue('M28', 'NIP. 196805301995031003');
+
+                return $ss;
+            },
+            'rkbmd_penghapusan_template.xlsx' => function () {
+                $ss = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+                $s = $ss->getActiveSheet();
+                $s->setTitle('Penghapusan');
+                $s->setCellValue('A4', 'PENGGUNA BARANG');
+                $s->setCellValue('A5', 'TAHUN ANGGARAN 2026');
+                for ($c = 'A'; $c <= 'J'; $c++) {
+                    $s->setCellValue("{$c}15", "Header {$c}");
+                    $s->setCellValue("{$c}16", "");
+                }
+                $s->mergeCells('F16:G16');
+                $s->setCellValue('H18', 'TOTAL');
+                $s->setCellValue('H22', 'Surabaya, 1 Januari 2026');
+                $s->setCellValue('H23', 'Kepala Dinas Perkebunan Provinsi Jawa Timur');
+                $s->setCellValue('H27', 'Dr. Ir. Heru Suseno, M.T.');
+                $s->setCellValue('H28', 'NIP. 196805301995031003');
+
+                return $ss;
+            },
+            'rkbmd_pemindahtanganan_template.xlsx' => function () {
+                $ss = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+                $s = $ss->getActiveSheet();
+                $s->setTitle('Pemindahtanganan');
+                $s->setCellValue('A3', 'PENGGUNA BARANG');
+                $s->setCellValue('A4', 'TAHUN ANGGARAN 2026');
+                for ($c = 'A'; $c <= 'L'; $c++) {
+                    $s->setCellValue("{$c}14", "Header {$c}");
+                    $s->setCellValue("{$c}15", "");
+                }
+                $s->mergeCells('F15:G15');
+                $s->setCellValue('H17', 'TOTAL');
+                $s->setCellValue('H21', 'Surabaya, 1 Januari 2026');
+                $s->setCellValue('H22', 'Kepala Dinas Perkebunan Provinsi Jawa Timur');
+                $s->setCellValue('H26', 'Dr. Ir. Heru Suseno, M.T.');
+                $s->setCellValue('H27', 'NIP. 196805301995031003');
+
+                return $ss;
+            },
+            'rkbmd_pemanfaatan_template.xlsx' => function () {
+                $ss = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+                $s = $ss->getActiveSheet();
+                $s->setTitle('Pemanfaatan');
+                $s->setCellValue('A3', 'PENGGUNA BARANG');
+                $s->setCellValue('A4', 'TAHUN 2026');
+                for ($c = 'A'; $c <= 'X'; $c++) {
+                    $s->setCellValue("{$c}11", "Header {$c}");
+                    $s->setCellValue("{$c}12", "");
+                }
+                $s->mergeCells('B12:D12');
+                $s->setCellValue('T20', 'Surabaya, 1 Januari 2026');
+                $s->setCellValue('T21', 'Kepala Dinas Perkebunan Provinsi Jawa Timur');
+                $s->setCellValue('T26', 'Dr. Ir. Heru Suseno, M.T.');
+                $s->setCellValue('T27', 'NIP. 196805301995031003');
+
+                return $ss;
+            },
+        ];
+
+        foreach ($templates as $file => $generator) {
+            $fullPath = "{$dir}/{$file}";
+            if (! file_exists($fullPath) || filesize($fullPath) === 0) {
+                $spreadsheet = $generator();
+                $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+                $writer->save($fullPath);
+            }
+        }
     }
 
     private function buatRole(string $nama): Role
@@ -103,6 +224,7 @@ class RkbmdExportTest extends TestCase
     private function loadExportSheet($response)
     {
         $tmp = tempnam(sys_get_temp_dir(), 'rkbmd_test_');
+        $this->temporaryExportFiles[] = $tmp;
         file_put_contents($tmp, $response->streamedContent());
         $sheet = IOFactory::load($tmp)->getActiveSheet();
         @unlink($tmp);

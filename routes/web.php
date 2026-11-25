@@ -329,9 +329,9 @@ Route::middleware(['auth', 'prevent-back-history'])->group(function () {
     });
 
     // ==========================================
-    // MODUL LAPORAN EKSEKUTIF (Eksklusif Admin Aset)
+    // MODUL LAPORAN EKSEKUTIF (Admin Aset & Admin UPT)
     // ==========================================
-    Route::middleware('role:Admin Aset')->group(function () {
+    Route::middleware('role:Admin Aset,Admin UPT')->group(function () {
         Route::get('laporan', [LaporanController::class, 'index'])
             ->name('laporan.index');
 

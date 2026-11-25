@@ -48,17 +48,7 @@ class PasangAsetMassalTest extends TestCase
 
     private function namaDatabase(): string
     {
-        $baris = file(base_path('.env'));
-
-        foreach ($baris as $line) {
-            if (str_starts_with(trim($line), 'DB_DATABASE=')) {
-                $nilai = trim(explode('=', $line, 2)[1]);
-
-                return $nilai === '' ? 'invesdisbun' : $nilai;
-            }
-        }
-
-        return 'invesdisbun';
+        return $this->namaDatabasePengujian();
     }
 
     protected function tearDown(): void
@@ -84,6 +74,20 @@ class PasangAsetMassalTest extends TestCase
             ->sortByDesc(fn ($items) => $items->count())
             ->keys()
             ->first();
+    }
+
+    private function jenisDenganKetersediaanTerbatas(): int
+    {
+        return Aset::with('barang')
+            ->barang()
+            ->where('status_aset', 'aktif')
+            ->whereDoesntHave('pemegangSaatIni')
+            ->whereDoesntHave('penempatanAktif')
+            ->get()
+            ->groupBy('id_barang')
+            ->filter(fn ($items) => $items->count() >= 1 && $items->count() < 100)
+            ->keys()
+            ->first() ?? $this->jenisTerbanyak();
     }
 
     private function pasang(int $idBarang, int $jumlah): array
@@ -148,7 +152,7 @@ class PasangAsetMassalTest extends TestCase
 
     public function test_jumlah_melebihi_ketersediaan_ditolak_tanpa_menyimpan(): void
     {
-        $idBarang = $this->jenisTerbanyak();
+        $idBarang = $this->jenisDenganKetersediaanTerbatas();
         $tersedia = Aset::with('barang')->barang()->where('status_aset', 'aktif')
             ->where('id_barang', $idBarang)
             ->whereDoesntHave('pemegangSaatIni')->whereDoesntHave('penempatanAktif')->count();

@@ -53,13 +53,7 @@ class MonitoringAsetExportTest extends TestCase
 
     private function namaDatabase(): string
     {
-        foreach (file(base_path('.env')) as $line) {
-            if (str_starts_with(trim($line), 'DB_DATABASE=')) {
-                $nilai = trim(explode('=', $line, 2)[1]);
-                return $nilai === '' ? 'invesdisbun' : $nilai;
-            }
-        }
-        return 'invesdisbun';
+        return $this->namaDatabasePengujian();
     }
 
     private function siapkanDataPengguna(): void
@@ -95,6 +89,7 @@ class MonitoringAsetExportTest extends TestCase
             'username' => 'upt_' . strtolower(str_replace(' ', '_', $skpd->nama_skpd)) . '_' . uniqid(),
             'password' => bcrypt('password'),
             'id_role' => Role::where('nama_role', 'Admin UPT')->firstOrFail()->id_role,
+            'status_user' => 'aktif',
         ]);
     }
 
@@ -111,6 +106,7 @@ class MonitoringAsetExportTest extends TestCase
             'username' => 'pgw_' . uniqid(),
             'password' => bcrypt('password'),
             'id_role' => Role::where('nama_role', 'Pegawai')->firstOrFail()->id_role,
+            'status_user' => 'aktif',
         ]);
     }
 

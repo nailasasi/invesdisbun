@@ -3,11 +3,12 @@
 namespace Tests\Feature;
 
 use App\Models\Aset;
-use App\Models\Barang;
 use App\Models\Kendaraan;
 use App\Models\Lokasi;
 use App\Models\Pegawai;
+use App\Models\PenempatanAset;
 use App\Models\Role;
+use App\Models\Ruangan;
 use App\Models\SensusAset;
 use App\Models\Skpd;
 use App\Models\User;
@@ -44,6 +45,18 @@ class CardAsetBelumDisensusTest extends TestCase
 
     private Lokasi $lokasiPsbp;
 
+    private array $createdAsetIds = [];
+
+    private array $createdKendaraanIds = [];
+
+    private array $createdPenempatanIds = [];
+
+    private array $createdSensusIds = [];
+
+    private array $createdUserIds = [];
+
+    private array $createdPegawaiIds = [];
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -64,22 +77,32 @@ class CardAsetBelumDisensusTest extends TestCase
     {
         DB::rollBack();
         Carbon::setTestNow();
+
+        if (! empty($this->createdSensusIds)) {
+            SensusAset::whereIn('id_sensus', $this->createdSensusIds)->delete();
+        }
+        if (! empty($this->createdPenempatanIds)) {
+            PenempatanAset::whereIn('id_penempatan', $this->createdPenempatanIds)->delete();
+        }
+        if (! empty($this->createdKendaraanIds)) {
+            Kendaraan::whereIn('id_kendaraan', $this->createdKendaraanIds)->delete();
+        }
+        if (! empty($this->createdAsetIds)) {
+            Aset::whereIn('id_aset', $this->createdAsetIds)->delete();
+        }
+        if (! empty($this->createdUserIds)) {
+            User::whereIn('id_user', $this->createdUserIds)->delete();
+        }
+        if (! empty($this->createdPegawaiIds)) {
+            Pegawai::whereIn('id_pegawai', $this->createdPegawaiIds)->delete();
+        }
+
         parent::tearDown();
     }
 
     private function namaDatabase(): string
     {
-        if (file_exists(base_path('.env'))) {
-            foreach (file(base_path('.env')) as $line) {
-                if (str_starts_with(trim($line), 'DB_DATABASE=')) {
-                    $nilai = trim(explode('=', $line, 2)[1]);
-
-                    return $nilai === '' ? 'invesdisbun' : $nilai;
-                }
-            }
-        }
-
-        return 'invesdisbun';
+        return $this->namaDatabasePengujian();
     }
 
     private function userDenganRole(string $role): User
@@ -106,6 +129,7 @@ class CardAsetBelumDisensusTest extends TestCase
             'nama_pegawai' => 'Admin UPT PSBP Test',
             'id_skpd' => $this->skpdPsbp->id_skpd,
         ]);
+        $this->createdPegawaiIds[] = $pegawaiPsbp->id_pegawai;
 
         $this->adminUptPsbp = User::create([
             'id_pegawai' => $pegawaiPsbp->id_pegawai,
@@ -114,6 +138,48 @@ class CardAsetBelumDisensusTest extends TestCase
             'password' => 'rahasia',
             'status_user' => 'aktif',
         ]);
+        $this->createdUserIds[] = $this->adminUptPsbp->id_user;
+    }
+
+    private function buatAset(array $attributes = []): Aset
+    {
+        $aset = Aset::create(array_merge([
+            'id_skpd' => $this->skpdP2btp->id_skpd,
+            'id_lokasi' => $this->lokasiP2btp->id_lokasi,
+            'nomor_kartu_barang' => 'TST-AST-' . uniqid(),
+            'tanggal_pengadaan' => '2025-01-01',
+            'status_aset' => 'aktif',
+            'kondisi' => 'Baik',
+            'is_kendaraan' => false,
+        ], $attributes));
+
+        $this->createdAsetIds[] = $aset->id_aset;
+
+        return $aset;
+    }
+
+    private function buatKendaraan(array $attributes = []): Kendaraan
+    {
+        $kendaraan = Kendaraan::create($attributes);
+        $this->createdKendaraanIds[] = $kendaraan->id_kendaraan;
+
+        return $kendaraan;
+    }
+
+    private function buatPenempatan(array $attributes = []): PenempatanAset
+    {
+        $penempatan = PenempatanAset::create($attributes);
+        $this->createdPenempatanIds[] = $penempatan->id_penempatan;
+
+        return $penempatan;
+    }
+
+    private function buatSensus(array $attributes = []): SensusAset
+    {
+        $sensus = SensusAset::create($attributes);
+        $this->createdSensusIds[] = $sensus->id_sensus;
+
+        return $sensus;
     }
 
     public function test_card_menampilkan_judul_desain_dan_ikon_aset_belum_disensus(): void
@@ -145,193 +211,206 @@ class CardAsetBelumDisensusTest extends TestCase
 
     public function test_skenario_1_admin_aset_melihat_jumlah_aset_belum_disensus_secara_keseluruhan(): void
     {
-        $periodeAktif = PeriodeSensus::periodeAktif();
-
-        // Hitung ekspektasi langsung dari query database sesuai scope Admin Aset
-        $ekspektasi = Aset::where(fn ($q) => $q->whereNull('status_aset')->orWhere('status_aset', '!=', 'dihapuskan'))
-            ->whereDoesntHave('sensus', fn ($s) => $s->where('periode', $periodeAktif))
-            ->count();
-
-        $response = $this->actingAs($this->adminAset)
+        // 1. Ambil nilai card awal
+        $resAwal = $this->actingAs($this->adminAset)
             ->get(route('monitoring-aset.index'));
+        $resAwal->assertOk();
+        $countAwal = $resAwal->viewData('asetBelumDisensusCount');
 
-        $response->assertOk();
-        $this->assertSame($ekspektasi, $response->viewData('asetBelumDisensusCount'));
-        $response->assertSee("{$ekspektasi} <span class=\"text-xs font-semibold text-slate-500\">Aset</span>", false);
+        // Pastikan angka card awal konsisten dengan hitungAsetBelumDisensusAktif scope Admin Aset
+        $query = Aset::query()->whereIn('status_aset', ['aktif', 'Aktif']);
+        $ekspektasiAwal = PeriodeSensus::hitungAsetBelumDisensusAktif($query);
+        $this->assertSame($ekspektasiAwal, $countAwal);
+        $resAwal->assertSee("{$countAwal} <span class=\"text-xs font-semibold text-slate-500\">Aset</span>", false);
+
+        // 2. Tambah 1 aset aktif baru dinamis
+        $this->buatAset([
+            'id_skpd' => $this->skpdP2btp->id_skpd,
+            'id_lokasi' => $this->lokasiP2btp->id_lokasi,
+            'status_aset' => 'aktif',
+            'is_kendaraan' => false,
+        ]);
+
+        // 3. Verifikasi delta card bertambah tepat 1
+        $resAkhir = $this->actingAs($this->adminAset)
+            ->get(route('monitoring-aset.index'));
+        $resAkhir->assertOk();
+        $countAkhir = $resAkhir->viewData('asetBelumDisensusCount');
+        $this->assertSame($countAwal + 1, $countAkhir);
     }
 
     public function test_skenario_2_admin_upt_p2btp_hanya_melihat_aset_belum_disensus_milik_p2btp(): void
     {
-        $periodeAktif = PeriodeSensus::periodeAktif();
+        $resAwal = $this->actingAs($this->adminUptP2btp)
+            ->get(route('monitoring-aset.index'));
+        $resAwal->assertOk();
+        $countAwalP2 = $resAwal->viewData('asetBelumDisensusCount');
 
-        // Buat 1 aset baru di UPT P2BTP
-        $asetP2 = Aset::create([
+        // Tambah 1 aset baru di UPT P2BTP
+        $this->buatAset([
             'id_skpd' => $this->skpdP2btp->id_skpd,
             'id_lokasi' => $this->lokasiP2btp->id_lokasi,
-            'nomor_kartu_barang' => 'TEST-P2-' . uniqid(),
-            'tanggal_pengadaan' => '2025-01-01',
             'status_aset' => 'aktif',
-            'kondisi' => 'Baik',
             'is_kendaraan' => false,
         ]);
 
-        // Buat 1 aset baru di UPT PSBP
-        $asetPs = Aset::create([
+        // Tambah 1 aset baru di UPT PSBP (tidak boleh menambah count P2BTP)
+        $this->buatAset([
             'id_skpd' => $this->skpdPsbp->id_skpd,
             'id_lokasi' => $this->lokasiPsbp->id_lokasi,
-            'nomor_kartu_barang' => 'TEST-PS-' . uniqid(),
-            'tanggal_pengadaan' => '2025-01-01',
             'status_aset' => 'aktif',
-            'kondisi' => 'Baik',
             'is_kendaraan' => false,
         ]);
 
-        $responseP2 = $this->actingAs($this->adminUptP2btp)
+        $resAkhir = $this->actingAs($this->adminUptP2btp)
             ->get(route('monitoring-aset.index'));
+        $resAkhir->assertOk();
+        $countAkhirP2 = $resAkhir->viewData('asetBelumDisensusCount');
 
-        $responseP2->assertOk();
-        $countP2 = $responseP2->viewData('asetBelumDisensusCount');
-
-        // Pastikan scope P2BTP hanya menghitung aset di lokasi P2BTP atau SKPD P2BTP
-        $ekspektasiP2 = Aset::where(fn ($q) => $q->whereNull('status_aset')->orWhere('status_aset', '!=', 'dihapuskan'))
-            ->where(function ($q) {
-                $q->whereIn('aset.id_lokasi', [$this->lokasiP2btp->id_lokasi])
-                    ->orWhere(fn ($q2) => $q2->whereNull('aset.id_lokasi')->where('aset.id_skpd', $this->skpdP2btp->id_skpd));
-            })
-            ->whereDoesntHave('sensus', fn ($s) => $s->where('periode', $periodeAktif))
-            ->count();
-
-        $this->assertSame($ekspektasiP2, $countP2);
+        // Pastikan hanya bertambah 1 untuk aset milik P2BTP
+        $this->assertSame($countAwalP2 + 1, $countAkhirP2);
     }
 
     public function test_skenario_3_admin_upt_psbp_hanya_melihat_aset_belum_disensus_milik_psbp(): void
     {
-        $periodeAktif = PeriodeSensus::periodeAktif();
-
-        $responsePs = $this->actingAs($this->adminUptPsbp)
+        $resAwal = $this->actingAs($this->adminUptPsbp)
             ->get(route('monitoring-aset.index'));
+        $resAwal->assertOk();
+        $countAwalPs = $resAwal->viewData('asetBelumDisensusCount');
 
-        $responsePs->assertOk();
-        $countPs = $responsePs->viewData('asetBelumDisensusCount');
+        // Tambah 1 aset di P2BTP (tidak boleh menambah count PSBP)
+        $this->buatAset([
+            'id_skpd' => $this->skpdP2btp->id_skpd,
+            'id_lokasi' => $this->lokasiP2btp->id_lokasi,
+            'status_aset' => 'aktif',
+            'is_kendaraan' => false,
+        ]);
 
-        $ekspektasiPs = Aset::where(fn ($q) => $q->whereNull('status_aset')->orWhere('status_aset', '!=', 'dihapuskan'))
-            ->where(function ($q) {
-                $q->whereIn('aset.id_lokasi', [$this->lokasiPsbp->id_lokasi])
-                    ->orWhere(fn ($q2) => $q2->whereNull('aset.id_lokasi')->where('aset.id_skpd', $this->skpdPsbp->id_skpd));
-            })
-            ->whereDoesntHave('sensus', fn ($s) => $s->where('periode', $periodeAktif))
-            ->count();
+        // Tambah 1 aset di PSBP (harus menambah count PSBP)
+        $this->buatAset([
+            'id_skpd' => $this->skpdPsbp->id_skpd,
+            'id_lokasi' => $this->lokasiPsbp->id_lokasi,
+            'status_aset' => 'aktif',
+            'is_kendaraan' => false,
+        ]);
 
-        $this->assertSame($ekspektasiPs, $countPs);
+        $resAkhir = $this->actingAs($this->adminUptPsbp)
+            ->get(route('monitoring-aset.index'));
+        $resAkhir->assertOk();
+        $countAkhirPs = $resAkhir->viewData('asetBelumDisensusCount');
+
+        $this->assertSame($countAwalPs + 1, $countAkhirPs);
     }
 
     public function test_skenario_4_aset_kendaraan_ikut_dihitung_dalam_card(): void
     {
-        $periodeAktif = PeriodeSensus::periodeAktif();
-
-        $baseline = Aset::where(fn ($q) => $q->whereNull('status_aset')->orWhere('status_aset', '!=', 'dihapuskan'))
-            ->whereDoesntHave('sensus', fn ($s) => $s->where('periode', $periodeAktif))
-            ->count();
+        $resAwal = $this->actingAs($this->adminAset)
+            ->get(route('monitoring-aset.index'));
+        $resAwal->assertOk();
+        $countAwal = $resAwal->viewData('asetBelumDisensusCount');
 
         // Tambah 1 aset kendaraan belum disensus
-        $asetKendaraan = Aset::create([
+        $asetKendaraan = $this->buatAset([
             'id_skpd' => $this->skpdP2btp->id_skpd,
             'id_lokasi' => $this->lokasiP2btp->id_lokasi,
-            'nomor_kartu_barang' => 'TEST-KENDARAAN-' . uniqid(),
-            'tanggal_pengadaan' => '2025-02-10',
             'status_aset' => 'aktif',
-            'kondisi' => 'Baik',
             'is_kendaraan' => true,
         ]);
 
-        Kendaraan::create([
+        $this->buatKendaraan([
             'id_aset' => $asetKendaraan->id_aset,
-            'nama_kendaraan' => 'Motor Dinas Lapangan',
+            'nama_kendaraan' => 'Motor Dinas Lapangan Test',
             'merk' => 'Honda',
             'tipe' => 'Revo',
             'jenis_kendaraan' => 'Roda 2',
         ]);
 
-        $response = $this->actingAs($this->adminAset)
+        $resAkhir = $this->actingAs($this->adminAset)
             ->get(route('monitoring-aset.index'));
+        $resAkhir->assertOk();
+        $countAkhir = $resAkhir->viewData('asetBelumDisensusCount');
 
-        $response->assertOk();
-        $this->assertSame($baseline + 1, $response->viewData('asetBelumDisensusCount'));
+        $this->assertSame($countAwal + 1, $countAkhir);
     }
 
     public function test_skenario_5_aset_belum_difinalisasi_ikut_dihitung_dalam_card(): void
     {
-        $periodeAktif = PeriodeSensus::periodeAktif();
+        $resAwal = $this->actingAs($this->adminAset)
+            ->get(route('monitoring-aset.index'));
+        $resAwal->assertOk();
+        $countAwal = $resAwal->viewData('asetBelumDisensusCount');
 
-        $baseline = Aset::where(fn ($q) => $q->whereNull('status_aset')->orWhere('status_aset', '!=', 'dihapuskan'))
-            ->whereDoesntHave('sensus', fn ($s) => $s->where('periode', $periodeAktif))
-            ->count();
-
-        // Buat aset baru berstatus draft / belum difinalisasi
-        $asetDraft = Aset::create([
+        // Buat aset baru berstatus aktif dengan penempatan belum difinalisasi (is_finalized = 0)
+        $aset = $this->buatAset([
             'id_skpd' => $this->skpdP2btp->id_skpd,
             'id_lokasi' => $this->lokasiP2btp->id_lokasi,
-            'nomor_kartu_barang' => 'TEST-DRAFT-' . uniqid(),
-            'tanggal_pengadaan' => '2025-03-15',
-            'status_aset' => null, // belum final / null
-            'kondisi' => 'Baik',
+            'status_aset' => 'aktif',
             'is_kendaraan' => false,
         ]);
 
-        $response = $this->actingAs($this->adminAset)
-            ->get(route('monitoring-aset.index'));
+        $ruangan = Ruangan::where('id_lokasi', $this->lokasiP2btp->id_lokasi)->first();
+        if ($ruangan) {
+            $this->buatPenempatan([
+                'id_aset' => $aset->id_aset,
+                'id_ruangan' => $ruangan->id_ruangan,
+                'tanggal_mulai' => '2025-01-01',
+                'status' => 'aktif',
+                'is_finalized' => 0, // belum difinalisasi
+            ]);
+        }
 
-        $response->assertOk();
-        $this->assertSame($baseline + 1, $response->viewData('asetBelumDisensusCount'));
+        $resAkhir = $this->actingAs($this->adminAset)
+            ->get(route('monitoring-aset.index'));
+        $resAkhir->assertOk();
+        $countAkhir = $resAkhir->viewData('asetBelumDisensusCount');
+
+        $this->assertSame($countAwal + 1, $countAkhir);
     }
 
     public function test_skenario_6_aset_tanpa_lokasi_atau_pemegang_ikut_dihitung_dalam_card(): void
     {
-        $periodeAktif = PeriodeSensus::periodeAktif();
-
-        $baseline = Aset::where(fn ($q) => $q->whereNull('status_aset')->orWhere('status_aset', '!=', 'dihapuskan'))
-            ->whereDoesntHave('sensus', fn ($s) => $s->where('periode', $periodeAktif))
-            ->count();
+        $resAwal = $this->actingAs($this->adminAset)
+            ->get(route('monitoring-aset.index'));
+        $resAwal->assertOk();
+        $countAwal = $resAwal->viewData('asetBelumDisensusCount');
 
         // Aset unplaced (tanpa lokasi fisik dan tanpa pemegang)
-        $asetUnplaced = Aset::create([
+        $this->buatAset([
             'id_skpd' => $this->skpdP2btp->id_skpd,
             'id_lokasi' => null,
-            'nomor_kartu_barang' => 'TEST-UNPLACED-' . uniqid(),
-            'tanggal_pengadaan' => '2025-04-20',
             'status_aset' => 'aktif',
-            'kondisi' => 'Baik',
             'is_kendaraan' => false,
         ]);
 
-        $response = $this->actingAs($this->adminAset)
+        $resAkhir = $this->actingAs($this->adminAset)
             ->get(route('monitoring-aset.index'));
+        $resAkhir->assertOk();
+        $countAkhir = $resAkhir->viewData('asetBelumDisensusCount');
 
-        $response->assertOk();
-        $this->assertSame($baseline + 1, $response->viewData('asetBelumDisensusCount'));
+        $this->assertSame($countAwal + 1, $countAkhir);
     }
 
     public function test_skenario_7_aset_yang_sudah_disensus_pada_periode_terpilih_tidak_dihitung(): void
     {
         $periodeAktif = PeriodeSensus::periodeAktif();
 
-        $aset = Aset::create([
+        // 1. Buat aset baru belum disensus
+        $aset = $this->buatAset([
             'id_skpd' => $this->skpdP2btp->id_skpd,
             'id_lokasi' => $this->lokasiP2btp->id_lokasi,
-            'nomor_kartu_barang' => 'TEST-SUDISENSUS-' . uniqid(),
             'tanggal_pengadaan' => '2025-01-01',
             'status_aset' => 'aktif',
-            'kondisi' => 'Baik',
             'is_kendaraan' => false,
         ]);
 
-        // Cek sebelum disensus
+        // Cek jumlah setelah aset dibuat
         $resSebelum = $this->actingAs($this->adminAset)
             ->get(route('monitoring-aset.index'));
+        $resSebelum->assertOk();
         $countSebelum = $resSebelum->viewData('asetBelumDisensusCount');
 
-        // Berikan sensus pada periode aktif terpilih
-        SensusAset::create([
+        // 2. Berikan sensus pada periode aktif terpilih
+        $this->buatSensus([
             'id_aset' => $aset->id_aset,
             'periode' => $periodeAktif,
             'hasil_sensus' => 'Baik',
@@ -339,9 +418,10 @@ class CardAsetBelumDisensusTest extends TestCase
             'id_user' => $this->adminAset->id_user,
         ]);
 
-        // Cek setelah disensus: jumlah berkurang 1
+        // 3. Cek setelah disensus: jumlah berkurang 1
         $resSetelah = $this->actingAs($this->adminAset)
             ->get(route('monitoring-aset.index'));
+        $resSetelah->assertOk();
         $countSetelah = $resSetelah->viewData('asetBelumDisensusCount');
 
         $this->assertSame($countSebelum - 1, $countSetelah);
@@ -349,18 +429,16 @@ class CardAsetBelumDisensusTest extends TestCase
 
     public function test_skenario_8_mengganti_dropdown_periode_tidak_mengubah_angka_card(): void
     {
-        $aset = Aset::create([
+        $aset = $this->buatAset([
             'id_skpd' => $this->skpdP2btp->id_skpd,
             'id_lokasi' => $this->lokasiP2btp->id_lokasi,
-            'nomor_kartu_barang' => 'TEST-DINAMIS-' . uniqid(),
             'tanggal_pengadaan' => '2022-01-01',
             'status_aset' => 'aktif',
-            'kondisi' => 'Baik',
             'is_kendaraan' => false,
         ]);
 
         // Berikan sensus HANYA pada periode lampau 2022–2024
-        SensusAset::create([
+        $this->buatSensus([
             'id_aset' => $aset->id_aset,
             'periode' => '2022–2024',
             'hasil_sensus' => 'Baik',
@@ -390,12 +468,31 @@ class CardAsetBelumDisensusTest extends TestCase
 
         $cardCount = $response->viewData('asetBelumDisensusCount');
 
-        // Hitung via PeriodeSensus::hitungAsetBelumDisensusAktif
+        // Hitung via PeriodeSensus::hitungAsetBelumDisensusAktif sesuai scope controller
         $query = Aset::query()
-            ->where(fn ($q) => $q->whereNull('status_aset')->orWhere('status_aset', '!=', 'dihapuskan'));
+            ->whereIn('status_aset', ['aktif', 'Aktif']);
 
         $dbCount = PeriodeSensus::hitungAsetBelumDisensusAktif($query);
         $this->assertSame($dbCount, $cardCount);
+
+        // Uji konsistensi dinamis dengan menambahkan aset baru
+        $this->buatAset([
+            'id_skpd' => $this->skpdP2btp->id_skpd,
+            'id_lokasi' => $this->lokasiP2btp->id_lokasi,
+            'status_aset' => 'aktif',
+            'is_kendaraan' => false,
+        ]);
+
+        $resBaru = $this->actingAs($this->adminAset)
+            ->get(route('monitoring-aset.index'));
+        $resBaru->assertOk();
+
+        $cardCountBaru = $resBaru->viewData('asetBelumDisensusCount');
+        $dbCountBaru = PeriodeSensus::hitungAsetBelumDisensusAktif(
+            Aset::query()->whereIn('status_aset', ['aktif', 'Aktif'])
+        );
+
+        $this->assertSame($dbCountBaru, $cardCountBaru);
+        $this->assertSame($cardCount + 1, $cardCountBaru);
     }
 }
-

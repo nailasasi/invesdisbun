@@ -22,6 +22,8 @@ class KendaraanImportTest extends TestCase
 {
     private User $adminAset;
 
+    private array $tempFiles = [];
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -41,20 +43,20 @@ class KendaraanImportTest extends TestCase
     {
         DB::rollBack();
         Carbon::setTestNow();
+
+        foreach ($this->tempFiles as $path) {
+            if (file_exists($path)) {
+                @unlink($path);
+            }
+        }
+        $this->tempFiles = [];
+
         parent::tearDown();
     }
 
     private function namaDatabase(): string
     {
-        foreach (file(base_path('.env')) as $line) {
-            if (str_starts_with(trim($line), 'DB_DATABASE=')) {
-                $nilai = trim(explode('=', $line, 2)[1]);
-
-                return $nilai === '' ? 'invesdisbun' : $nilai;
-            }
-        }
-
-        return 'invesdisbun';
+        return $this->namaDatabasePengujian();
     }
 
     /**
@@ -84,6 +86,7 @@ class KendaraanImportTest extends TestCase
         $writer = new Xlsx($spreadsheet);
         $tempPath = tempnam(sys_get_temp_dir(), 'kend_import_test_') . '.xlsx';
         $writer->save($tempPath);
+        $this->tempFiles[] = $tempPath;
 
         return new UploadedFile(
             $tempPath,

@@ -34,20 +34,12 @@ class LaporanEksekutifExportTest extends TestCase
 
     private function namaDatabase(): string
     {
-        foreach (file(base_path('.env')) as $line) {
-            if (str_starts_with(trim($line), 'DB_DATABASE=')) {
-                $nilai = trim(explode('=', $line, 2)[1]);
-
-                return $nilai === '' ? 'invesdisbun' : $nilai;
-            }
-        }
-
-        return 'invesdisbun';
+        return $this->namaDatabasePengujian();
     }
 
     private function userDenganRole(string $role): User
     {
-        return User::whereHas('role', fn ($q) => $q->where('nama_role', $role))->firstOrFail();
+        return $this->ambilAtauBuatUserRole($role);
     }
 
     private function adminUpt(string $namaSkpd): User
@@ -231,7 +223,7 @@ class LaporanEksekutifExportTest extends TestCase
         $this->assertStringContainsString('IV. TREN PENGADAAN 5 TAHUN TERAKHIR', $html);
         $this->assertStringContainsString('V. REKAPITULASI VALUASI FINANSIAL', $html);
         $this->assertStringContainsString('VI. ANALISIS STATUS MASA MANFAAT', $html);
-        $this->assertStringContainsString('VII. RINGKASAN KONDISI FISIK ASET', $html);
+        $this->assertStringContainsString('VII. RINGKASAN KONDISI FISIK SELURUH ASET AKTIF', $html);
         $this->assertStringContainsString('VIII. PROGRES SENSUS FISIK SIKLUS 3-TAHUNAN', $html);
         $this->assertStringContainsString('IX. DISTRIBUSI LOKASI FISIK ASET', $html);
         $this->assertStringContainsString('X. AKTIVITAS PENGADAAN', $html);
@@ -264,13 +256,15 @@ class LaporanEksekutifExportTest extends TestCase
         $uptUser = $this->adminUpt('UPT P2BTP');
         $this->actingAs($uptUser);
 
-        // Ekspor Excel untuk Admin UPT wajib ditolak HTTP 403
+        // Ekspor Excel untuk Admin UPT diizinkan untuk unitnya sendiri
         $respExcel = $this->get('/laporan/export/excel?jenis=bulanan&tahun=2026&bulan=11');
-        $respExcel->assertStatus(403);
+        $respExcel->assertStatus(200);
+        $this->assertTrue(str_contains((string) $respExcel->headers->get('content-type'), 'spreadsheetml'));
 
-        // Ekspor PDF untuk Admin UPT wajib ditolak HTTP 403
+        // Ekspor PDF untuk Admin UPT diizinkan untuk unitnya sendiri
         $respPdf = $this->get('/laporan/export/pdf?jenis=bulanan&tahun=2026&bulan=11');
-        $respPdf->assertStatus(403);
+        $respPdf->assertStatus(200);
+        $this->assertSame('application/pdf', $respPdf->headers->get('content-type'));
     }
 
     public function test_role_non_admin_aset_ditolak_pada_seluruh_endpoint_ekspor(): void

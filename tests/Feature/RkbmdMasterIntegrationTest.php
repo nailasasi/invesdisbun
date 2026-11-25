@@ -22,7 +22,7 @@ class RkbmdMasterIntegrationTest extends TestCase
         // Gunakan MySQL database invesdisbun
         config([
             'database.default' => 'mysql',
-            'database.connections.mysql.database' => 'invesdisbun',
+            'database.connections.mysql.database' => $this->namaDatabasePengujian(),
         ]);
         DB::purge('mysql');
         DB::reconnect('mysql');
@@ -130,20 +130,45 @@ class RkbmdMasterIntegrationTest extends TestCase
 
     public function test_data_usulan_lama_id_10_tetap_dapat_ditampilkan_di_tabel_index(): void
     {
-        // Pastikan record ID 10 ada di database
-        $usulanLama = UsulanRkbmd::find(10);
-        $this->assertNotNull($usulanLama, 'Usulan lama ID 10 harus tetap ada');
-        $this->assertSame('Program Penunjang Pemerintah', $usulanLama->program_kegiatan);
-        $this->assertSame('Ditolak', $usulanLama->status_usulan);
+        DB::beginTransaction();
+        try {
+            $skpd = Skpd::first();
+            $usulanLama = UsulanRkbmd::create([
+                'id_skpd' => $skpd->id_skpd,
+                'id_pegawai' => $this->adminUser->pegawai?->id_pegawai,
+                'tahun_anggaran' => 2026,
+                'jenis_usulan' => 'Pengadaan',
+                'id_kegiatan' => null,
+                'bidang_urusan' => null,
+                'nama_program' => null,
+                'nama_sub_kegiatan' => null,
+                'program_kegiatan' => 'Program Penunjang Pemerintah',
+                'nama_barang' => 'Barang Usulan Legacy Uji ' . uniqid(),
+                'kode_barang' => '1.3.2.04',
+                'jumlah' => 2,
+                'satuan' => 'Unit',
+                'kebutuhan_maksimum' => 5,
+                'kebutuhan_riil' => 2,
+                'alasan_kebutuhan' => 'Usulan legacy tanpa master kegiatan',
+                'status_usulan' => 'Ditolak',
+                'tanggal_usulan' => '2026-01-10',
+            ]);
 
-        $response = $this->actingAs($this->adminUser)
-            ->get(route('rkbmd.index'));
+            $this->assertNotNull($usulanLama, 'Usulan lama harus tersimpan');
+            $this->assertSame('Program Penunjang Pemerintah', $usulanLama->program_kegiatan);
+            $this->assertSame('Ditolak', $usulanLama->status_usulan);
 
-        $response->assertOk();
-        // Pastikan tabel merender baris usulan lama
-        $response->assertSee($usulanLama->nama_barang);
-        $response->assertSee($usulanLama->status_usulan);
-        $response->assertSee('TA ' . $usulanLama->tahun_anggaran);
+            $response = $this->actingAs($this->adminUser)
+                ->get(route('rkbmd.index'));
+
+            $response->assertOk();
+            // Pastikan tabel merender baris usulan lama
+            $response->assertSee($usulanLama->nama_barang);
+            $response->assertSee($usulanLama->status_usulan);
+            $response->assertSee('TA ' . $usulanLama->tahun_anggaran);
+        } finally {
+            DB::rollBack();
+        }
     }
 
     public function test_store_usulan_berhasil_menyimpan_relasi_dan_snapshot_kegiatan(): void
@@ -373,16 +398,45 @@ class RkbmdMasterIntegrationTest extends TestCase
 
     public function test_record_lama_id_10_tetap_utuh_dan_tidak_berubah(): void
     {
-        $usulan10 = UsulanRkbmd::find(10);
-        $this->assertNotNull($usulan10, 'Record ID 10 harus tetap ada di tabel usulan_rkbmd');
-        $this->assertEquals(10, $usulan10->id_usulan);
-        $this->assertNull($usulan10->id_kegiatan, 'Record ID 10 id_kegiatan harus tetap NULL');
-        $this->assertNull($usulan10->bidang_urusan, 'Record ID 10 bidang_urusan harus tetap NULL');
-        $this->assertNull($usulan10->nama_program, 'Record ID 10 nama_program harus tetap NULL');
-        $this->assertNull($usulan10->nama_sub_kegiatan, 'Record ID 10 nama_sub_kegiatan harus tetap NULL');
-        $this->assertSame('Program Penunjang Pemerintah', $usulan10->program_kegiatan, 'Kolom program_kegiatan ID 10 tidak boleh berubah');
-        $this->assertSame('test', $usulan10->nama_barang);
-        $this->assertSame('Ditolak', $usulan10->status_usulan);
+        DB::beginTransaction();
+        try {
+            $skpd = Skpd::first();
+            $usulanLegacy = UsulanRkbmd::create([
+                'id_skpd' => $skpd->id_skpd,
+                'id_pegawai' => $this->adminUser->pegawai?->id_pegawai,
+                'tahun_anggaran' => 2026,
+                'jenis_usulan' => 'Pengadaan',
+                'id_kegiatan' => null,
+                'bidang_urusan' => null,
+                'nama_program' => null,
+                'nama_sub_kegiatan' => null,
+                'program_kegiatan' => 'Program Penunjang Pemerintah',
+                'nama_barang' => 'test',
+                'kode_barang' => '1.3.2.04',
+                'jumlah' => 1,
+                'satuan' => 'Unit',
+                'kebutuhan_maksimum' => 1,
+                'kebutuhan_riil' => 1,
+                'alasan_kebutuhan' => 'Record legacy',
+                'status_usulan' => 'Ditolak',
+                'tanggal_usulan' => '2026-01-10',
+            ]);
+
+            $idUsulan = $usulanLegacy->id_usulan;
+            $record = UsulanRkbmd::find($idUsulan);
+
+            $this->assertNotNull($record, 'Record usulan legacy harus tetap ada di tabel usulan_rkbmd');
+            $this->assertEquals($idUsulan, $record->id_usulan);
+            $this->assertNull($record->id_kegiatan, 'Record legacy id_kegiatan harus tetap NULL');
+            $this->assertNull($record->bidang_urusan, 'Record legacy bidang_urusan harus tetap NULL');
+            $this->assertNull($record->nama_program, 'Record legacy nama_program harus tetap NULL');
+            $this->assertNull($record->nama_sub_kegiatan, 'Record legacy nama_sub_kegiatan harus tetap NULL');
+            $this->assertSame('Program Penunjang Pemerintah', $record->program_kegiatan, 'Kolom program_kegiatan tidak boleh berubah');
+            $this->assertSame('test', $record->nama_barang);
+            $this->assertSame('Ditolak', $record->status_usulan);
+        } finally {
+            DB::rollBack();
+        }
     }
 }
 

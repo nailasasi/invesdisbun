@@ -20,9 +20,10 @@
             @csrf
             <div class="max-h-[70vh] space-y-4 overflow-y-auto px-6 py-6">
                 <div class="space-y-1.5">
-                    <label for="field-jenis-select" class="block text-sm font-medium text-slate-700">Jenis Barang <span class="text-red-500">*</span></label>
-                    <select id="field-jenis-select" required class="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400 transition">
-                        <option value="">-- Pilih Jenis Barang --</option>
+                    <label class="block text-sm font-medium text-slate-700">Jenis Barang <span class="text-red-500">*</span></label>
+                    <input type="text" id="field-jenis-search" placeholder="Cari nama barang..." autocomplete="off" class="block h-9 w-full rounded-lg border border-slate-300 bg-white px-2.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-disbun-600 focus:ring-2 focus:ring-disbun-400">
+                    <select id="field-jenis-select" name="id_barang" size="6" class="block w-full rounded-lg border border-slate-300 bg-white text-sm text-slate-900 shadow-sm focus:outline-none focus:border-disbun-600 focus:ring-2 focus:ring-disbun-400" data-searchable="true">
+                        <option value="" disabled selected class="text-slate-400">Memuat data barang...</option>
                     </select>
                     <p class="text-xs text-slate-500">Pilih jenis barang untuk memasang beberapa aset sekaligus.</p>
                     <p class="field-error hidden text-xs font-medium text-red-600" data-error-for="id_barang"></p>
