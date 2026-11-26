@@ -13,8 +13,10 @@ use App\Services\MasaPakaiAset;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
 
@@ -98,7 +100,7 @@ class KendaraanImportTest extends TestCase
     }
 
     /**
-     * Baris valid default untuk testing (16 kolom sesuai template resmi).
+     * Baris valid default untuk testing (17 kolom sesuai template resmi).
      */
     private function rowValid(array $overrides = []): array
     {
@@ -114,13 +116,14 @@ class KendaraanImportTest extends TestCase
             'RNGK-' . $id,                  // 6. No. Rangka
             'MSN-' . $id,                   // 7. No. Mesin
             '15/01/2024',                   // 8. Tanggal Pengadaan
-            350000000,                      // 9. Nilai Perolehan
-            'Baik',                         // 10. Kondisi
-            'aktif',                        // 11. Status Aset
-            'Operasional Lapangan',         // 12. Keterangan
-            '02/07/2027',                   // 13. Jatuh Tempo Pajak 1 Tahun
-            '02/07/2029',                   // 14. Jatuh Tempo Pajak 5 Tahun
-            null,                           // 15. Dokumentasi
+            '15/01/2034',                   // 9. Tanggal Habis Pakai
+            350000000,                      // 10. Nilai Perolehan
+            'Baik',                         // 11. Kondisi
+            'aktif',                        // 12. Status Aset
+            'Operasional Lapangan',         // 13. Keterangan
+            '02/07/2027',                   // 14. Jatuh Tempo Pajak 1 Tahun
+            '02/07/2029',                   // 15. Jatuh Tempo Pajak 5 Tahun
+            null,                           // 16. Dokumentasi
         ];
 
         foreach ($overrides as $colIndex => $val) {
@@ -134,7 +137,7 @@ class KendaraanImportTest extends TestCase
     // A. PENGUJIAN TEMPLATE & STRUKTUR DASAR
     // ==========================================
 
-    public function test_download_template_berhasil_dan_memiliki_16_kolom(): void
+    public function test_download_template_berhasil_dan_memiliki_17_kolom(): void
     {
         $this->actingAs($this->adminAset);
 
@@ -149,10 +152,10 @@ class KendaraanImportTest extends TestCase
         $spreadsheet = IOFactory::load($tempPath);
         $sheet = $spreadsheet->getActiveSheet();
 
-        $headerRow = $sheet->rangeToArray('A9:P9', null, true, true, true)[9];
+        $headerRow = $sheet->rangeToArray('A9:Q9', null, true, true, true)[9];
         $headers = array_values(array_filter($headerRow));
 
-        $this->assertCount(16, $headers);
+        $this->assertCount(17, $headers);
         $this->assertSame(KendaraanController::KOLOM_TEMPLATE, $headers);
 
         @unlink($tempPath);
@@ -290,18 +293,13 @@ class KendaraanImportTest extends TestCase
     {
         $this->actingAs($this->adminAset);
 
-        // Jika menggunakan template legacy dengan kolom Tanggal Habis Pakai
-        $customHeaders = array_merge(
-            array_slice(KendaraanController::KOLOM_TEMPLATE, 0, 9),
-            ['Tanggal Habis Pakai'],
-            array_slice(KendaraanController::KOLOM_TEMPLATE, 9)
-        );
-
-        $rowSalah = $this->rowValid([8 => '15/01/2024']);
-        array_splice($rowSalah, 9, 0, ['10/01/2024']); // Habis pakai lebih kecil dari pengadaan
+        $rowSalah = $this->rowValid([
+            8 => '15/01/2024',
+            9 => '10/01/2024', // Habis pakai lebih kecil dari pengadaan
+        ]);
 
         $res = $this->post(route('kendaraan.import'), [
-            'file' => $this->buatExcelFile([$rowSalah], $customHeaders),
+            'file' => $this->buatExcelFile([$rowSalah]),
             'mode' => 'skip',
         ]);
         $res->assertSessionHas('error');
@@ -313,14 +311,14 @@ class KendaraanImportTest extends TestCase
         $this->actingAs($this->adminAset);
 
         $res1 = $this->post(route('kendaraan.import'), [
-            'file' => $this->buatExcelFile([$this->rowValid([9 => ''])]),
+            'file' => $this->buatExcelFile([$this->rowValid([10 => ''])]),
             'mode' => 'skip',
         ]);
         $res1->assertSessionHas('error');
         $this->assertStringContainsString('Nilai Perolehan wajib diisi', $res1->getSession()->get('error'));
 
         $res2 = $this->post(route('kendaraan.import'), [
-            'file' => $this->buatExcelFile([$this->rowValid([9 => 0])]),
+            'file' => $this->buatExcelFile([$this->rowValid([10 => 0])]),
             'mode' => 'skip',
         ]);
         $res2->assertSessionHas('error');
@@ -331,7 +329,7 @@ class KendaraanImportTest extends TestCase
     {
         $this->actingAs($this->adminAset);
 
-        $row = $this->rowValid([9 => 'Rp 275.500.000']);
+        $row = $this->rowValid([10 => 'Rp 275.500.000']);
         $kartu = $row[0];
 
         $res = $this->post(route('kendaraan.import'), [
@@ -351,7 +349,7 @@ class KendaraanImportTest extends TestCase
         $this->actingAs($this->adminAset);
 
         $res = $this->post(route('kendaraan.import'), [
-            'file' => $this->buatExcelFile([$this->rowValid([10 => ''])]),
+            'file' => $this->buatExcelFile([$this->rowValid([11 => ''])]),
             'mode' => 'skip',
         ]);
         $res->assertSessionHas('error');
@@ -364,7 +362,7 @@ class KendaraanImportTest extends TestCase
         $this->actingAs($this->adminAset);
 
         $res = $this->post(route('kendaraan.import'), [
-            'file' => $this->buatExcelFile([$this->rowValid([11 => ''])]),
+            'file' => $this->buatExcelFile([$this->rowValid([12 => ''])]),
             'mode' => 'skip',
         ]);
         $res->assertSessionHas('error');
@@ -441,7 +439,7 @@ class KendaraanImportTest extends TestCase
     {
         $this->actingAs($this->adminAset);
 
-        $row = $this->rowValid([11 => 'aktif']);
+        $row = $this->rowValid([12 => 'aktif']);
         $kartu = $row[0];
 
         $res = $this->post(route('kendaraan.import'), [
@@ -459,7 +457,7 @@ class KendaraanImportTest extends TestCase
     {
         $this->actingAs($this->adminAset);
 
-        $row = $this->rowValid([11 => 'nonaktif']);
+        $row = $this->rowValid([12 => 'nonaktif']);
         $kartu = $row[0];
 
         $res = $this->post(route('kendaraan.import'), [
@@ -477,7 +475,7 @@ class KendaraanImportTest extends TestCase
     {
         $this->actingAs($this->adminAset);
 
-        $row = $this->rowValid([11 => 'Dihapuskan']);
+        $row = $this->rowValid([12 => 'Dihapuskan']);
 
         $res = $this->post(route('kendaraan.import'), [
             'file' => $this->buatExcelFile([$row]),
@@ -493,7 +491,7 @@ class KendaraanImportTest extends TestCase
     {
         $this->actingAs($this->adminAset);
 
-        $row = $this->rowValid([11 => 'Mutasi']);
+        $row = $this->rowValid([12 => 'Mutasi']);
 
         $res = $this->post(route('kendaraan.import'), [
             'file' => $this->buatExcelFile([$row]),
@@ -513,7 +511,7 @@ class KendaraanImportTest extends TestCase
     {
         $this->actingAs($this->adminAset);
 
-        $row = $this->rowValid([10 => 'Rusak Berat']);
+        $row = $this->rowValid([11 => 'Rusak Berat']);
         $kartu = $row[0];
 
         $res = $this->post(route('kendaraan.import'), [
@@ -540,7 +538,7 @@ class KendaraanImportTest extends TestCase
     {
         $this->actingAs($this->adminAset);
 
-        $row = $this->rowValid([10 => 'Rusak Berat']);
+        $row = $this->rowValid([11 => 'Rusak Berat']);
         $kartu = $row[0];
 
         $resImport = $this->post(route('kendaraan.import'), [
@@ -566,7 +564,7 @@ class KendaraanImportTest extends TestCase
     {
         $this->actingAs($this->adminAset);
 
-        $row = $this->rowValid([10 => 'Rusak Berat']);
+        $row = $this->rowValid([11 => 'Rusak Berat']);
         $kartu = $row[0];
 
         // Import pertama
@@ -817,7 +815,7 @@ class KendaraanImportTest extends TestCase
             1 => 'Toyota Hilux Modif ' . uniqid(),
             6 => $rowAwal[6],
             7 => $rowAwal[7],
-            9 => 400000000,
+            10 => 400000000,
         ]);
 
         $res = $this->post(route('kendaraan.import'), [
@@ -844,7 +842,7 @@ class KendaraanImportTest extends TestCase
             0 => $kartu,
             6 => $rangka,
             7 => $mesin,
-            9 => -50000,
+            10 => -50000,
         ]);
 
         $beforeAset = Aset::count();
@@ -868,22 +866,17 @@ class KendaraanImportTest extends TestCase
         $this->actingAs($this->adminAset);
 
         $kartu = 'KIB-MONITOR-' . uniqid();
-        $customHeaders = array_merge(
-            array_slice(KendaraanController::KOLOM_TEMPLATE, 0, 9),
-            ['Tanggal Habis Pakai'],
-            array_slice(KendaraanController::KOLOM_TEMPLATE, 9)
-        );
         $row = $this->rowValid([
             0 => $kartu,
             8 => '01/01/2024',
-            9 => 300000000,
-            10 => 'Baik',
-            11 => 'aktif',
+            9 => '01/01/2034',
+            10 => 300000000,
+            11 => 'Baik',
+            12 => 'aktif',
         ]);
-        array_splice($row, 9, 0, ['01/01/2034']);
 
         $res = $this->post(route('kendaraan.import'), [
-            'file' => $this->buatExcelFile([$row], $customHeaders),
+            'file' => $this->buatExcelFile([$row]),
             'mode' => 'skip',
         ]);
         $res->assertSessionHas('success');
@@ -910,8 +903,8 @@ class KendaraanImportTest extends TestCase
         $this->actingAs($this->adminAset);
 
         $row = $this->rowValid([
-            13 => '15/08/2027', // Jatuh Tempo Pajak 1 Tahun
-            14 => '15/08/2029', // Jatuh Tempo Pajak 5 Tahun
+            14 => '15/08/2027', // Jatuh Tempo Pajak 1 Tahun
+            15 => '15/08/2029', // Jatuh Tempo Pajak 5 Tahun
         ]);
         $kartu = $row[0];
 
@@ -1052,5 +1045,347 @@ class KendaraanImportTest extends TestCase
         $this->assertNotNull(Aset::where('nomor_kartu_barang', $kartu)->first());
 
         @unlink($tempPath);
+    }
+
+    public function test_mode_update_mempertahankan_tanggal_habis_pakai_jika_kolom_tidak_ada_atau_kosong(): void
+    {
+        $this->actingAs($this->adminAset);
+
+        $rowAwal = $this->rowValid([
+            8 => '15/01/2024',
+            9 => '15/01/2034',
+        ]);
+        $kartu = $rowAwal[0];
+
+        $this->post(route('kendaraan.import'), [
+            'file' => $this->buatExcelFile([$rowAwal]),
+            'mode' => 'skip',
+        ])->assertSessionHas('success');
+
+        $aset = Aset::where('nomor_kartu_barang', $kartu)->first();
+        $this->assertSame('2034-01-15', $aset->tanggal_habis_pakai?->format('Y-m-d'));
+
+        // 1. Update dengan kolom Tanggal Habis Pakai ada tetapi selnya kosong -> pertahankan nilai lama
+        $rowKosong = $this->rowValid([
+            0 => $kartu,
+            6 => $rowAwal[6],
+            7 => $rowAwal[7],
+            8 => '15/01/2024',
+            9 => null,
+        ]);
+
+        $this->post(route('kendaraan.import'), [
+            'file' => $this->buatExcelFile([$rowKosong]),
+            'mode' => 'update',
+        ])->assertSessionHas('success');
+
+        $this->assertSame('2034-01-15', $aset->fresh()->tanggal_habis_pakai?->format('Y-m-d'));
+
+        // 2. Update tanpa kolom Tanggal Habis Pakai di header -> tetap pertahankan nilai lama
+        $headersTanpaHabis = array_values(array_filter(
+            KendaraanController::KOLOM_TEMPLATE,
+            fn ($col) => $col !== 'Tanggal Habis Pakai'
+        ));
+        $rowTanpaKolom = $this->rowValid([
+            0 => $kartu,
+            6 => $rowAwal[6],
+            7 => $rowAwal[7],
+            8 => '15/01/2024',
+        ]);
+        array_splice($rowTanpaKolom, 9, 1);
+
+        $this->post(route('kendaraan.import'), [
+            'file' => $this->buatExcelFile([$rowTanpaKolom], $headersTanpaHabis),
+            'mode' => 'update',
+        ])->assertSessionHas('success');
+
+        $this->assertSame('2034-01-15', $aset->fresh()->tanggal_habis_pakai?->format('Y-m-d'));
+    }
+
+    public function test_batas_panjang_karakter_jenis_merk_tipe_sesuai_form_tambah(): void
+    {
+        $this->actingAs($this->adminAset);
+
+        $rowValidMax = $this->rowValid([
+            2 => str_repeat('J', 150),
+            3 => str_repeat('M', 100),
+            4 => str_repeat('T', 100),
+        ]);
+
+        $this->post(route('kendaraan.import'), [
+            'file' => $this->buatExcelFile([$rowValidMax]),
+            'mode' => 'skip',
+        ])->assertSessionHas('success');
+
+        $rowTipeBerlebih = $this->rowValid([
+            4 => str_repeat('T', 101),
+        ]);
+
+        $res = $this->post(route('kendaraan.import'), [
+            'file' => $this->buatExcelFile([$rowTipeBerlebih]),
+            'mode' => 'skip',
+        ]);
+        $res->assertSessionHas('error');
+        $this->assertStringContainsString('Tipe melebihi 100 karakter', session('error'));
+    }
+
+    /**
+     * Helper untuk membuat file Excel UploadedFile dengan gambar tersisip per baris.
+     *
+     * @param  array<int, string>  $imagePathsByRow  [nomorBarisExcel => pathFileGambar]
+     */
+    private function buatExcelFileDenganGambar(array $dataRows, array $imagePathsByRow): UploadedFile
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Template Import Kendaraan');
+
+        $sheet->setCellValue('A1', 'PETUNJUK PENGISIAN IMPORT KENDARAAN DINAS');
+        $sheet->fromArray(KendaraanController::KOLOM_TEMPLATE, null, 'A9');
+
+        $rowNum = 10;
+        foreach ($dataRows as $row) {
+            $sheet->fromArray($row, null, "A{$rowNum}", true);
+            $rowNum++;
+        }
+
+        foreach ($imagePathsByRow as $rowTarget => $imgPath) {
+            $drawing = new Drawing();
+            $drawing->setName('Foto Baris ' . $rowTarget);
+            $drawing->setPath($imgPath);
+            $drawing->setCoordinates("Q{$rowTarget}");
+            $drawing->setWorksheet($sheet);
+        }
+
+        $writer = new Xlsx($spreadsheet);
+        $tempPath = tempnam(sys_get_temp_dir(), 'kend_img_test_') . '.xlsx';
+        $writer->save($tempPath);
+        $this->tempFiles[] = $tempPath;
+
+        return new UploadedFile(
+            $tempPath,
+            'Template-Import-Kendaraan-Gambar.xlsx',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            null,
+            true
+        );
+    }
+
+    private function buatFileSementaraBytes(string $ext, string $bytes): string
+    {
+        $path = tempnam(sys_get_temp_dir(), 'img_test_') . '.' . $ext;
+        file_put_contents($path, $bytes);
+        $this->tempFiles[] = $path;
+
+        return $path;
+    }
+
+    public function test_import_gambar_valid_tersimpan_di_storage_dan_database(): void
+    {
+        Storage::fake('public');
+        $this->actingAs($this->adminAset);
+
+        $pngBytes = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=');
+        $imgPath = $this->buatFileSementaraBytes('png', $pngBytes);
+
+        $row = $this->rowValid();
+        $kartu = $row[0];
+        $file = $this->buatExcelFileDenganGambar([$row], [10 => $imgPath]);
+
+        $res = $this->post(route('kendaraan.import'), [
+            'file' => $file,
+            'mode' => 'skip',
+        ]);
+        $res->assertSessionHas('success');
+
+        $kendaraan = Kendaraan::whereHas('aset', fn ($a) => $a->where('nomor_kartu_barang', $kartu))->first();
+        $this->assertNotNull($kendaraan);
+        $this->assertNotNull($kendaraan->foto);
+        $this->assertStringStartsWith('kendaraan/', $kendaraan->foto);
+        $this->assertStringEndsWith('.png', $kendaraan->foto);
+        Storage::disk('public')->assertExists($kendaraan->foto);
+    }
+
+    public function test_import_gambar_tidak_valid_atau_melebihi_batas_ditolak_tanpa_orphan_file(): void
+    {
+        Storage::fake('public');
+        $this->actingAs($this->adminAset);
+
+        // 1. Ekstensi terlarang (.gif)
+        $gifBytes = base64_decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
+        $gifPath = $this->buatFileSementaraBytes('gif', $gifBytes);
+        $rowGif = $this->rowValid();
+
+        $resGif = $this->post(route('kendaraan.import'), [
+            'file' => $this->buatExcelFileDenganGambar([$rowGif], [10 => $gifPath]),
+            'mode' => 'skip',
+        ]);
+        $resGif->assertSessionHas('error');
+        $this->assertStringContainsString('Format foto tidak didukung', session('error'));
+        $this->assertNull(Aset::where('nomor_kartu_barang', $rowGif[0])->first());
+        $this->assertSame([], Storage::disk('public')->allFiles('kendaraan'));
+
+        // 2. Bukan gambar valid (berkas .png berisi teks biasa)
+        $pngBytes = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=');
+        $pngPath = $this->buatFileSementaraBytes('png', $pngBytes);
+        $rowFakePng = $this->rowValid();
+        $uploadedFakePng = $this->buatExcelFileDenganGambar([$rowFakePng], [10 => $pngPath]);
+
+        $zip = new \ZipArchive();
+        if ($zip->open($uploadedFakePng->getRealPath()) === true) {
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $entryName = $zip->getNameIndex($i);
+                if (str_starts_with($entryName, 'xl/media/')) {
+                    $zip->addFromString($entryName, 'ini-bukan-file-gambar-valid');
+                }
+            }
+            $zip->close();
+        }
+
+        $resFakePng = $this->post(route('kendaraan.import'), [
+            'file' => $uploadedFakePng,
+            'mode' => 'skip',
+        ]);
+        $resFakePng->assertSessionHas('error');
+        $this->assertStringContainsString('File foto tidak valid', session('error'));
+        $this->assertNull(Aset::where('nomor_kartu_barang', $rowFakePng[0])->first());
+        $this->assertSame([], Storage::disk('public')->allFiles('kendaraan'));
+
+        // 3. Ukuran biner melebihi 2MB (2048 * 1024 bytes)
+        $oversizedPng = $pngBytes . str_repeat("\0", (2048 * 1024) + 128);
+        $oversizedPath = $this->buatFileSementaraBytes('png', $oversizedPng);
+        $rowBesar = $this->rowValid();
+
+        $resBesar = $this->post(route('kendaraan.import'), [
+            'file' => $this->buatExcelFileDenganGambar([$rowBesar], [10 => $oversizedPath]),
+            'mode' => 'skip',
+        ]);
+        $resBesar->assertSessionHas('error');
+        $this->assertStringContainsString('Ukuran foto melebihi batas maksimal 2MB', session('error'));
+        $this->assertNull(Aset::where('nomor_kartu_barang', $rowBesar[0])->first());
+        $this->assertSame([], Storage::disk('public')->allFiles('kendaraan'));
+    }
+
+    public function test_baris_gagal_validasi_data_tidak_menyisakan_orphan_file_gambar(): void
+    {
+        Storage::fake('public');
+        $this->actingAs($this->adminAset);
+
+        $pngBytes = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=');
+        $imgPath = $this->buatFileSementaraBytes('png', $pngBytes);
+
+        // Baris gagal karena tanggal pengadaan tidak valid
+        $rowTanggalSalah = $this->rowValid([8 => 'tanggal-tidak-valid']);
+        $resTanggal = $this->post(route('kendaraan.import'), [
+            'file' => $this->buatExcelFileDenganGambar([$rowTanggalSalah], [10 => $imgPath]),
+            'mode' => 'skip',
+        ]);
+        $resTanggal->assertSessionHas('error');
+        $this->assertSame([], Storage::disk('public')->allFiles('kendaraan'));
+
+        // Baris gagal karena duplikasi Nomor Kartu Barang dalam file
+        $kartuSama = 'KIB-DUP-IMG-' . uniqid();
+        $row1 = $this->rowValid([0 => $kartuSama]);
+        $row2 = $this->rowValid([0 => $kartuSama]);
+
+        $resDup = $this->post(route('kendaraan.import'), [
+            'file' => $this->buatExcelFileDenganGambar([$row1, $row2], [11 => $imgPath]),
+            'mode' => 'skip',
+        ]);
+        $resDup->assertSessionHas('error');
+        $this->assertSame([], Storage::disk('public')->allFiles('kendaraan'));
+    }
+
+    public function test_tanggal_pajak_tidak_valid_ditolak_sedangkan_kosong_diterima_null(): void
+    {
+        $this->actingAs($this->adminAset);
+
+        // 1. Tanggal pajak 1 tahun format salah ditolak
+        $rowPajak1Salah = $this->rowValid([14 => 'bukan-tanggal']);
+        $res1 = $this->post(route('kendaraan.import'), [
+            'file' => $this->buatExcelFile([$rowPajak1Salah]),
+            'mode' => 'skip',
+        ]);
+        $res1->assertSessionHas('error');
+        $this->assertStringContainsString('Jatuh Tempo Pajak 1 Tahun', session('error'));
+        $this->assertNull(Aset::where('nomor_kartu_barang', $rowPajak1Salah[0])->first());
+
+        // 2. Tanggal pajak 5 tahun format salah ditolak
+        $rowPajak5Salah = $this->rowValid([15 => '31/02/2029']);
+        $res2 = $this->post(route('kendaraan.import'), [
+            'file' => $this->buatExcelFile([$rowPajak5Salah]),
+            'mode' => 'skip',
+        ]);
+        $res2->assertSessionHas('error');
+        $this->assertStringContainsString('Jatuh Tempo Pajak 5 Tahun', session('error'));
+        $this->assertNull(Aset::where('nomor_kartu_barang', $rowPajak5Salah[0])->first());
+
+        // 3. Sel pajak kosong (null / string spasi) tetap lolos bernilai null
+        $rowPajakKosong = $this->rowValid([14 => null, 15 => '   ']);
+        $res3 = $this->post(route('kendaraan.import'), [
+            'file' => $this->buatExcelFile([$rowPajakKosong]),
+            'mode' => 'skip',
+        ]);
+        $res3->assertSessionHas('success');
+
+        $kendaraan = Kendaraan::whereHas('aset', fn ($a) => $a->where('nomor_kartu_barang', $rowPajakKosong[0]))->first();
+        $this->assertNotNull($kendaraan);
+        $this->assertNull($kendaraan->jatuh_tempo_pkb);
+        $this->assertNull($kendaraan->jatuh_tempo_stnk);
+    }
+
+    public function test_mode_update_plat_nomor_normalisasi_spasi_dan_konsisten_dengan_form_edit(): void
+    {
+        $this->actingAs($this->adminAset);
+
+        $rowAwal = $this->rowValid([
+            5 => 'B 1111 OLD',
+            15 => '02/07/2029',
+        ]);
+        $kartu = $rowAwal[0];
+
+        $this->post(route('kendaraan.import'), [
+            'file' => $this->buatExcelFile([$rowAwal]),
+            'mode' => 'skip',
+        ])->assertSessionHas('success');
+
+        $kendaraan = Kendaraan::whereHas('aset', fn ($a) => $a->where('nomor_kartu_barang', $kartu))->first();
+        $this->assertSame(1, RiwayatPlat::where('id_kendaraan', $kendaraan->id_kendaraan)->count());
+
+        // 1. Update dengan spasi berlebih / huruf kecil ('  b   1111  old ') -> dianggap sama, tidak buat riwayat baru
+        $rowSpasiSama = $this->rowValid([
+            0 => $kartu,
+            5 => '  b   1111  old ',
+            6 => $rowAwal[6],
+            7 => $rowAwal[7],
+        ]);
+
+        $this->post(route('kendaraan.import'), [
+            'file' => $this->buatExcelFile([$rowSpasiSama]),
+            'mode' => 'update',
+        ])->assertSessionHas('success');
+
+        $this->assertSame(1, RiwayatPlat::where('id_kendaraan', $kendaraan->id_kendaraan)->count());
+
+        // 2. Update dengan plat baru berspasi ganda dan tanggal pajak 5 tahun kosong -> warisi tanggal_berlaku lama & ganti_plat = false
+        $rowPlatBaru = $this->rowValid([
+            0 => $kartu,
+            5 => 'B   2222  NEW',
+            6 => $rowAwal[6],
+            7 => $rowAwal[7],
+            15 => null,
+        ]);
+
+        $this->post(route('kendaraan.import'), [
+            'file' => $this->buatExcelFile([$rowPlatBaru]),
+            'mode' => 'update',
+        ])->assertSessionHas('success');
+
+        $platAktifBaru = $kendaraan->fresh()->platAktif;
+        $this->assertNotNull($platAktifBaru);
+        $this->assertSame('B 2222 NEW', $platAktifBaru->nomor_plat);
+        $this->assertFalse((bool) $platAktifBaru->ganti_plat);
+        $this->assertSame('2029-07-02', $platAktifBaru->tanggal_berlaku?->format('Y-m-d'));
+        $this->assertSame(2, RiwayatPlat::where('id_kendaraan', $kendaraan->id_kendaraan)->count());
     }
 }

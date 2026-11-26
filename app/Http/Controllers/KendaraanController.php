@@ -1798,8 +1798,9 @@ class KendaraanController extends Controller
             return back()->with('error', 'Header kolom tidak ditemukan pada 15 baris pertama. Pastikan file sesuai template import kendaraan.');
         }
 
-        // Kumpulkan foto dari objek gambar tersisip, kelompokkan per baris data.
+        // Kumpulkan payload gambar tersisip di memori per baris (belum ditulis ke disk).
         $photosByRow = $this->collectPhotos($sheet);
+        $mappedPhotoRows = [];
 
         // Tracking duplikasi antarbaris di dalam file Excel yang sama
         $fileKartuMap = [];
@@ -1814,6 +1815,10 @@ class KendaraanController extends Controller
             // Lewati baris contoh bawaan template & baris kosong.
             if ($this->isContohRow($row) || ! $this->rowBerisi($row, $colMap)) {
                 continue;
+            }
+
+            if (isset($photosByRow[$index])) {
+                $mappedPhotoRows[$index] = true;
             }
 
             // Ambil data sel dari baris Excel
@@ -1975,8 +1980,8 @@ class KendaraanController extends Controller
                 $errors[] = "Baris {$index}: Merk melebihi 100 karakter.";
                 continue;
             }
-            if ($tipe !== null && mb_strlen($tipe) > 50) {
-                $errors[] = "Baris {$index}: Tipe melebihi 50 karakter.";
+            if ($tipe !== null && mb_strlen($tipe) > 100) {
+                $errors[] = "Baris {$index}: Tipe melebihi 100 karakter.";
                 continue;
             }
             if ($keterangan !== null && mb_strlen($keterangan) > 1000) {
@@ -1985,14 +1990,37 @@ class KendaraanController extends Controller
             }
 
             // Validasi data pajak opsional
-            $jt1Date = $jt1 ? $this->parseDate($jt1) : null;
-            $jt5Date = $jt5 ? $this->parseDate($jt5) : null;
+            $jt1Date = null;
+            if ($jt1 !== null) {
+                $jt1Date = $this->parseDate($jt1);
+                if ($jt1Date === null) {
+                    $errors[] = "Baris {$index}: Jatuh Tempo Pajak 1 Tahun ('{$jt1}') tidak valid. Gunakan format DD/MM/YYYY.";
+                    continue;
+                }
+            }
+
+            $jt5Date = null;
+            if ($jt5 !== null) {
+                $jt5Date = $this->parseDate($jt5);
+                if ($jt5Date === null) {
+                    $errors[] = "Baris {$index}: Jatuh Tempo Pajak 5 Tahun ('{$jt5}') tidak valid. Gunakan format DD/MM/YYYY.";
+                    continue;
+                }
+            }
+
             if ($flag5 && ! $jt5Date) {
                 $errors[] = "Baris {$index}: Pajak 5 Tahunan = Iya tetapi Jatuh Tempo Pajak 5 Tahun kosong.";
                 continue;
             }
             $nominalVal = $nominal !== null ? $this->toNumber($nominal) : null;
             $totalVal = $total !== null ? $this->toNumber($total) : null;
+
+            // Validasi foto tersisip pada kolom Dokumentasi (bila ada pada baris ini)
+            $photoEntry = $photosByRow[$index] ?? null;
+            if (isset($photoEntry['error'])) {
+                $errors[] = "Baris {$index}: {$photoEntry['error']}";
+                continue;
+            }
 
             // ==========================================
             // 2. CEK DUPLIKASI ANTARBARIS DALAM FILE
@@ -2060,13 +2088,14 @@ class KendaraanController extends Controller
                 }
 
                 // Jalankan pembaruan master data secara atomik
+                $writtenPhotoPath = null;
                 try {
                     DB::transaction(function () use (
                         $existingKendaraan, $existingAset, $kartu, $nama, $jenis, $merk, $tipe,
                         $platRaw, $rangka, $mesin, $tglPengadaanDate, $tglHabisDate,
                         $nilaiPerolehan, $kondisi, $statusAset, $keterangan,
                         $jt1Date, $jt5Date, $nominalVal, $totalVal, $flag5,
-                        $photosByRow, $index
+                        $photoEntry, &$writtenPhotoPath
                     ) {
                         // Jangan ubah status aset sistem (diusulkan_hapus / dihapuskan) lewat import
                         $statusSekarang = mb_strtolower(trim((string) ($existingAset->status_aset ?? '')));
@@ -2076,7 +2105,7 @@ class KendaraanController extends Controller
 
                         $existingAset->update([
                             'tanggal_pengadaan' => $tglPengadaanDate,
-                            'tanggal_habis_pakai' => $tglHabisDate,
+                            'tanggal_habis_pakai' => $tglHabisDate ?? $existingAset->tanggal_habis_pakai,
                             'nilai_perolehan' => $nilaiPerolehan,
                             'merk' => $merk ?: $existingAset->merk,
                             'kondisi' => $kondisi,
@@ -2096,27 +2125,33 @@ class KendaraanController extends Controller
                             // Pemegang dipertahankan apa adanya (tidak disentuh)
                         ]);
 
-                        $photoPath = $photosByRow[$index] ?? null;
-                        if ($photoPath && ! $existingKendaraan->foto) {
-                            $existingKendaraan->update(['foto' => $photoPath]);
+                        if ($photoEntry && isset($photoEntry['bytes']) && ! $existingKendaraan->foto) {
+                            $writtenPhotoPath = $this->saveDrawing($photoEntry);
+                            if ($writtenPhotoPath) {
+                                $existingKendaraan->update(['foto' => $writtenPhotoPath]);
+                            }
                         }
 
-                        // Penanganan Riwayat Plat jika nomor polisi diisi
+                        // Penanganan Riwayat Plat jika nomor polisi diisi (konsisten dengan update())
                         if (! empty($platRaw)) {
-                            $platBaru = trim(mb_strtoupper($platRaw));
+                            $platSimpan = trim((string) preg_replace('/\s+/', ' ', $platRaw));
+                            $platBaru = mb_strtoupper($platSimpan);
                             $platAktif = $existingKendaraan->platAktif;
-                            $platLama = $platAktif ? trim(mb_strtoupper($platAktif->nomor_plat)) : null;
+                            $platLama = $platAktif
+                                ? trim((string) preg_replace('/\s+/', ' ', mb_strtoupper((string) $platAktif->nomor_plat)))
+                                : null;
 
                             // Jika belum ada plat aktif atau plat baru berbeda, akhiri plat lama dan buat baru
                             if ($platAktif === null || $platLama !== $platBaru) {
+                                $tanggalBerlakuLama = $platAktif?->tanggal_berlaku;
                                 if ($platAktif) {
                                     $platAktif->update(['status' => 'Tidak Aktif']);
                                 }
                                 RiwayatPlat::create([
                                     'id_kendaraan' => $existingKendaraan->id_kendaraan,
-                                    'nomor_plat' => $platRaw,
-                                    'tanggal_berlaku' => $jt5Date,
-                                    'ganti_plat' => true,
+                                    'nomor_plat' => $platSimpan,
+                                    'tanggal_berlaku' => $jt5Date ?? $tanggalBerlakuLama,
+                                    'ganti_plat' => false,
                                     'status' => 'Aktif',
                                 ]);
                             } elseif ($jt5Date && ! $platAktif->tanggal_berlaku) {
@@ -2134,6 +2169,9 @@ class KendaraanController extends Controller
                     });
                     $updated++;
                 } catch (\Throwable $e) {
+                    if ($writtenPhotoPath) {
+                        Storage::disk('public')->delete($writtenPhotoPath);
+                    }
                     $errors[] = "Baris {$index}: {$e->getMessage()}";
                 }
                 continue;
@@ -2157,13 +2195,14 @@ class KendaraanController extends Controller
             }
 
             // Buat kendaraan baru dalam transaksi atomik
+            $writtenPhotoPath = null;
             try {
                 DB::transaction(function () use (
                     $kartu, $nama, $jenis, $merk, $tipe, $platRaw,
                     $rangka, $mesin, $tglPengadaanDate, $tglHabisDate,
                     $nilaiPerolehan, $kondisi, $statusAset, $keterangan,
                     $jt1Date, $jt5Date, $nominalVal, $totalVal, $flag5,
-                    $photosByRow, $index
+                    $photoEntry, &$writtenPhotoPath
                 ) {
                     $aset = Aset::create([
                         'nomor_kartu_barang' => $kartu,
@@ -2190,9 +2229,11 @@ class KendaraanController extends Controller
                         'jatuh_tempo_stnk' => $jt5Date,
                     ]);
 
-                    $photoPath = $photosByRow[$index] ?? null;
-                    if ($photoPath) {
-                        $kendaraan->update(['foto' => $photoPath]);
+                    if ($photoEntry && isset($photoEntry['bytes'])) {
+                        $writtenPhotoPath = $this->saveDrawing($photoEntry);
+                        if ($writtenPhotoPath) {
+                            $kendaraan->update(['foto' => $writtenPhotoPath]);
+                        }
                     }
 
                     if ($platRaw) {
@@ -2215,13 +2256,18 @@ class KendaraanController extends Controller
                 });
                 $created++;
             } catch (\Throwable $e) {
+                if ($writtenPhotoPath) {
+                    Storage::disk('public')->delete($writtenPhotoPath);
+                }
                 $errors[] = "Baris {$index}: {$e->getMessage()}";
             }
         }
 
         $photoWarnings = 0;
-        if ($photosByRow && count($photosByRow) > ($created + $updated)) {
-            $photoWarnings = count($photosByRow) - ($created + $updated);
+        foreach ($photosByRow as $photoRow => $photoPayload) {
+            if ($photoRow > $headerRow && ! isset($mappedPhotoRows[$photoRow]) && ! $this->isContohRow($rows[$photoRow] ?? [])) {
+                $photoWarnings++;
+            }
         }
 
         $message = "Berhasil mengimpor {$created} kendaraan baru";
@@ -2283,6 +2329,7 @@ class KendaraanController extends Controller
             'CONTOH - MHKMJ1A200012345',
             'CONTOH - 1GRFE1234567',
             '15/01/2024',
+            '15/01/2034',
             450000000,
             'Baik',
             'aktif',
@@ -2292,8 +2339,8 @@ class KendaraanController extends Controller
             null, // Dokumentasi: gambar disisip, bukan teks
         ], null, 'A10');
 
-        // Styling Header Tabel (A9:P9)
-        $sheet->getStyle('A9:P9')->applyFromArray([
+        // Styling Header Tabel (A9:Q9)
+        $sheet->getStyle('A9:Q9')->applyFromArray([
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
             'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '047857']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
@@ -2301,7 +2348,7 @@ class KendaraanController extends Controller
         $sheet->getRowDimension(9)->setRowHeight(28);
         $sheet->getRowDimension(10)->setRowHeight(20);
 
-        foreach (range('A', 'P') as $col) {
+        foreach (range('A', 'Q') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
@@ -2319,7 +2366,7 @@ class KendaraanController extends Controller
     }
 
     /**
-     * Daftar kolom resmi template import kendaraan (16 kolom berurutan).
+     * Daftar kolom resmi template import kendaraan (17 kolom berurutan).
      */
     public const KOLOM_TEMPLATE = [
         'No Kartu Barang',
@@ -2331,6 +2378,7 @@ class KendaraanController extends Controller
         'No. Rangka',
         'No. Mesin',
         'Tanggal Pengadaan',
+        'Tanggal Habis Pakai',
         'Nilai Perolehan',
         'Kondisi',
         'Status Aset',
@@ -2425,8 +2473,12 @@ class KendaraanController extends Controller
     }
 
     /**
-     * Kumpulkan gambar tersisip, petakan ke nomor baris data berdasarkan posisi.
-     * Mengembalikan [nomorBaris => relativePathFoto].
+     * Kumpulkan gambar tersisip di memori per nomor baris tanpa menulis ke disk.
+     *
+     * Bila 1 baris memiliki lebih dari 1 gambar, gambar lama di memori langsung
+     * tertimpa tanpa menyisakan file sampah di disk.
+     *
+     * @return array<int, array{bytes?: string, ext?: string, mime?: string, error?: string}>
      */
     private function collectPhotos($sheet): array
     {
@@ -2437,53 +2489,113 @@ class KendaraanController extends Controller
             if ($row < 1) {
                 continue;
             }
-            $path = $this->saveDrawing($drawing);
-            if ($path) {
-                $result[$row] = $path;
+            $payload = $this->extractDrawing($drawing);
+            if ($payload !== null) {
+                $result[$row] = $payload;
             }
         }
 
         return $result;
     }
 
-    private function saveDrawing($drawing): ?string
+    /**
+     * Ekstrak dan validasi gambar tersisip di memori sesuai aturan form Tambah
+     * Kendaraan (jpg/jpeg/png/webp, MIME asli image/jpeg|png|webp, maks 2MB).
+     *
+     * @return array{bytes?: string, ext?: string, mime?: string, error?: string}|null
+     */
+    private function extractDrawing($drawing): ?array
     {
         try {
-            $ext = 'png';
+            $ext = null;
             $bytes = null;
 
             if ($drawing instanceof MemoryDrawing) {
                 $image = $drawing->getImageResource();
                 if (! $image) {
-                    return null;
+                    return ['error' => 'Foto pada kolom Dokumentasi tidak dapat dibaca.'];
                 }
-                $ext = strtolower($drawing->getMimeType()) === 'image/png' ? 'png' : 'jpg';
+                $mime = strtolower((string) $drawing->getMimeType());
+                if (! in_array($mime, ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'], true)) {
+                    return ['error' => 'Format foto tidak didukung. Hanya gambar JPG, JPEG, PNG, atau WebP yang diizinkan.'];
+                }
+                $ext = match ($mime) {
+                    'image/png' => 'png',
+                    'image/webp' => 'webp',
+                    default => 'jpg',
+                };
                 ob_start();
                 if ($ext === 'png') {
                     imagepng($image);
+                } elseif ($ext === 'webp') {
+                    if (! function_exists('imagewebp')) {
+                        ob_end_clean();
+
+                        return ['error' => 'Server tidak mendukung pemrosesan gambar WebP.'];
+                    }
+                    imagewebp($image, null, 90);
                 } else {
                     imagejpeg($image, null, 90);
                 }
                 $bytes = ob_get_clean();
             } elseif ($drawing instanceof Drawing && $drawing->getPath()) {
-                $bytes = @file_get_contents($drawing->getPath());
-                $ext = strtolower($drawing->getExtension()) ?: 'png';
-                if ($ext === 'jpeg') {
-                    $ext = 'jpg';
+                $ext = strtolower((string) $drawing->getExtension());
+                if (! in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
+                    return ['error' => 'Format foto tidak didukung. Hanya gambar JPG, JPEG, PNG, atau WebP yang diizinkan.'];
                 }
+                $bytes = @file_get_contents($drawing->getPath());
+            } else {
+                return ['error' => 'Foto pada kolom Dokumentasi tidak valid.'];
             }
 
-            if (! $bytes) {
-                return null;
+            if (! is_string($bytes) || $bytes === '') {
+                return ['error' => 'Foto pada kolom Dokumentasi kosong atau tidak dapat dibaca.'];
             }
 
-            $name = 'kendaraan/'.Str::uuid()->toString().'.'.$ext;
-            Storage::disk('public')->put($name, $bytes);
+            // Samakan batas ukuran maksimal dengan validateKendaraan() (`max:2048` / 2MB).
+            if (strlen($bytes) > 2048 * 1024) {
+                return ['error' => 'Ukuran foto melebihi batas maksimal 2MB.'];
+            }
 
-            return $name;
+            $imageInfo = @getimagesizefromstring($bytes);
+            $detectedMime = strtolower((string) ($imageInfo['mime'] ?? ''));
+            $allowedMimes = [
+                'image/jpeg' => 'jpg',
+                'image/png' => 'png',
+                'image/webp' => 'webp',
+            ];
+
+            if (! $imageInfo || ! isset($allowedMimes[$detectedMime])) {
+                return ['error' => 'File foto tidak valid. Hanya gambar JPG, JPEG, PNG, atau WebP yang diizinkan.'];
+            }
+
+            $safeExt = ($ext === 'jpeg' && $detectedMime === 'image/jpeg')
+                ? 'jpeg'
+                : $allowedMimes[$detectedMime];
+
+            return [
+                'bytes' => $bytes,
+                'ext' => $safeExt,
+                'mime' => $detectedMime,
+            ];
         } catch (\Throwable $e) {
+            return ['error' => 'Foto pada kolom Dokumentasi tidak dapat diproses.'];
+        }
+    }
+
+    /**
+     * Tulis payload gambar yang sudah tervalidasi ke disk `public` folder `kendaraan`.
+     */
+    private function saveDrawing(array $photo): ?string
+    {
+        if (empty($photo['bytes']) || empty($photo['ext'])) {
             return null;
         }
+
+        $name = 'kendaraan/'.Str::uuid()->toString().'.'.$photo['ext'];
+        Storage::disk('public')->put($name, $photo['bytes']);
+
+        return $name;
     }
 
     private function parseYaTidak($value): bool
