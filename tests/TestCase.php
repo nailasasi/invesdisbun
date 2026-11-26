@@ -20,9 +20,12 @@ abstract class TestCase extends BaseTestCase
     /**
      * Dapatkan nama database pengujian MySQL yang terisolasi.
      * Mengutamakan konfigurasi dari .env.testing atau DB_DATABASE di phpunit.xml.
+     * Menolak keras jika mengarah ke database utama agar data produksi/Laragon aman.
      */
     protected function namaDatabasePengujian(): string
     {
+        $dbName = null;
+
         // 1. Baca dari .env.testing jika tersedia
         $envTesting = base_path('.env.testing');
         if (file_exists($envTesting)) {
@@ -30,20 +33,29 @@ abstract class TestCase extends BaseTestCase
                 if (str_starts_with(trim($line), 'DB_DATABASE=')) {
                     $nilai = trim(explode('=', $line, 2)[1]);
                     if ($nilai !== '') {
-                        return $nilai;
+                        $dbName = $nilai;
+                        break;
                     }
                 }
             }
         }
 
         // 2. Baca dari environment testing
-        $db = env('DB_DATABASE');
-        if (!empty($db) && $db !== ':memory:') {
-            return $db;
+        if ($dbName === null) {
+            $db = env('DB_DATABASE');
+            if (!empty($db) && $db !== ':memory:') {
+                $dbName = $db;
+            }
         }
 
         // 3. Fallback database pengujian terisolasi
-        return 'invesdisbunver3_test';
+        $dbName ??= 'invesdisbunver3_test';
+
+        if ($dbName === 'invensbun') {
+            throw new \RuntimeException('Pengujian dilarang menggunakan database utama "invensbun". Gunakan database terisolasi (mis. invesdisbunver3_test).');
+        }
+
+        return $dbName;
     }
 
     /**

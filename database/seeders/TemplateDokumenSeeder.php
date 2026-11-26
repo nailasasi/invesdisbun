@@ -89,7 +89,7 @@ class TemplateDokumenSeeder extends Seeder
         ];
 
         foreach ($templates as $tpl) {
-            TemplateDokumen::updateOrCreate(
+            TemplateDokumen::firstOrCreate(
                 ['kode_template' => $tpl['kode_template']],
                 $tpl
             );

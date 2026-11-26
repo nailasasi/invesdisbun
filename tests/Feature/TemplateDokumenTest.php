@@ -25,11 +25,15 @@ class TemplateDokumenTest extends TestCase
             'database.connections.mysql.database' => $this->namaDatabase(),
         ]);
 
+        DB::beginTransaction();
+
         $this->pastikanBerkasTemplateTersedia();
     }
 
     protected function tearDown(): void
     {
+        DB::rollBack();
+
         foreach ($this->filesDibuatSementara as $path) {
             if (file_exists($path)) {
                 @unlink($path);
@@ -245,6 +249,9 @@ class TemplateDokumenTest extends TestCase
 
     public function test_penggantian_file_berhasil_dan_membersihkan_file_lama(): void
     {
+        Storage::fake(TemplateDokumen::DISK);
+        Storage::fake('public');
+
         $admin = $this->userDenganRole('Admin Aset');
         $this->actingAs($admin);
 
